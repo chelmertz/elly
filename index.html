@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <style type="text/css">
+            body {
+                font-family: Inter, sans-serif;
+                font-weight: 600;
+                margin: 0;
+            }
+
+            section.prs {
+                display: flex;
+                flex-direction: column;
+                gap: 1em;
+            }
+
+            .pr {
+                border-radius: 5px;
+                padding: 2rem;
+                justify-content: space-between;
+            }
+
+            .pr.active {
+                background: lightgoldenrodyellow;
+            }
+
+            .pr .motivation {
+                display: none;
+            }
+
+            .pr.active .motivation {
+                display: block;
+            }
+
+            .boring {
+                opacity: 0.5;
+            }
+
+            .pr-title {
+                font-size: 1.5rem;
+            }
+
+            a {
+                text-decoration: none;
+            }
+
+            aside.meta {
+                /* we're overlapping with the main content, transparent wouldn't
+                 * work */
+                background: #fff;
+                bottom: 0;
+                padding: 2rem;
+                position: sticky;
+            }
+
+            aside.meta ul {
+                list-style-type: none;
+                margin: 0;
+                padding: 0;
+            }
+            aside.meta li {
+                display: inline-block;
+                margin-left: 2rem;
+            }
+            aside.meta li:first-child {
+                margin-left: 0;
+            }
+
+            .circle {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+            }
+
+            .circle.ok {
+                background: rgb(39, 180, 39);
+                color: white;
+            }
+
+            .circle.fail {
+                background: rgb(209, 69, 69);
+                color: white;
+            }
+
+            .inline {
+                display: inline-block;
+            }
+
+            dialog::backdrop {
+                background: rgba(0, 0, 0, 0.5)
+            }
+
+        </style>
+        <title>elly - Github pull request todos</title>
+    </head>
+    <body>
+        <main>
+            <section class="prs">
+                {{range $index, $pr := .Prs}}
+                <article class="pr {{$pr.ReviewStatus}}">
+                    <h3>{{if eq $.CurrentUser $pr.Author}}👤 {{end}}<a class="pr-title" href="{{$pr.Url}}">{{$pr.Title}}</a> <span class="boring">@{{$pr.Author}}</span></h3>
+                    <span class="boring">{{$pr.RepoName}}</span>
+                    {{with $points := index $.PointsPerPrUrl $pr.Url}}
+                    <span class="inline"><span class="circle ok">{{$points.Total}}</span></span>
+                    <div class="motivation">
+                        {{range $motivation := $points.Reasons}}
+                        <p>{{$motivation}}</p>
+                        {{end}}
+                    </div>
+                    {{end}}
+                </article>
+                {{end}}
+            </section>
+            <aside class="meta">
+                <ul>
+                    <li>👤 {{.CurrentUser}}</li>
+                    <li>🗘 {{.LastRefreshed}}</a></li>
+                    <li><a class="about" href="/about">About</a></li>
+                </ul>
+            </aside>
+            <dialog>
+                <h2>About</h2>
+                <p>PRs that you should interact with are all listed on a single
+                page, ranked by certain factors that are explained inline.</p>
+                <p>For example, if a PR is a draft or if it's already approved, it's ranked lower.</p>
+
+                <h2>Keyboard shortcuts</h2>
+                <ul>
+                    <li><kbd>j</kbd> or <kbd>down</kbd> - focus next PR</li>
+                    <li><kbd>k</kbd> or <kbd>up</kbd> - focus previous PR</li>
+                    <li><kbd>enter</kbd> - open focused PR in Github</li>
+                    <li><kbd>shift + enter</kbd> - open focused PR in Github, in a new window/tab</li>
+                    <li><kbd>?</kbd> - show this dialog</li>
+                    <li><kbd>esc</kbd> - hide this dialog</li>
+                </ul>
+                <button>OK</button>
+            </dialog>
+        </main>
+        <script type="text/javascript">
+            // all prs are rendered server side, non-dynamically, let's take
+            // advantage of that
+            const prs = document.querySelectorAll(".pr");
+            let activePr = 0;
+            const activatePr = (step) => {
+                if (prs[activePr+step]) {
+                    prs[activePr].classList.remove("active");
+                    activePr += step;
+                    prs[activePr].classList.add("active");
+                    prs[activePr].scrollIntoView();
+                }
+            };
+            if (prs[activePr]) {
+                // there is at least one pr
+                prs[activePr].classList.add("active");
+            }
+
+            const dialog = document.querySelector("dialog");
+            dialog.querySelector("button").addEventListener("click", (e) => {
+                dialog.close();
+            });
+            document.querySelector("a.about").addEventListener("click", (e) => {
+                e.preventDefault();
+                dialog.showModal();
+            });
+            
+            const refreshPrs = document.querySelector(".refresh-prs");
+
+            // "mutex" for not accepting keypresses while navigating away
+            // (double clicks etc.)
+            let navigatingAway = false;
+
+            window.addEventListener("keydown", (e) => {
+                if (e.key === "j" || e.key === "ArrowDown") {
+                    activatePr(1);
+                    e.preventDefault();
+                } else if (e.key === "k" || e.key === "ArrowUp") {
+                    activatePr(-1);
+                    e.preventDefault();
+                } else if (e.key === "R") {
+                    refreshPrs.click();
+                    navigatingAway = true;
+                } else if (e.key === "?") {
+                    dialog.showModal();
+                } else if (e.key === "Enter") {
+                    if (prs[activePr]) {
+                        const pr = prs[activePr].querySelector("a.pr-title");
+                        if (e.shiftKey) {
+                            navigatingAway = false;
+                            window.open(pr.href);
+                        } else if (!navigatingAway) {
+                            pr.click();
+                            navigatingAway = true;
+                        }
+                        e.preventDefault();
+                    }
+                }
+            });
+        </script>
+    </body>
+</html>
