@@ -1,4 +1,4 @@
-module github.com/chelmertz/ghpr-inbox
+module github.com/chelmertz/elly
 
 go 1.19
 
