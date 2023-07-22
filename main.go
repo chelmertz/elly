@@ -253,6 +253,7 @@ type ViewPr struct {
 	Title                                string
 	Author                               string
 	RepoName                             string
+	RepoOwner                            string
 	RepoUrl                              string
 	IsDraft                              bool
 	LastUpdated                          time.Time
@@ -554,6 +555,7 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 			Title:                                pr.Title,
 			Author:                               pr.Author.Login,
 			RepoName:                             pr.Repository.Name,
+			RepoOwner:                            pr.Repository.Owner.Login,
 			RepoUrl:                              pr.Repository.Url,
 			IsDraft:                              pr.IsDraft,
 			LastUpdated:                          updatedAt,
