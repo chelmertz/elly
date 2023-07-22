@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -271,10 +272,11 @@ func possiblyRefreshPrs(token, username string, lastFetched time.Time, githubFai
 	return true, nil
 }
 
+//go:embed templates/index.html
+var index embed.FS
+
 func ServeWeb(url string, username string, token string) {
-	temp, err := template.
-		New("index.html").
-		ParseGlob("*.html")
+	temp, err := template.ParseFS(index, "templates/index.html")
 	check(err)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
