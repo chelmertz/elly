@@ -13,6 +13,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -44,23 +45,22 @@ func main() {
 		logger.Warn("missing GITHUB_USER env var, will not assign points properly", nil)
 	}
 
-	StartRefreshLoop(token, username)
-	ServeWeb(*url, username, token)
+	storage := NewStorage()
+	StartRefreshLoop(token, username, storage)
+	ServeWeb(*url, username, token, storage)
 }
 
-func StartRefreshLoop(token, username string) {
+func StartRefreshLoop(token, username string, storage *storage) {
 	refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
 	refresh := make(chan string)
 	retriesLeft := 5
-
-	storage := readStorage()
 
 	go func() {
 		for {
 			select {
 			case reason := <-refresh:
 				logger.Info("refreshing", slog.String("reason", reason))
-				_, err := possiblyRefreshPrs(token, username, storage.LastFetched)
+				_, err := possiblyRefreshPrs(token, username, storage)
 				if err != nil {
 					if errors.Is(err, errClient) {
 						refreshTimer.Stop()
@@ -168,14 +168,23 @@ func querySearchPrsInvolvingUser(username string) string {
 type storage struct {
 	Prs         []ViewPr
 	LastFetched time.Time
+	dirname     string
+	filename    string
+	mutex       sync.Mutex
 }
 
-var storageMutex sync.Mutex
+func NewStorage() *storage {
+	s := &storage{}
+	dirname, err := os.UserCacheDir()
+	check(err)
+	s.dirname = filepath.Join(dirname, "elly")
+	if err := os.Mkdir(s.dirname, 0770); err != nil && !errors.Is(err, os.ErrExist) {
+		check(err)
+	}
 
-func readStorage() storage {
-	storageMutex.Lock()
-	defer storageMutex.Unlock()
-	oldContents, err := os.ReadFile(filename)
+	s.filename = filepath.Join(s.dirname, "prs.json")
+
+	oldContents, err := os.ReadFile(s.filename)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			oldContents = []byte("{}")
@@ -184,31 +193,27 @@ func readStorage() storage {
 		}
 	}
 
-	storage := storage{}
-	err = json.Unmarshal(oldContents, &storage)
+	err = json.Unmarshal(oldContents, &s)
 	check(err)
 
-	return storage
+	return s
 }
 
-var filename = "prs.json"
+func (s *storage) StoreRepoPrs(orderedPrs []ViewPr) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.Prs = make([]ViewPr, len(orderedPrs))
+	copy(s.Prs, orderedPrs)
+	s.LastFetched = time.Now()
 
-func storeRepoPrs(orderedPrs []ViewPr) error {
-	storageMutex.Lock()
-	defer storageMutex.Unlock()
-	storage := storage{}
-	storage.Prs = make([]ViewPr, len(orderedPrs))
-	copy(storage.Prs, orderedPrs)
-	storage.LastFetched = time.Now()
+	logger.Info("storing prs", slog.Int("prs", len(s.Prs)))
 
-	logger.Info("storing prs", slog.Int("prs", len(storage.Prs)))
-
-	newContents, err := json.Marshal(storage)
+	newContents, err := json.Marshal(s)
 	if err != nil {
 		return fmt.Errorf("could not marshal json: %w", err)
 	}
 
-	if err := os.WriteFile(filename, newContents, 0660); err != nil {
+	if err := os.WriteFile(s.filename, newContents, 0660); err != nil {
 		return fmt.Errorf("could not write file: %w", err)
 	}
 
@@ -257,8 +262,8 @@ type ViewPr struct {
 	Deletions                            int
 }
 
-func possiblyRefreshPrs(token, username string, lastFetched time.Time) (bool, error) {
-	if time.Since(lastFetched) < time.Duration(*timeoutMinutes)*time.Minute {
+func possiblyRefreshPrs(token, username string, storage *storage) (bool, error) {
+	if time.Since(storage.LastFetched) < time.Duration(*timeoutMinutes)*time.Minute {
 		return false, nil
 	}
 	prs, err := queryGithub(token, username)
@@ -266,7 +271,7 @@ func possiblyRefreshPrs(token, username string, lastFetched time.Time) (bool, er
 		return false, fmt.Errorf("could not query github: %w", err)
 	}
 
-	if err := storeRepoPrs(prs); err != nil {
+	if err := storage.StoreRepoPrs(prs); err != nil {
 		return false, fmt.Errorf("%w: %w", errCouldNotStorePrs, err)
 	}
 	return true, nil
@@ -275,12 +280,11 @@ func possiblyRefreshPrs(token, username string, lastFetched time.Time) (bool, er
 //go:embed templates/index.html
 var index embed.FS
 
-func ServeWeb(url string, username string, token string) {
+func ServeWeb(url, username, token string, storage *storage) {
 	temp, err := template.ParseFS(index, "templates/index.html")
 	check(err)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		var storage storage = readStorage()
 		prs := storage.Prs
 
 		pointsPerPrUrl := make(map[string]*Points)
