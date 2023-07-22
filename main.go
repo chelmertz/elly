@@ -50,8 +50,7 @@ func main() {
 
 func StartRefreshLoop(token, username string) {
 	refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
-	githubFailure := make(chan struct{})
-	manualRefresh := make(chan string)
+	refresh := make(chan string)
 	retriesLeft := 5
 
 	storage := readStorage()
@@ -59,28 +58,30 @@ func StartRefreshLoop(token, username string) {
 	go func() {
 		for {
 			select {
-			case reason := <-manualRefresh:
-				logger.Info("manual refresh requested", slog.String("reason", reason))
-				_, err := possiblyRefreshPrs(token, username, storage.LastFetched, githubFailure)
+			case reason := <-refresh:
+				logger.Info("refreshing", slog.String("reason", reason))
+				_, err := possiblyRefreshPrs(token, username, storage.LastFetched)
 				if err != nil {
-					logger.Error("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
+					if errors.Is(err, errClient) {
+						refreshTimer.Stop()
+						logger.Error("client error when querying github, giving up", err)
+						return
+					} else if errors.Is(err, errGithubServer) {
+						retriesLeft--
+						if retriesLeft <= 0 {
+							refreshTimer.Stop()
+							logger.Error("too many failed github requests, giving up", nil)
+							return
+						}
+						logger.Warn("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
+					}
 				}
 			case <-refreshTimer.C:
-				_, err := possiblyRefreshPrs(token, username, storage.LastFetched, githubFailure)
-				if err != nil {
-					logger.Error("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
-				}
-			case <-githubFailure:
-				retriesLeft--
-				if retriesLeft <= 0 {
-					refreshTimer.Stop()
-					logger.Error("too many failed github requests, giving up", nil)
-					return
-				}
+				refresh <- "automatic refresh"
 			}
 		}
 	}()
-	manualRefresh <- "upstart refresh"
+	refresh <- "upstart refresh"
 }
 
 func querySearchPrsInvolvingUser(username string) string {
@@ -256,18 +257,17 @@ type ViewPr struct {
 	Deletions                            int
 }
 
-func possiblyRefreshPrs(token, username string, lastFetched time.Time, githubFailure chan struct{}) (bool, error) {
+func possiblyRefreshPrs(token, username string, lastFetched time.Time) (bool, error) {
 	if time.Since(lastFetched) < time.Duration(*timeoutMinutes)*time.Minute {
 		return false, nil
 	}
 	prs, err := queryGithub(token, username)
 	if err != nil {
-		githubFailure <- struct{}{}
 		return false, fmt.Errorf("could not query github: %w", err)
 	}
 
 	if err := storeRepoPrs(prs); err != nil {
-		return false, fmt.Errorf("could not store prs: %w", err)
+		return false, fmt.Errorf("%w: %w", errCouldNotStorePrs, err)
 	}
 	return true, nil
 }
@@ -465,6 +465,10 @@ type querySearchPrsInvolvingMeGraphQl struct {
 	}
 }
 
+var errClient = errors.New("github returned client error")
+var errGithubServer = errors.New("github returned server error")
+var errCouldNotStorePrs = errors.New("could not store prs")
+
 func queryGithub(token string, username string) ([]ViewPr, error) {
 	payload := struct {
 		Query string `json:"query"`
@@ -493,9 +497,18 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 		return nil, fmt.Errorf("could not request github: %w", err)
 	}
 	defer response.Body.Close()
+
 	respBody, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, fmt.Errorf("could not read github response: %w", err)
+	}
+
+	if response.StatusCode >= 400 {
+		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", string(respBody)))
+		if response.StatusCode < 500 {
+			return nil, errClient
+		}
+		return nil, errGithubServer
 	}
 
 	typedResponse := querySearchPrsInvolvingMeGraphQl{}
@@ -503,8 +516,6 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not unmarshal github response: %w", err)
 	}
-
-	logger.Debug("response", slog.Any("serialized", typedResponse), slog.String("body", string(respBody)))
 
 	viewPrs := make([]ViewPr, 0)
 
