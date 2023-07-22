@@ -4,7 +4,7 @@ Github pull requests presented in a prioritized order, via a keyboard driven web
 gui & API.
 
 Configured by a Github PAT (personal access token) and the Github username,
-using the env vars `GITHUB-USER` and `GITHUB_PAT` respectively. Should be hosted
+using the env vars `GITHUB_USER` and `GITHUB_PAT` respectively. Should be hosted
 locally.
 
 ## PAT Oauth permissions
