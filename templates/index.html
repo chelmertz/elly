@@ -185,7 +185,9 @@
                 } else if (e.key === "?") {
                     dialog.showModal();
                 } else if (e.key === "Enter") {
-                    if (prs[activePr]) {
+                    if (dialog.open) {
+                        dialog.close();
+                    } else if (prs[activePr]) {
                         const pr = prs[activePr].querySelector("a.pr-title");
                         if (e.shiftKey) {
                             navigatingAway = false;
