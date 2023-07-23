@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ func check(err error) {
 var timeoutMinutes = flag.Int("timeout", 10, "refresh PRs every N minutes")
 var url = flag.String("url", "localhost:9876", "URL for web GUI")
 var logger = slog.New(slog.NewTextHandler(os.Stdout))
+var githubUsernameRegex = regexp.MustCompile("[a-zA-Z0-9-]+")
 
 func main() {
 	flag.Parse()
@@ -43,6 +45,11 @@ func main() {
 	username := os.Getenv("GITHUB_USER")
 	if token == "" {
 		logger.Warn("missing GITHUB_USER env var, will not assign points properly", nil)
+	}
+
+	if !githubUsernameRegex.Match([]byte(username)) {
+		logger.Error("GITHUB_USER env var is not a valid github username", nil)
+		os.Exit(1)
 	}
 
 	storage := NewStorage()
