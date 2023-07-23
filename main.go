@@ -309,10 +309,9 @@ func ServeWeb(url, username, token string, storage *storage) {
 			}
 			return pri > prj
 		})
-		lastRefreshed := fmt.Sprintf("%d min ago (%d:%d)",
+		lastRefreshed := fmt.Sprintf("%d min ago (%s)",
 			int(math.RoundToEven(time.Since(storage.LastFetched).Minutes())),
-			storage.LastFetched.Local().Hour(),
-			storage.LastFetched.Local().Minute())
+			storage.LastFetched.Format("15:04"))
 		data := IndexHtmlData{
 			Prs:            prs,
 			PointsPerPrUrl: pointsPerPrUrl,
