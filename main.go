@@ -384,7 +384,7 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 		case diff < 150:
 			points.Add(30, fmt.Sprintf("PR is smallish, %d loc changed is <150", diff))
 		case diff > 300:
-			points.Remove(30, fmt.Sprintf("PR is bigish, %d loc changed is >300", diff))
+			points.Add(10, fmt.Sprintf("PR is bigish, %d loc changed is >300", diff))
 		}
 
 		// TODO find our own comment threads here, and see if they are
