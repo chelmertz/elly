@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -319,6 +320,47 @@ func ServeWeb(url, username, token string, storage *storage) {
 			LastRefreshed:  lastRefreshed,
 		}
 		err := temp.Execute(w, data)
+		check(err)
+	})
+
+	// Let's say that v0 represents "may change at any time", read the code.
+	// Should be bumped before tagging this repo as v1
+	http.HandleFunc("/api/v0/prs", func(w http.ResponseWriter, r *http.Request) {
+		prs := storage.Prs
+		prsToReturn := make([]ViewPr, 0)
+
+		minimumPoints := -999
+		if minPoints := r.URL.Query().Get("minPoints"); minPoints != "" {
+			if min, err := strconv.Atoi(minPoints); err == nil && min >= -999 && min <= 999 {
+				minimumPoints = min
+			}
+		}
+
+		pointsPerPrUrl := make(map[string]*Points)
+		for _, pr := range prs {
+			points := standardPrPoints(pr, username)
+			pointsPerPrUrl[pr.Url] = points
+		}
+
+		for _, pr := range prs {
+			points := pointsPerPrUrl[pr.Url]
+			if points.Total >= minimumPoints {
+				prsToReturn = append(prsToReturn, pr)
+			}
+		}
+
+		sort.Slice(prsToReturn, func(i, j int) bool {
+			pri := pointsPerPrUrl[prs[i].Url].Total
+			prj := pointsPerPrUrl[prs[j].Url].Total
+			if pri == prj {
+				lastUpdated := prs[i].LastUpdated.Before(prs[j].LastUpdated)
+				return lastUpdated
+			}
+			return pri > prj
+		})
+
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(prsToReturn)
 		check(err)
 	})
 
