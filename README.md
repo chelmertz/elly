@@ -35,11 +35,6 @@ find . | grep -E 'html|go' | entr -r -s 'source .env && go run .'
 - [ ] run webserver with old data even if PAT is expired/bad
 
 # Maybes
-- [ ] a count for unhandled prs (render these first?) à la glmr
-  - try without this for a while and revisit
-  - alternative: tweak the points so that "everything above threshold" (0?) can
-    be worked on
-  - [ ] i3blocks statusbar
 - [ ] ease setup (html template with intro)
   - [ ] store pattern + username in sqlite instead
     - encrypt, and decrypt patterns on startup?
