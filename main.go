@@ -42,11 +42,13 @@ func main() {
 		logger.Error("missing GITHUB_PAT env var", nil)
 		os.Exit(1)
 	}
+	os.Unsetenv("GITHUB_PAT")
 
 	username := os.Getenv("GITHUB_USER")
 	if token == "" {
 		logger.Warn("missing GITHUB_USER env var, will not assign points properly", nil)
 	}
+	os.Unsetenv("GITHUB_USER")
 
 	if !githubUsernameRegex.Match([]byte(username)) {
 		logger.Error("GITHUB_USER env var is not a valid github username", nil)
