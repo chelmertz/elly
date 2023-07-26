@@ -1,0 +1,19 @@
+[Unit]
+Description=elly - monitoring Github for work to be done
+After=network.target
+
+[Service]
+ExecStart=/home/ch/go/bin/elly
+Type=simple
+Restart=on-failure
+# create elly env file with GITHUB_TOKEN=... and GITHUB_USER=...
+# format is key=value, one per line
+# https://www.freedesktop.org/software/systemd/man/systemd.exec.html#EnvironmentFile=
+EnvironmentFile=/home/ch/.config/elly/env
+
+
+[Install]
+WantedBy=multi-user.target
+
+# place in ~/.config/systemd/user; systemctl --user enable elly; systemctl --user start elly; journalctl --user -u elly
+# see https://www.freedesktop.org/software/systemd/man/systemd.service.html

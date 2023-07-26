@@ -16,7 +16,15 @@ A Github personal access token these permissions:
 - metadata (read only)
 - pull requests (read only)
 
-# Developing
+## Installation
+
+```
+go install github.com/chelmertz/elly@latest
+```
+will fetch you the latest binary. See contrib/elly.service for a systemd
+example of managing the service.
+
+## Developing
 
 With a .env file containing something like:
 
@@ -29,12 +37,12 @@ export GITHUB_PATH=github_pat_123k135hjhhjtjethwejhtjh5jhj
 find . | grep -E 'html|go' | entr -r -s 'source .env && go run .'
 ```
 
-# Todos
+## Todos
 
 - [ ] empty state gui
 - [ ] run webserver with old data even if PAT is expired/bad
 
-# Maybes
+### Maybes
 - [ ] ease setup (html template with intro)
   - [ ] store pattern + username in sqlite instead
     - encrypt, and decrypt patterns on startup?
@@ -42,7 +50,7 @@ find . | grep -E 'html|go' | entr -r -s 'source .env && go run .'
 - [ ] support multiple users/tokens/owners (user/organization)
   - ADR-0003
 
-# Out of scope
+### Out of scope
 
 - adapted repositories scanning frequency
 - Github issues
