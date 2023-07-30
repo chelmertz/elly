@@ -176,11 +176,14 @@ func querySearchPrsInvolvingUser(username string) string {
 }
 
 type storage struct {
+	dirname  string
+	filename string
+	sync.Mutex
+}
+
+type prs struct {
 	Prs         []ViewPr
 	LastFetched time.Time
-	dirname     string
-	filename    string
-	mutex       sync.Mutex
 }
 
 func NewStorage() *storage {
@@ -194,6 +197,13 @@ func NewStorage() *storage {
 
 	s.filename = filepath.Join(s.dirname, "prs.json")
 
+	return s
+}
+
+func (s *storage) Prs() prs {
+	s.Lock()
+	defer s.Unlock()
+
 	oldContents, err := os.ReadFile(s.filename)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -203,22 +213,24 @@ func NewStorage() *storage {
 		}
 	}
 
-	err = json.Unmarshal(oldContents, &s)
+	var prs_ = prs{}
+	err = json.Unmarshal(oldContents, &prs_)
 	check(err)
 
-	return s
+	return prs_
 }
 
 func (s *storage) StoreRepoPrs(orderedPrs []ViewPr) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.Prs = make([]ViewPr, len(orderedPrs))
-	copy(s.Prs, orderedPrs)
-	s.LastFetched = time.Now()
+	s.Lock()
+	defer s.Unlock()
+	prs_ := prs{}
+	prs_.Prs = make([]ViewPr, len(orderedPrs))
+	copy(prs_.Prs, orderedPrs)
+	prs_.LastFetched = time.Now()
 
-	logger.Info("storing prs", slog.Int("prs", len(s.Prs)))
+	logger.Info("storing prs", slog.Int("prs", len(prs_.Prs)))
 
-	newContents, err := json.Marshal(s)
+	newContents, err := json.Marshal(prs_)
 	if err != nil {
 		return fmt.Errorf("could not marshal json: %w", err)
 	}
@@ -274,7 +286,7 @@ type ViewPr struct {
 }
 
 func possiblyRefreshPrs(token, username string, storage *storage) (bool, error) {
-	if time.Since(storage.LastFetched) < time.Duration(*timeoutMinutes)*time.Minute {
+	if time.Since(storage.Prs().LastFetched) < time.Duration(*timeoutMinutes)*time.Minute {
 		return false, nil
 	}
 	prs, err := queryGithub(token, username)
@@ -296,27 +308,28 @@ func ServeWeb(url, username, token string, storage *storage) {
 	check(err)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		prs := storage.Prs
+		storedPrs := storage.Prs()
+		prs_ := storedPrs.Prs
 
 		pointsPerPrUrl := make(map[string]*Points)
-		for _, pr := range prs {
+		for _, pr := range prs_ {
 			pointsPerPrUrl[pr.Url] = standardPrPoints(pr, username)
 		}
 
-		sort.Slice(prs, func(i, j int) bool {
-			pri := pointsPerPrUrl[prs[i].Url].Total
-			prj := pointsPerPrUrl[prs[j].Url].Total
+		sort.Slice(prs_, func(i, j int) bool {
+			pri := pointsPerPrUrl[prs_[i].Url].Total
+			prj := pointsPerPrUrl[prs_[j].Url].Total
 			if pri == prj {
-				lastUpdated := prs[i].LastUpdated.Before(prs[j].LastUpdated)
+				lastUpdated := prs_[i].LastUpdated.Before(prs_[j].LastUpdated)
 				return lastUpdated
 			}
 			return pri > prj
 		})
 		lastRefreshed := fmt.Sprintf("%d min ago (%s)",
-			int(math.RoundToEven(time.Since(storage.LastFetched).Minutes())),
-			storage.LastFetched.Format("15:04"))
+			int(math.RoundToEven(time.Since(storedPrs.LastFetched).Minutes())),
+			storedPrs.LastFetched.Format("15:04"))
 		data := IndexHtmlData{
-			Prs:            prs,
+			Prs:            prs_,
 			PointsPerPrUrl: pointsPerPrUrl,
 			CurrentUser:    username,
 			LastRefreshed:  lastRefreshed,
@@ -328,7 +341,7 @@ func ServeWeb(url, username, token string, storage *storage) {
 	// Let's say that v0 represents "may change at any time", read the code.
 	// Should be bumped before tagging this repo as v1
 	http.HandleFunc("/api/v0/prs", func(w http.ResponseWriter, r *http.Request) {
-		prs := storage.Prs
+		storedPrs := storage.Prs().Prs
 		prsToReturn := make([]ViewPr, 0)
 
 		minimumPoints := -999
@@ -339,12 +352,12 @@ func ServeWeb(url, username, token string, storage *storage) {
 		}
 
 		pointsPerPrUrl := make(map[string]*Points)
-		for _, pr := range prs {
+		for _, pr := range storedPrs {
 			points := standardPrPoints(pr, username)
 			pointsPerPrUrl[pr.Url] = points
 		}
 
-		for _, pr := range prs {
+		for _, pr := range storedPrs {
 			points := pointsPerPrUrl[pr.Url]
 			if points.Total >= minimumPoints {
 				prsToReturn = append(prsToReturn, pr)
@@ -352,10 +365,10 @@ func ServeWeb(url, username, token string, storage *storage) {
 		}
 
 		sort.Slice(prsToReturn, func(i, j int) bool {
-			pri := pointsPerPrUrl[prs[i].Url].Total
-			prj := pointsPerPrUrl[prs[j].Url].Total
+			pri := pointsPerPrUrl[storedPrs[i].Url].Total
+			prj := pointsPerPrUrl[storedPrs[j].Url].Total
 			if pri == prj {
-				lastUpdated := prs[i].LastUpdated.Before(prs[j].LastUpdated)
+				lastUpdated := storedPrs[i].LastUpdated.Before(storedPrs[j].LastUpdated)
 				return lastUpdated
 			}
 			return pri > prj
