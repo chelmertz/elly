@@ -168,8 +168,6 @@
                 dialog.showModal();
             });
             
-            const refreshPrs = document.querySelector(".refresh-prs");
-
             // "mutex" for not accepting keypresses while navigating away
             // (double clicks etc.)
             let navigatingAway = false;
@@ -181,9 +179,6 @@
                 } else if (e.key === "k" || e.key === "ArrowUp") {
                     activatePr(-1);
                     e.preventDefault();
-                } else if (e.key === "R") {
-                    refreshPrs.click();
-                    navigatingAway = true;
                 } else if (e.key === "?") {
                     dialog.showModal();
                 } else if (e.key === "Enter") {
