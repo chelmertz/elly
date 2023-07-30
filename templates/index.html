@@ -95,12 +95,22 @@
                 background: rgba(0, 0, 0, 0.5)
             }
 
+            .done {
+                font-size: 4rem;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+
         </style>
         <title>elly - Github pull request todos</title>
     </head>
     <body>
         <main>
             <section class="prs">
+                {{if not .Prs}}
+                <p class="done">🏝 You're done</p>
+                {{else}}
                 {{range $index, $pr := .Prs}}
                 <article class="pr {{$pr.ReviewStatus}}">
                     <h3>{{if eq $.CurrentUser $pr.Author}}👤 {{end}}<a class="pr-title" href="{{$pr.Url}}">{{$pr.Title}}</a> <span class="boring">@{{$pr.Author}}</span></h3>
@@ -114,6 +124,7 @@
                     </div>
                     {{end}}
                 </article>
+                {{end}}
                 {{end}}
             </section>
             <aside class="meta">
