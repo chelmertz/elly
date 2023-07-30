@@ -133,8 +133,8 @@
                 <ul>
                     <li><kbd>j</kbd> or <kbd>down</kbd> - focus next PR</li>
                     <li><kbd>k</kbd> or <kbd>up</kbd> - focus previous PR</li>
-                    <li><kbd>enter</kbd> - open focused PR in Github</li>
-                    <li><kbd>shift + enter</kbd> - open focused PR in Github, in a new window/tab</li>
+                    <li><kbd>enter</kbd> - open focused PR in Github, in a new window</li>
+                    <li><kbd>shift + enter</kbd> - open all PRs in Github, in new windows (might trigger a browser warning)</li>
                     <li><kbd>?</kbd> - show this dialog</li>
                     <li><kbd>esc</kbd> - hide this dialog</li>
                 </ul>
@@ -168,10 +168,6 @@
                 dialog.showModal();
             });
             
-            // "mutex" for not accepting keypresses while navigating away
-            // (double clicks etc.)
-            let navigatingAway = false;
-
             window.addEventListener("keydown", (e) => {
                 if (e.key === "j" || e.key === "ArrowDown") {
                     activatePr(1);
@@ -184,14 +180,17 @@
                 } else if (e.key === "Enter") {
                     if (dialog.open) {
                         dialog.close();
-                    } else if (prs[activePr]) {
-                        const pr = prs[activePr].querySelector("a.pr-title");
+                    } else {
                         if (e.shiftKey) {
-                            navigatingAway = false;
+                            // open all prs
+                            document.querySelectorAll("a.pr-title").forEach((el) => {
+                                console.log("opening pr", el.href)
+                                window.open(el.href);
+                            });
+                        } else if (prs[activePr]) {
+                            // open focused pr
+                            const pr = prs[activePr].querySelector("a.pr-title");
                             window.open(pr.href);
-                        } else if (!navigatingAway) {
-                            pr.click();
-                            navigatingAway = true;
                         }
                         e.preventDefault();
                     }
