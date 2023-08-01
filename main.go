@@ -415,7 +415,7 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 			points.Add(100, "Own PR is approved, should be a simple merge")
 		}
 
-		if pr.LastPrCommenter != username {
+		if pr.LastPrCommenter != "" && pr.LastPrCommenter != username {
 			// someone might have asked us something
 			points.Add(10, fmt.Sprintf("Someone else commented last (%s)", pr.LastPrCommenter))
 		}
@@ -440,12 +440,14 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 		}
 
 		// reward short prs
-		diff := pr.Additions + pr.Deletions
+		diff := int(math.Abs(float64(pr.Additions)) + math.Abs(float64(pr.Deletions)))
 		switch {
 		case diff < 50:
 			points.Add(50, fmt.Sprintf("PR is small, %d loc changed is <50", diff))
 		case diff < 150:
 			points.Add(30, fmt.Sprintf("PR is smallish, %d loc changed is <150", diff))
+		case diff <= 300:
+			points.Add(20, fmt.Sprintf("PR is bigger, %d loc changed is <=300", diff))
 		case diff > 300:
 			points.Add(10, fmt.Sprintf("PR is bigish, %d loc changed is >300", diff))
 		}
