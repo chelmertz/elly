@@ -13,7 +13,7 @@ EnvironmentFile=/home/ch/.config/elly/env
 
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 
 # place in ~/.config/systemd/user; systemctl --user enable elly; systemctl --user start elly; journalctl --user -u elly
 # see https://www.freedesktop.org/software/systemd/man/systemd.service.html
