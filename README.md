@@ -11,6 +11,7 @@ locally.
 flowchart TB
     subgraph elly daemon
     A[run ./elly] -->|Runs| B(Request PRs)
+    H(systemd) -.-> A
     B -->|Timer, default 10 min| B
     F[(prs.json)]
     B -->|Persists|F
@@ -19,7 +20,8 @@ flowchart TB
     C --> D(Server rendered GUI)
     C --> E(API)
     end
-    D -.-> G(Github PR view)
+    D -.->|Opens in browser| G(Github PR view)
+    I(i3blocks) -.-> E
 ```
 
 ![Screenshot of GUI](gui.png)
