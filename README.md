@@ -7,6 +7,10 @@ Configured by a Github PAT (personal access token) and the Github username,
 using the env vars `GITHUB_USER` and `GITHUB_PAT` respectively. Should be hosted
 locally.
 
+![Screenshot of GUI](gui.png)
+
+![Screenshot of GUI's about screen](about.png)
+
 ## PAT Oauth permissions
 
 A Github personal access token these permissions:
