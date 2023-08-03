@@ -4,10 +4,25 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="description" content="elly shows your Github pull requests presented in a prioritized order" />
         <style type="text/css">
+            :root {
+                --bg: #e1e1e1;
+                --fg: #312f2f;
+                --link: #aa0606;
+            }
+
             body {
                 font-family: Inter, sans-serif;
+                color: var(--fg);
+                background: var(--bg);
                 font-weight: 600;
                 margin: 0;
+            }
+
+            main {
+                display: flex;
+                min-height: 100vh;
+                flex-direction: column;
+                justify-content: start;
             }
 
             section.prs {
@@ -20,10 +35,11 @@
                 border-radius: 5px;
                 padding: 2rem;
                 justify-content: space-between;
+                opacity: 0.5;
             }
 
             .pr.active {
-                background: lightgoldenrodyellow;
+                opacity: 1;
             }
 
             .pr .motivation {
@@ -35,24 +51,32 @@
             }
 
             .boring {
-                opacity: 0.5;
+                opacity: 0.7;
             }
 
             .pr-title {
                 font-size: 1.5rem;
+                padding-bottom: 0.5rem;
+                border-bottom: 1px solid var(--fg);
+                margin-right: 0.5rem;
             }
 
             a {
+                color: var(--link);
                 text-decoration: none;
             }
 
             aside.meta {
                 /* we're overlapping with the main content, transparent wouldn't
                  * work */
-                background: #fff;
-                bottom: 0;
+                background: var(--bg);
+                border-top: 1px solid var(--fg);
                 padding: 2rem;
+                /* margin-top, for pushing to bottom without enough content above */
+                margin-top: auto;
+                /* position and bottom, for pushing to bottom when there is content above */
                 position: sticky;
+                bottom: 0;
             }
 
             aside.meta ul {
@@ -108,7 +132,7 @@
                 {{else}}
                 {{range $index, $pr := .Prs}}
                 <article class="pr {{$pr.ReviewStatus}}">
-                    <h3>{{if eq $.CurrentUser $pr.Author}}👤 {{end}}<a class="pr-title" href="{{$pr.Url}}">{{$pr.Title}}</a> <span class="boring">@{{$pr.Author}}</span></h3>
+                    <h3><a class="pr-title" href="{{$pr.Url}}">{{if eq $.CurrentUser $pr.Author}}👤 {{end}}{{$pr.Title}}</a> <span class="boring">@{{$pr.Author}}</span></h3>
                     <span class="boring">{{$pr.RepoOwner}}/{{$pr.RepoName}}</span>
                     {{with $points := index $.PointsPerPrUrl $pr.Url}}
                     <span class="inline"><span class="circle ok">{{$points.Total}}</span></span>
