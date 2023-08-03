@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"sync"
@@ -54,6 +55,13 @@ func main() {
 		logger.Error("GITHUB_USER env var is not a valid github username", nil)
 		os.Exit(1)
 	}
+
+	version := "unknown"
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		version = bi.Main.Version
+	}
+
+	logger.Info("starting elly", slog.String("github_user", username), slog.String("version", version))
 
 	storage := NewStorage()
 	StartRefreshLoop(token, username, storage)
