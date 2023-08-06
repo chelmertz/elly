@@ -73,7 +73,7 @@ func main() {
 
 func StartRefreshLoop(token, username string, storage *storage) {
 	refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
-	refresh := make(chan string)
+	refresh := make(chan string, 1)
 	retriesLeft := 5
 
 	go func() {
