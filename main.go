@@ -80,41 +80,41 @@ const (
 )
 
 func StartRefreshLoop(token, username string, storage *storage) {
-	refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
-	refresh := make(chan refreshAction)
+	//refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
+	refreshTimer := time.NewTicker(time.Duration(3) * time.Second)
+	refresh := make(chan refreshAction, 1)
 	retriesLeft := 5
 
 	go func() {
-		for action := range refresh {
-			logger.Info("refresh loop", slog.Any("action", action))
-			switch action {
-			case stop:
-				refreshTimer.Stop()
-				return
-			}
-			_, err := possiblyRefreshPrs(token, username, storage)
-			if err != nil {
-				if errors.Is(err, errClient) {
+		for {
+			select {
+			case action := <-refresh:
+				logger.Info("refresh loop", slog.Any("action", action))
+				switch action {
+				case stop:
 					refreshTimer.Stop()
-					logger.Error("client error when querying github, giving up", err)
 					return
-				} else if errors.Is(err, errGithubServer) {
-					retriesLeft--
-					if retriesLeft <= 0 {
-						refreshTimer.Stop()
-						logger.Error("too many failed github requests, giving up", nil)
-						return
-					}
-					logger.Warn("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
 				}
-			}
-		}
-	}()
+				_, err := possiblyRefreshPrs(token, username, storage)
+				if err != nil {
+					if errors.Is(err, errClient) {
+						refreshTimer.Stop()
+						logger.Error("client error when querying github, giving up", err)
+						return
+					} else if errors.Is(err, errGithubServer) {
+						retriesLeft--
+						if retriesLeft <= 0 {
+							refreshTimer.Stop()
+							logger.Error("too many failed github requests, giving up", nil)
+							return
+						}
+						logger.Warn("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
+					}
+				}
 
-	go func() {
-		for range refreshTimer.C {
-			logger.Info("refresh timer")
-			refresh <- tick
+			case <-refreshTimer.C:
+				refresh <- tick
+			}
 		}
 	}()
 
