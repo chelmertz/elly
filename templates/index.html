@@ -149,7 +149,7 @@
             <aside class="meta">
                 <ul>
                     <li>👤 {{.CurrentUser}}</li>
-                    <li>🗘 {{.LastRefreshed}}</a></li>
+                    <li><a class="refresh" href="/api/v0/prs/refresh">🗘 {{.LastRefreshed}}</a></li>
                     <li><a class="about" href="/about">About</a></li>
                 </ul>
             </aside>
@@ -196,6 +196,17 @@
             document.querySelector("a.about").addEventListener("click", (e) => {
                 e.preventDefault();
                 dialog.showModal();
+            });
+
+            let isRefreshing = false;
+            document.querySelector("a.refresh").addEventListener("click", (e) => {
+                if (!isRefreshing) {
+                    isRefreshing = true;
+                    fetch(e.target.href).then((response) => {
+                        isRefreshing = false;
+                    });
+                }
+                e.preventDefault()
             });
             
             window.addEventListener("keydown", (e) => {

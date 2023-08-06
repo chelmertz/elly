@@ -67,8 +67,8 @@ func main() {
 		slog.Int("timeout_minutes", *timeoutMinutes))
 
 	storage := NewStorage()
-	StartRefreshLoop(token, username, storage)
-	ServeWeb(*url, username, token, storage)
+	refreshChannel := StartRefreshLoop(token, username, storage)
+	ServeWeb(*url, username, token, storage, refreshChannel)
 }
 
 type refreshAction string
@@ -77,9 +77,10 @@ const (
 	upstart refreshAction = "upstart"
 	stop    refreshAction = "stop"
 	tick    refreshAction = "tick"
+	manual  refreshAction = "manual"
 )
 
-func StartRefreshLoop(token, username string, storage *storage) {
+func StartRefreshLoop(token, username string, storage *storage) chan refreshAction {
 	refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
 	refresh := make(chan refreshAction, 1)
 	retriesLeft := 5
@@ -118,6 +119,7 @@ func StartRefreshLoop(token, username string, storage *storage) {
 	}()
 
 	refresh <- upstart
+	return refresh
 }
 
 func querySearchPrsInvolvingUser(username string) string {
@@ -312,7 +314,9 @@ type ViewPr struct {
 }
 
 func possiblyRefreshPrs(token, username string, storage *storage) (bool, error) {
-	if time.Since(storage.Prs().LastFetched) < time.Duration(*timeoutMinutes)*time.Minute {
+	// querying github once a minute should be fine,
+	// especially as long as we do the passive, loopy thing more seldom
+	if time.Since(storage.Prs().LastFetched) < time.Duration(59)*time.Second {
 		return false, nil
 	}
 	prs, err := queryGithub(token, username)
@@ -329,7 +333,7 @@ func possiblyRefreshPrs(token, username string, storage *storage) (bool, error) 
 //go:embed templates/index.html
 var index embed.FS
 
-func ServeWeb(url, username, token string, storage *storage) {
+func ServeWeb(url, username, token string, storage *storage, refreshingChannel chan refreshAction) {
 	temp, err := template.ParseFS(index, "templates/index.html")
 	check(err)
 
@@ -403,6 +407,10 @@ func ServeWeb(url, username, token string, storage *storage) {
 		w.Header().Set("Content-Type", "application/json")
 		err := json.NewEncoder(w).Encode(prsToReturn)
 		check(err)
+	})
+
+	http.HandleFunc("/api/v0/prs/refresh", func(w http.ResponseWriter, r *http.Request) {
+		refreshingChannel <- manual
 	})
 
 	logger.Info("starting web server at", slog.String("url", "http://"+url))
