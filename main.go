@@ -61,7 +61,10 @@ func main() {
 		version = bi.Main.Version
 	}
 
-	logger.Info("starting elly", slog.String("github_user", username), slog.String("version", version))
+	logger.Info("starting elly",
+		slog.String("github_user", username),
+		slog.String("version", version),
+		slog.Int("timeout_minutes", *timeoutMinutes))
 
 	storage := NewStorage()
 	StartRefreshLoop(token, username, storage)
