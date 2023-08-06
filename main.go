@@ -71,16 +71,29 @@ func main() {
 	ServeWeb(*url, username, token, storage)
 }
 
+type refreshAction string
+
+const (
+	upstart refreshAction = "upstart"
+	stop    refreshAction = "stop"
+	tick    refreshAction = "tick"
+)
+
 func StartRefreshLoop(token, username string, storage *storage) {
 	refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
-	refresh := make(chan string, 1)
+	refresh := make(chan refreshAction, 1)
 	retriesLeft := 5
 
 	go func() {
 		for {
 			select {
-			case reason := <-refresh:
-				logger.Info("refreshing", slog.String("reason", reason))
+			case action := <-refresh:
+				logger.Info("refresh loop", slog.Any("action", action))
+				switch action {
+				case stop:
+					refreshTimer.Stop()
+					return
+				}
 				_, err := possiblyRefreshPrs(token, username, storage)
 				if err != nil {
 					if errors.Is(err, errClient) {
@@ -97,12 +110,14 @@ func StartRefreshLoop(token, username string, storage *storage) {
 						logger.Warn("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
 					}
 				}
+
 			case <-refreshTimer.C:
-				refresh <- "automatic refresh"
+				refresh <- tick
 			}
 		}
 	}()
-	refresh <- "upstart refresh"
+
+	refresh <- upstart
 }
 
 func querySearchPrsInvolvingUser(username string) string {
