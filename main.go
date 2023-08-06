@@ -71,38 +71,54 @@ func main() {
 	ServeWeb(*url, username, token, storage)
 }
 
+type refreshAction string
+
+const (
+	upstart refreshAction = "upstart"
+	stop    refreshAction = "stop"
+	tick    refreshAction = "tick"
+)
+
 func StartRefreshLoop(token, username string, storage *storage) {
 	refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
-	refresh := make(chan string)
+	refresh := make(chan refreshAction)
 	retriesLeft := 5
 
 	go func() {
-		for {
-			select {
-			case reason := <-refresh:
-				logger.Info("refreshing", slog.String("reason", reason))
-				_, err := possiblyRefreshPrs(token, username, storage)
-				if err != nil {
-					if errors.Is(err, errClient) {
+		for action := range refresh {
+			logger.Info("refresh loop", slog.Any("action", action))
+			switch action {
+			case stop:
+				refreshTimer.Stop()
+				return
+			}
+			_, err := possiblyRefreshPrs(token, username, storage)
+			if err != nil {
+				if errors.Is(err, errClient) {
+					refreshTimer.Stop()
+					logger.Error("client error when querying github, giving up", err)
+					return
+				} else if errors.Is(err, errGithubServer) {
+					retriesLeft--
+					if retriesLeft <= 0 {
 						refreshTimer.Stop()
-						logger.Error("client error when querying github, giving up", err)
+						logger.Error("too many failed github requests, giving up", nil)
 						return
-					} else if errors.Is(err, errGithubServer) {
-						retriesLeft--
-						if retriesLeft <= 0 {
-							refreshTimer.Stop()
-							logger.Error("too many failed github requests, giving up", nil)
-							return
-						}
-						logger.Warn("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
 					}
+					logger.Warn("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
 				}
-			case <-refreshTimer.C:
-				refresh <- "automatic refresh"
 			}
 		}
 	}()
-	refresh <- "upstart refresh"
+
+	go func() {
+		for range refreshTimer.C {
+			logger.Info("refresh timer")
+			refresh <- tick
+		}
+	}()
+
+	refresh <- upstart
 }
 
 func querySearchPrsInvolvingUser(username string) string {
