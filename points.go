@@ -29,8 +29,6 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 	points := &Points{}
 	points.Reasons = make([]string, 0)
 
-	unrespondedThreads := unrespondedCommentThreads(pr, username)
-
 	if pr.Author == username {
 		// our pr
 		if pr.ReviewStatus == "APPROVED" {
@@ -44,12 +42,6 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 		if pr.LastPrCommenter != "" && pr.LastPrCommenter != username {
 			// someone might have asked us something
 			points.Add(10, fmt.Sprintf("Someone else commented last (%s)", pr.LastPrCommenter))
-		}
-
-		if unrespondedThreads > 0 {
-			points.Add(80, fmt.Sprintf("Someone asked us something (%d comments)", unrespondedThreads))
-			// we already need to go over this, don't scale the points
-			// by amount of threads though, it might go overboard
 		}
 
 		if pr.IsDraft {
@@ -90,9 +82,12 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 		case diff > 300:
 			points.Add(10, fmt.Sprintf("PR is bigish, %d loc changed is >300", diff))
 		}
+	}
 
-		// TODO find our own comment threads here, and see if they are
-		// responded to
+	if pr.UnrespondedThreads > 0 {
+		points.Add(80, fmt.Sprintf("Someone asked us something (%d comments)", pr.UnrespondedThreads))
+		// we already need to go over this, don't scale the points
+		// by amount of threads though, it might go overboard
 	}
 
 	sort.Slice(points.Reasons, func(i, j int) bool {
@@ -101,21 +96,4 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 	})
 
 	return points
-}
-
-// unrespondedCommentThreads() searches through PR review comments and returns
-// amount of comments that the given github user has not responded to.
-func unrespondedCommentThreads(pr ViewPr, myGithubUsername string) int {
-	comments := 0
-	if myGithubUsername == "" {
-		return comments
-	}
-
-	for _, c := range pr.UnresolvedReviewThreadLastCommenters {
-		if c != myGithubUsername {
-			comments++
-		}
-	}
-
-	return comments
 }

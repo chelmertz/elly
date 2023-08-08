@@ -177,14 +177,35 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 			lastPrCommenter = c.Node.Author.Login
 		}
 
-		unresolvedReviewThreadLastCommenters := make([]string, 0)
+		ownPr := pr.Author.Login == username
+		unrespondedThreads := 0
 		for _, t := range pr.ReviewThreads.Edges {
 			if t.Node.IsCollapsed || t.Node.IsOutdated || t.Node.IsResolved {
 				continue
 			}
 
-			lastCommenting := t.Node.Comments.Nodes[len(t.Node.Comments.Nodes)-1].Author.Login
-			unresolvedReviewThreadLastCommenters = append(unresolvedReviewThreadLastCommenters, lastCommenting)
+			lastCommenter := t.Node.Comments.Nodes[len(t.Node.Comments.Nodes)-1].Author.Login
+			if lastCommenter == username {
+				// we have the (currently) last word
+				continue
+			}
+
+			if ownPr {
+				// someone else commented last, and this is our pr
+				unrespondedThreads++
+				continue
+			}
+
+			threadStarter := t.Node.Comments.Nodes[0].Author.Login
+			if threadStarter == username {
+				// we started the thread, and it's still open (and someone else
+				// has the last word)
+				unrespondedThreads++
+				continue
+			}
+
+			// not recorded so far: someone else started the thread, we
+			// commented in the middle and someone else has the last word
 		}
 
 		reviewUsers := make([]string, 0)
@@ -193,20 +214,20 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 		}
 
 		viewPr := ViewPr{
-			ReviewStatus:                         pr.ReviewDecision,
-			Url:                                  pr.Url,
-			Title:                                pr.Title,
-			Author:                               pr.Author.Login,
-			RepoName:                             pr.Repository.Name,
-			RepoOwner:                            pr.Repository.Owner.Login,
-			RepoUrl:                              pr.Repository.Url,
-			IsDraft:                              pr.IsDraft,
-			LastUpdated:                          updatedAt,
-			LastPrCommenter:                      lastPrCommenter,
-			UnresolvedReviewThreadLastCommenters: unresolvedReviewThreadLastCommenters,
-			Additions:                            pr.Additions,
-			Deletions:                            pr.Deletions,
-			ReviewRequestedFromUsers:             reviewUsers,
+			ReviewStatus:             pr.ReviewDecision,
+			Url:                      pr.Url,
+			Title:                    pr.Title,
+			Author:                   pr.Author.Login,
+			RepoName:                 pr.Repository.Name,
+			RepoOwner:                pr.Repository.Owner.Login,
+			RepoUrl:                  pr.Repository.Url,
+			IsDraft:                  pr.IsDraft,
+			LastUpdated:              updatedAt,
+			LastPrCommenter:          lastPrCommenter,
+			UnrespondedThreads:       unrespondedThreads,
+			Additions:                pr.Additions,
+			Deletions:                pr.Deletions,
+			ReviewRequestedFromUsers: reviewUsers,
 		}
 		logger.Debug("fetched a pr", slog.Any("pr", viewPr))
 		viewPrs = append(viewPrs, viewPr)
