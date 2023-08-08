@@ -67,7 +67,7 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 		}
 
 		if pr.IsDraft {
-			points.Remove(100, "PR is someone else's draft")
+			points.Remove(10, "PR is someone else's draft")
 		}
 
 		// reward short prs
