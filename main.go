@@ -131,6 +131,15 @@ func querySearchPrsInvolvingUser(username string) string {
           title
           url
           isDraft
+          reviewRequests(first: 100) {
+            nodes {
+              requestedReviewer {
+                ... on User {
+                  login
+                }
+              }
+            }
+          }
           repository {
             url
             name
@@ -311,6 +320,7 @@ type ViewPr struct {
 	UnresolvedReviewThreadLastCommenters []string
 	Additions                            int
 	Deletions                            int
+	ReviewRequestedFromUsers             []string
 }
 
 func possiblyRefreshPrs(token, username string, storage *storage) (bool, error) {
@@ -463,6 +473,13 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 		if pr.IsDraft {
 			points.Remove(10, "PR is my draft")
 		}
+
+		if len(pr.ReviewRequestedFromUsers) == 0 {
+			// points represents "actions to take", and if there are no
+			// reviewers assigned to your pr, there's a chance no-one will look
+			// at it
+			points.Add(10, "You should add reviewers")
+		}
 	} else {
 		// someone else's pr, or our but the username is not set
 		if pr.ReviewStatus == "APPROVED" {
@@ -506,6 +523,13 @@ type querySearchPrsInvolvingMeGraphQl struct {
 					Url            string
 					Title          string
 					IsDraft        bool
+					ReviewRequests struct {
+						Nodes []struct {
+							RequestedReviewer struct {
+								Login string
+							}
+						}
+					}
 					ReviewDecision string
 					UpdatedAt      string
 					Author         struct {
@@ -648,6 +672,11 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 			unresolvedReviewThreadLastCommenters = append(unresolvedReviewThreadLastCommenters, lastCommenting)
 		}
 
+		reviewUsers := make([]string, 0)
+		for _, u := range pr.ReviewRequests.Nodes {
+			reviewUsers = append(reviewUsers, u.RequestedReviewer.Login)
+		}
+
 		viewPr := ViewPr{
 			ReviewStatus:                         pr.ReviewDecision,
 			Url:                                  pr.Url,
@@ -662,6 +691,7 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 			UnresolvedReviewThreadLastCommenters: unresolvedReviewThreadLastCommenters,
 			Additions:                            pr.Additions,
 			Deletions:                            pr.Deletions,
+			ReviewRequestedFromUsers:             reviewUsers,
 		}
 		logger.Debug("fetched a pr", slog.Any("pr", viewPr))
 		viewPrs = append(viewPrs, viewPr)
