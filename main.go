@@ -459,6 +459,10 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 			points.Add(100, "Own PR is approved, should be a simple merge")
 		}
 
+		if pr.ReviewStatus == "CHANGES_REQUESTED" {
+			points.Add(50, "Someone wants you to change something")
+		}
+
 		if pr.LastPrCommenter != "" && pr.LastPrCommenter != username {
 			// someone might have asked us something
 			points.Add(10, fmt.Sprintf("Someone else commented last (%s)", pr.LastPrCommenter))
@@ -484,6 +488,12 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 		// someone else's pr, or our but the username is not set
 		if pr.ReviewStatus == "APPROVED" {
 			points.Remove(100, "PR is someone else's and is approved")
+		}
+
+		if pr.ReviewStatus == "CHANGES_REQUESTED" {
+			// you might want to wait with this, it seems like the PR author has
+			// some work to do already
+			points.Remove(10, "Changes are already requested")
 		}
 
 		if pr.IsDraft {
