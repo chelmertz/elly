@@ -63,7 +63,8 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 		if pr.ReviewStatus == "CHANGES_REQUESTED" {
 			// you might want to wait with this, it seems like the PR author has
 			// some work to do already
-			points.Remove(10, "Changes are already requested")
+
+			points.Remove(100, "Changes are already requested")
 		}
 
 		if pr.IsDraft {
