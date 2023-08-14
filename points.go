@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"time"
 )
 
 type Points struct {
@@ -63,12 +64,18 @@ func standardPrPoints(pr ViewPr, username string) *Points {
 		if pr.ReviewStatus == "CHANGES_REQUESTED" {
 			// you might want to wait with this, it seems like the PR author has
 			// some work to do already
-
 			points.Remove(100, "Changes are already requested")
 		}
 
 		if pr.IsDraft {
-			points.Remove(10, "PR is someone else's draft")
+			if pr.LastUpdated.Before(time.Now().Add(-5 * 24 * time.Hour)) {
+				// another person's draft might be interesting if it's new, but
+				// when the "draft" status is being used as a "WIP" status, it
+				// probably doesn't require our immediate attention
+				points.Remove(70, "PR is someone else's old draft")
+			} else {
+				points.Remove(10, "PR is someone else's draft")
+			}
 		}
 
 		// reward short prs
