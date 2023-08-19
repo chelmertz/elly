@@ -149,7 +149,7 @@
             <aside class="meta">
                 <ul>
                     <li>👤 {{.CurrentUser}}</li>
-                    <li><a class="refresh" href="/api/v0/prs/refresh">🗘 {{.LastRefreshed}}</a></li>
+                    <li><a class="refresh" href="/api/v0/prs/refresh">🗘 <time datetime="{{.LastRefreshed}}">{{.LastRefreshed}}</time></a></li>
                     <li><a class="about" href="/about">About</a></li>
                 </ul>
             </aside>
@@ -208,6 +208,19 @@
                 }
                 e.preventDefault()
             });
+
+            const timeFormat = new Intl.RelativeTimeFormat("en", {numeric: "auto"});
+            const updateTime = () => {
+                document.querySelectorAll("time").forEach((el) => {
+                    const date = new Date(el.dateTime);
+                    const now = new Date();
+                    const  minuteDiff = Math.round((date-now) / 1000 / 60);
+                    el.innerText = timeFormat.format(minuteDiff, 'minute');
+                });
+            };
+
+            updateTime();
+            setInterval(updateTime, 5000);
             
             window.addEventListener("keydown", (e) => {
                 if (e.key === "j" || e.key === "ArrowDown") {

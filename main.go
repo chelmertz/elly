@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
-	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -238,14 +237,11 @@ func ServeWeb(url, username, token string, storage *storage, refreshingChannel c
 			}
 			return pri > prj
 		})
-		lastRefreshed := fmt.Sprintf("%d min ago (%s)",
-			int(math.RoundToEven(time.Since(storedPrs.LastFetched).Minutes())),
-			storedPrs.LastFetched.Format("15:04"))
 		data := IndexHtmlData{
 			Prs:            prs_,
 			PointsPerPrUrl: pointsPerPrUrl,
 			CurrentUser:    username,
-			LastRefreshed:  lastRefreshed,
+			LastRefreshed:  storedPrs.LastFetched.Format(time.RFC3339),
 		}
 		err := temp.Execute(w, data)
 		check(err)
