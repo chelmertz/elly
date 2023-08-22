@@ -203,7 +203,7 @@
             document.querySelector("a.refresh").addEventListener("click", (e) => {
                 if (!isRefreshing) {
                     isRefreshing = true;
-                    fetch(e.target.href).then((response) => {
+                    fetch(e.currentTarget.href, {method: 'POST'}).then((response) => {
                         isRefreshing = false;
                     });
                 }

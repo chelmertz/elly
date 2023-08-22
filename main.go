@@ -289,7 +289,9 @@ func ServeWeb(url, username, token string, storage *storage, refreshingChannel c
 	})
 
 	http.HandleFunc("/api/v0/prs/refresh", func(w http.ResponseWriter, r *http.Request) {
-		refreshingChannel <- manual
+		if r.Method == http.MethodPost {
+			refreshingChannel <- manual
+		}
 	})
 
 	logger.Info("starting web server at", slog.String("url", "http://"+url))
