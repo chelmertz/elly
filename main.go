@@ -291,6 +291,10 @@ func ServeWeb(url, username, token string, storage *storage, refreshingChannel c
 	http.HandleFunc("/api/v0/prs/refresh", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			refreshingChannel <- manual
+		} else if r.Method == http.MethodGet {
+		} else {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
 		}
 	})
 
