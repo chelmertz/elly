@@ -12,7 +12,7 @@ prs=$(curl -q "$elly_url/api/v0/prs?minPoints=1")
 # left click - open elly in browser
 if [ "$BLOCK_BUTTON" -eq 1 ]; then
 	xdg-open "$elly_url" &
-	wmctrl -a chrome
+	wmctrl -a firefox
 fi
 
 count=$(jq 'length' <(echo "$prs"))
@@ -25,8 +25,8 @@ if [ "$count" -gt 0 ]; then
 	if [ "$BLOCK_BUTTON" -eq 3 ]; then
 		for u in $(jq -r '.[].Url' <(echo "$prs")); do
 			xdg-open "$u" &
-			wmctrl -a chrome
 		done
+		wmctrl -a firefox
 	fi
 else
 	echo "$text_or_icon $count"
