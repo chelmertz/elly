@@ -212,12 +212,22 @@
 
             const timeFormat = new Intl.RelativeTimeFormat("en", {numeric: "auto"});
             const updateTime = () => {
-                document.querySelectorAll("time").forEach((el) => {
-                    const date = new Date(el.dateTime);
-                    const now = new Date();
-                    const  minuteDiff = Math.round((date-now) / 1000 / 60);
-                    el.innerText = timeFormat.format(minuteDiff, 'minute');
-                });
+                fetch("/api/v0/prs/refresh")
+                    .then(response => response.json())
+                    .then(json => {
+                        const lastRefreshed = new Date(json.LastRefreshed);
+                        const now = new Date();
+                        const minuteDiff = Math.round((lastRefreshed-now) / 1000 / 60);
+                        if (minuteDiff < 0) {
+                            // we should reload, there could be new changes
+                            console.log("reloading, current time: ", now, "backend: ", lastRefreshed);
+                            window.location.reload();
+                        } else {
+                            // let's bump the "last refreshed" time
+                            console.log("NOT reloading, current time: ", now, "backend: ", json, json.LastRefreshed, lastRefreshed);
+                            document.querySelector("a.refresh time").innerText = timeFormat.format(minuteDiff, "minute");
+                        }
+                    });
             };
 
             updateTime();
