@@ -141,6 +141,16 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 	}
 	defer response.Body.Close()
 
+	if expiration := response.Header.Get("Github-Authentication-Token-Expiration"); expiration != "" {
+		expires, err := time.Parse("2006-01-02 15:04:05 -0700", expiration)
+		if err != nil {
+			logger.Error("could not parse github token expiration", err, slog.String("expiration", expiration))
+		} else if expires.After(time.Now().Add(-1 * 24 * 10 * time.Hour)) {
+			// less than 10 days left on token, warn!
+			logger.Warn("github token expires soon", slog.Time("expires", expires), slog.Int("days_left", int(time.Until(expires).Hours()/24)))
+		}
+	}
+
 	respBody, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, fmt.Errorf("could not read github response: %w", err)
