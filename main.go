@@ -26,6 +26,9 @@ func check(err error) {
 	}
 }
 
+// TODO debug level as flag
+// TODO update to go version, remove experimental slog dependency
+
 var timeoutMinutes = flag.Int("timeout", 10, "refresh PRs every N minutes")
 var url = flag.String("url", "localhost:9876", "URL for web GUI")
 var logger = slog.New(slog.NewTextHandler(os.Stdout))

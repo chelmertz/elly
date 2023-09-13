@@ -147,6 +147,7 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 			logger.Error("could not parse github token expiration", err, slog.String("expiration", expiration))
 		} else if expires.After(time.Now().Add(-1 * 24 * 10 * time.Hour)) {
 			// less than 10 days left on token, warn!
+			// TODO notify the GUI
 			logger.Warn("github token expires soon", slog.Time("expires", expires), slog.Int("days_left", int(time.Until(expires).Hours()/24)))
 		}
 	}
