@@ -195,14 +195,15 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 			}
 
 			lastCommenter := t.Node.Comments.Nodes[len(t.Node.Comments.Nodes)-1].Author.Login
-			if lastCommenter == username {
-				// we have the (currently) last word
+
+			if ownPr && lastPrCommenter != username {
+				// someone else commented last, and this is our pr
+				unrespondedThreads++
 				continue
 			}
 
-			if ownPr {
-				// someone else commented last, and this is our pr
-				unrespondedThreads++
+			if !ownPr && lastCommenter == username {
+				// we have the currently last word, the owner should reply or resolve the thread
 				continue
 			}
 
