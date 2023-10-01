@@ -13,13 +13,13 @@ func Test_WhenReviewThreadIsEmpty_WillNotRequireAction(t *testing.T) {
 	}, "currentUser")
 
 	if constructedButEmpty != 0 {
-		t.Fatalf("expected 0 actionable threads, got %d", constructedButEmpty)
+		t.Fatalf("expected 0 actionable threads on an empty struct, got %d", constructedButEmpty)
 	}
 
 	actuallyEmpty := actionableThreads(prSearchResultGraphQl{}, "currentUser")
 
 	if actuallyEmpty != 0 {
-		t.Fatalf("expected 0 actionable threads, got %d", actuallyEmpty)
+		t.Fatalf("expected 0 actionable threads for an empty pr, got %d", actuallyEmpty)
 	}
 }
 
