@@ -38,78 +38,84 @@ type querySearchPrsInvolvingMeGraphQl struct {
 	Data struct {
 		Search struct {
 			Edges []struct {
-				Node struct {
-					Url            string
-					Title          string
-					IsDraft        bool
-					ReviewRequests struct {
-						Nodes []struct {
-							RequestedReviewer struct {
-								Login string
-							}
-						}
-					}
-					ReviewDecision string
-					UpdatedAt      string
-					Author         struct {
-						Login string
-					}
+				Node prSearchResultGraphQl
+			}
+		}
+	}
+}
 
-					Repository struct {
-						Url   string
-						Name  string
-						Owner struct {
-							Login string
-						}
-					}
+type prSearchResultGraphQl struct {
+	Url            string
+	Title          string
+	IsDraft        bool
+	ReviewRequests struct {
+		Nodes []struct {
+			RequestedReviewer struct {
+				Login string
+			}
+		}
+	}
+	ReviewDecision string
+	UpdatedAt      string
+	Author         struct {
+		Login string
+	}
 
-					Additions int
-					Deletions int
-					Comments  struct {
-						Edges []struct {
-							Node struct {
-								UpdatedAt string
-								Author    struct {
-									Login string
-								}
-								Url  string
-								Body string
-							}
-						}
-					}
-					Commits struct {
-						Nodes []struct {
-							Commit struct {
-								Author struct {
-									Date  string
-									Email string
-									Name  string
-								}
-							}
-						}
-					}
-					ReviewThreads struct {
-						Edges []struct {
-							Node struct {
-								IsResolved  bool
-								IsOutdated  bool
-								IsCollapsed bool
-								Comments    struct {
-									Nodes []struct {
-										Author struct {
-											Login string
-										}
-										Body string
-										Url  string
-									}
-								}
-							}
-						}
-					}
+	Repository struct {
+		Url   string
+		Name  string
+		Owner struct {
+			Login string
+		}
+	}
+
+	Additions int
+	Deletions int
+	Comments  struct {
+		Edges []struct {
+			Node struct {
+				UpdatedAt string
+				Author    struct {
+					Login string
+				}
+				Url  string
+				Body string
+			}
+		}
+	}
+	Commits struct {
+		Nodes []struct {
+			Commit struct {
+				Author struct {
+					Date  string
+					Email string
+					Name  string
 				}
 			}
 		}
 	}
+	ReviewThreads struct {
+		Edges []struct {
+			Node prReviewThreadGraphQl
+		}
+	}
+}
+
+type prReviewThreadGraphQl struct {
+	IsResolved  bool
+	IsOutdated  bool
+	IsCollapsed bool
+	Comments    struct {
+		Nodes []prReviewThreadCommentGraphQl
+	}
+}
+
+type prReviewThreadCommentGraphQl struct {
+	Author struct {
+		Login string
+	}
+	Body string
+	Url  string
 }
 
 func queryGithub(token string, username string) ([]ViewPr, error) {
@@ -187,36 +193,7 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 			lastPrCommenter = c.Node.Author.Login
 		}
 
-		ownPr := pr.Author.Login == username
-		unrespondedThreads := 0
-		for _, t := range pr.ReviewThreads.Edges {
-			if t.Node.IsCollapsed || t.Node.IsOutdated || t.Node.IsResolved {
-				continue
-			}
-
-			lastCommenter := t.Node.Comments.Nodes[len(t.Node.Comments.Nodes)-1].Author.Login
-			if lastCommenter == username {
-				// we have the (currently) last word
-				continue
-			}
-
-			if ownPr {
-				// someone else commented last, and this is our pr
-				unrespondedThreads++
-				continue
-			}
-
-			threadStarter := t.Node.Comments.Nodes[0].Author.Login
-			if threadStarter == username {
-				// we started the thread, and it's still open (and someone else
-				// has the last word)
-				unrespondedThreads++
-				continue
-			}
-
-			// not recorded so far: someone else started the thread, we
-			// commented in the middle and someone else has the last word
-		}
+		unrespondedThreads := actionableThreads(pr, username)
 
 		reviewUsers := make([]string, 0)
 		for _, u := range pr.ReviewRequests.Nodes {
@@ -234,7 +211,7 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 			IsDraft:                  pr.IsDraft,
 			LastUpdated:              updatedAt,
 			LastPrCommenter:          lastPrCommenter,
-			UnrespondedThreads:       unrespondedThreads,
+			UnrespondedThreads:       unrespondedThreads, // TODO "threadsNeedingOurAction"
 			Additions:                pr.Additions,
 			Deletions:                pr.Deletions,
 			ReviewRequestedFromUsers: reviewUsers,
@@ -244,6 +221,47 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 	}
 
 	return viewPrs, nil
+}
+
+func actionableThreads(pr prSearchResultGraphQl, myUsername string) int {
+	unrespondedThreads := 0
+	ownPr := pr.Author.Login == myUsername
+	for _, t := range pr.ReviewThreads.Edges {
+		if t.Node.IsCollapsed || t.Node.IsOutdated || t.Node.IsResolved {
+			continue
+		}
+
+		if len(t.Node.Comments.Nodes) == 0 {
+			// the types say this is possible, I haven't seen it in the wild though
+			continue
+		}
+
+		lastCommenter := t.Node.Comments.Nodes[len(t.Node.Comments.Nodes)-1].Author.Login
+
+		if ownPr && lastCommenter != myUsername {
+			// someone else commented last, and this is our pr
+			unrespondedThreads++
+			continue
+		}
+
+		if !ownPr && lastCommenter == myUsername {
+			// we have the currently last word, the owner should reply or resolve the thread
+			continue
+		}
+
+		threadStarter := t.Node.Comments.Nodes[0].Author.Login
+		if threadStarter == myUsername && lastCommenter != myUsername {
+			// we started the thread, and it's still open (and someone else
+			// has the last word)
+			unrespondedThreads++
+			continue
+		}
+
+		// not recorded so far: someone else started the thread, we
+		// commented in the middle and someone else has the last word
+	}
+
+	return unrespondedThreads
 }
 
 func querySearchPrsInvolvingUser(username string) string {

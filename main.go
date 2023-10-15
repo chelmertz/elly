@@ -34,6 +34,7 @@ var githubUsernameRegex = regexp.MustCompile("[a-zA-Z0-9-]+")
 func main() {
 	flag.Parse()
 
+	// TODO try out with bad github pat and make sure it fails gracefully (and is shown in GUI)
 	token := os.Getenv("GITHUB_PAT")
 	if token == "" {
 		logger.Error("missing GITHUB_PAT env var", nil)
@@ -129,6 +130,7 @@ type prs struct {
 	LastFetched time.Time
 }
 
+// TODO storage impl into separate file
 func NewStorage() *storage {
 	s := &storage{}
 	dirname, err := os.UserCacheDir()
