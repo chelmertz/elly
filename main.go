@@ -234,7 +234,7 @@ func ServeWeb(url, username, token string, storage *storage, refreshingChannel c
 			pri := pointsPerPrUrl[prs_[i].Url].Total
 			prj := pointsPerPrUrl[prs_[j].Url].Total
 			if pri == prj {
-				lastUpdated := prs_[i].LastUpdated.Before(prs_[j].LastUpdated)
+				lastUpdated := prs_[j].LastUpdated.Before(prs_[i].LastUpdated)
 				return lastUpdated
 			}
 			return pri > prj
@@ -279,7 +279,7 @@ func ServeWeb(url, username, token string, storage *storage, refreshingChannel c
 			pri := pointsPerPrUrl[storedPrs[i].Url].Total
 			prj := pointsPerPrUrl[storedPrs[j].Url].Total
 			if pri == prj {
-				lastUpdated := storedPrs[i].LastUpdated.Before(storedPrs[j].LastUpdated)
+				lastUpdated := storedPrs[j].LastUpdated.Before(storedPrs[i].LastUpdated)
 				return lastUpdated
 			}
 			return pri > prj
