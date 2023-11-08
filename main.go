@@ -2,7 +2,6 @@ package main
 
 import (
 	"embed"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -15,7 +14,6 @@ import (
 	"runtime/debug"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -214,23 +212,6 @@ type ViewPr struct {
 	Additions                int
 	Deletions                int
 	ReviewRequestedFromUsers []string
-	Buried                   bool
-}
-
-func (pr ViewPr) Id() string {
-	return base64.StdEncoding.EncodeToString([]byte(pr.Url))
-}
-
-// ToggleBuryUrl() introduces the concept of base64-encoded-PR-URL as an "ID", in the
-// sense of a REST API's resource. This feels cleaner than having to escape
-// things, or constructing an ID with a owner/repo/pr# or such. If we want to
-// support something else than Github later, an URL is still a good ID.
-func (pr ViewPr) ToggleBuryUrl() string {
-	if pr.Buried {
-		return fmt.Sprintf("/api/v0/prs/%s/unbury", pr.Id())
-	} else {
-		return fmt.Sprintf("/api/v0/prs/%s/bury", pr.Id())
-	}
 }
 
 //go:embed templates/index.html
@@ -243,44 +224,6 @@ func ServeWeb(url, username, token string, storage *storage, refreshingChannel c
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		storedPrs := storage.Prs()
 		prs_ := storedPrs.Prs
-
-		if r.Method == http.MethodPost {
-			wo := strings.TrimPrefix(r.URL.Path, "/api/v0/prs/")
-			parts := strings.Split(wo, "/")
-			if len(parts) == 2 && (parts[1] == "bury" || parts[1] == "unbury") {
-				prUrlBytes, err := base64.StdEncoding.DecodeString(parts[0])
-				if err != nil {
-					w.Write([]byte("invalid PR ID"))
-					w.WriteHeader(http.StatusBadRequest)
-					return
-				}
-
-				ghPrUrl := string(prUrlBytes)
-				validUrl := false
-				for i, pr := range prs_ {
-					if pr.Url == ghPrUrl {
-						prs_[i].Buried = parts[1] == "bury"
-						validUrl = true
-						break
-					}
-				}
-
-				if !validUrl {
-					w.Write([]byte("couldn't find PR by given URL"))
-					w.WriteHeader(http.StatusNotFound)
-					return
-				}
-
-				if err := storage.StoreRepoPrs(prs_); err != nil {
-					w.Write([]byte("couldn't store PRs"))
-					w.WriteHeader(http.StatusInternalServerError)
-					return
-				}
-
-				http.Redirect(w, r, "/", http.StatusFound)
-				return
-			}
-		}
 
 		pointsPerPrUrl := make(map[string]*Points)
 		for _, pr := range prs_ {
