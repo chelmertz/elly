@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 var errClient = errors.New("github returned client error")

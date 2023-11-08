@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 func check(err error) {
@@ -28,7 +28,7 @@ func check(err error) {
 
 var timeoutMinutes = flag.Int("timeout", 10, "refresh PRs every N minutes")
 var url = flag.String("url", "localhost:9876", "URL for web GUI")
-var logger = slog.New(slog.NewTextHandler(os.Stdout))
+var logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 var githubUsernameRegex = regexp.MustCompile("[a-zA-Z0-9-]+")
 
 func main() {
