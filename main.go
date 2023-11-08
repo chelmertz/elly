@@ -127,7 +127,7 @@ type storage struct {
 	sync.Mutex
 }
 
-type prs struct {
+type storedState struct {
 	Prs         []ViewPr
 	LastFetched time.Time
 }
@@ -147,7 +147,7 @@ func NewStorage() *storage {
 	return s
 }
 
-func (s *storage) Prs() prs {
+func (s *storage) Prs() storedState {
 	s.Lock()
 	defer s.Unlock()
 
@@ -160,7 +160,7 @@ func (s *storage) Prs() prs {
 		}
 	}
 
-	var prs_ = prs{}
+	var prs_ = storedState{}
 	err = json.Unmarshal(oldContents, &prs_)
 	check(err)
 
@@ -170,7 +170,7 @@ func (s *storage) Prs() prs {
 func (s *storage) StoreRepoPrs(orderedPrs []ViewPr) error {
 	s.Lock()
 	defer s.Unlock()
-	prs_ := prs{}
+	prs_ := storedState{}
 	prs_.Prs = make([]ViewPr, len(orderedPrs))
 	copy(prs_.Prs, orderedPrs)
 	prs_.LastFetched = time.Now()
