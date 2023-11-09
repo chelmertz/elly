@@ -4,14 +4,11 @@
 
 package storage
 
-import (
-	"database/sql"
-)
+import ()
 
 type Pr struct {
-	ID                       int64
-	ReviewStatus             string
 	Url                      string
+	ReviewStatus             string
 	Title                    string
 	Author                   string
 	RepoName                 string
@@ -24,5 +21,5 @@ type Pr struct {
 	Additions                int64
 	Deletions                int64
 	ReviewRequestedFromUsers string
-	Buried                   sql.NullBool
+	Buried                   bool
 }

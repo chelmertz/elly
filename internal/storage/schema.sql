@@ -1,7 +1,6 @@
 create table prs (
-    id integer primary key,
+    url text not null unique,
     review_status text not null,
-    url text not null,
     title text not null,
     author text not null,
     repo_name text not null,
@@ -14,5 +13,5 @@ create table prs (
     additions integer not null,
     deletions integer not null,
     review_requested_from_users text not null,
-    buried boolean
+    buried boolean not null
 );

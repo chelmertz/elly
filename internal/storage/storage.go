@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -80,6 +81,31 @@ func (s *Storage) Prs() StoredState {
 	err = json.Unmarshal(oldContents, &prs_)
 	check(err)
 
+	dbPrs, err := s.db.ListPrs(context.Background())
+	check(err)
+	prs := make([]types.ViewPr, 0)
+	for _, dbPr := range dbPrs {
+		lastUpdated, err := time.Parse(time.RFC3339, dbPr.LastUpdated)
+		check(err)
+		prs = append(prs, types.ViewPr{
+			Url:                      dbPr.Url,
+			ReviewStatus:             dbPr.ReviewStatus,
+			Title:                    dbPr.Title,
+			Author:                   dbPr.Author,
+			RepoName:                 dbPr.RepoName,
+			RepoOwner:                dbPr.RepoOwner,
+			RepoUrl:                  dbPr.RepoUrl,
+			IsDraft:                  dbPr.IsDraft,
+			LastUpdated:              lastUpdated,
+			LastPrCommenter:          dbPr.LastPrCommenter,
+			UnrespondedThreads:       int(dbPr.UnrespondedThreads),
+			Additions:                int(dbPr.Additions),
+			Deletions:                int(dbPr.Deletions),
+			ReviewRequestedFromUsers: strings.Split(dbPr.ReviewRequestedFromUsers, ","),
+		})
+	}
+	prs_.Prs = prs
+
 	return prs_
 }
 
@@ -100,6 +126,27 @@ func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr, logger *slog.Logger) e
 
 	if err := os.WriteFile(s.filename, newContents, 0660); err != nil {
 		return fmt.Errorf("could not write file: %w", err)
+	}
+
+	for _, pr := range orderedPrs {
+		_, err := s.db.CreatePr(context.Background(), CreatePrParams{
+			Url:                      pr.Url,
+			ReviewStatus:             pr.ReviewStatus,
+			Title:                    pr.Title,
+			Author:                   pr.Author,
+			RepoName:                 pr.RepoName,
+			RepoOwner:                pr.RepoOwner,
+			RepoUrl:                  pr.RepoUrl,
+			IsDraft:                  pr.IsDraft,
+			LastUpdated:              pr.LastUpdated.Format(time.RFC3339),
+			LastPrCommenter:          pr.LastPrCommenter,
+			UnrespondedThreads:       int64(pr.UnrespondedThreads),
+			Additions:                int64(pr.Additions),
+			Deletions:                int64(pr.Deletions),
+			ReviewRequestedFromUsers: strings.Join(pr.ReviewRequestedFromUsers, ","),
+			Buried:                   false,
+		})
+		check(err)
 	}
 
 	return nil
