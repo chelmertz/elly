@@ -16,6 +16,7 @@ import (
 
 	"log/slog"
 
+	"github.com/chelmertz/elly/internal/github"
 	"github.com/chelmertz/elly/internal/points"
 	"github.com/chelmertz/elly/internal/storage"
 	"github.com/chelmertz/elly/internal/types"
@@ -93,13 +94,13 @@ func StartRefreshLoop(token, username string, store *storage.Storage) chan refre
 					refreshTimer.Stop()
 					return
 				}
-				_, err := possiblyRefreshPrs(token, username, store, logger)
+				_, err := github.PossiblyRefreshPrs(token, username, store, logger)
 				if err != nil {
-					if errors.Is(err, errClient) {
+					if errors.Is(err, github.ErrClient) {
 						refreshTimer.Stop()
 						logger.Error("client error when querying github, giving up", err)
 						return
-					} else if errors.Is(err, errGithubServer) {
+					} else if errors.Is(err, github.ErrGithubServer) {
 						retriesLeft--
 						if retriesLeft <= 0 {
 							refreshTimer.Stop()

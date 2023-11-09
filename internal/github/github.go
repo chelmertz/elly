@@ -1,4 +1,4 @@
-package main
+package github
 
 import (
 	"bytes"
@@ -16,23 +16,23 @@ import (
 	"github.com/chelmertz/elly/internal/types"
 )
 
-var errClient = errors.New("github returned client error")
-var errGithubServer = errors.New("github returned server error")
-var errCouldNotStorePrs = errors.New("could not store prs")
+var ErrClient = errors.New("github returned client error")
+var ErrGithubServer = errors.New("github returned server error")
+var ErrCouldNotStorePrs = errors.New("could not store prs")
 
-func possiblyRefreshPrs(token, username string, store *storage.Storage, logger *slog.Logger) (bool, error) {
+func PossiblyRefreshPrs(token, username string, store *storage.Storage, logger *slog.Logger) (bool, error) {
 	// querying github once a minute should be fine,
 	// especially as long as we do the passive, loopy thing more seldom
 	if time.Since(store.Prs().LastFetched) < time.Duration(59)*time.Second {
 		return false, nil
 	}
-	prs, err := queryGithub(token, username)
+	prs, err := queryGithub(token, username, logger)
 	if err != nil {
 		return false, fmt.Errorf("could not query github: %w", err)
 	}
 
 	if err := store.StoreRepoPrs(prs, logger); err != nil {
-		return false, fmt.Errorf("%w: %w", errCouldNotStorePrs, err)
+		return false, fmt.Errorf("%w: %w", ErrCouldNotStorePrs, err)
 	}
 	return true, nil
 }
@@ -121,7 +121,7 @@ type prReviewThreadCommentGraphQl struct {
 	Url  string
 }
 
-func queryGithub(token string, username string) ([]types.ViewPr, error) {
+func queryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
 	payload := struct {
 		Query string `json:"query"`
 	}{
@@ -168,9 +168,9 @@ func queryGithub(token string, username string) ([]types.ViewPr, error) {
 	if response.StatusCode >= 400 {
 		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", string(respBody)))
 		if response.StatusCode < 500 {
-			return nil, errClient
+			return nil, ErrClient
 		}
-		return nil, errGithubServer
+		return nil, ErrGithubServer
 	}
 
 	typedResponse := querySearchPrsInvolvingMeGraphQl{}
