@@ -105,5 +105,10 @@ func StandardPrPoints(pr types.ViewPr, username string) *Points {
 		return points.Reasons[i] < points.Reasons[j]
 	})
 
+	if pr.Buried {
+		// TODO test that no other combinations of input can negate the effect of something buried
+		points.Remove(1000, "PR is buried")
+	}
+
 	return points
 }

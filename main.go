@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -12,6 +13,7 @@ import (
 	"runtime/debug"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"log/slog"
@@ -139,6 +141,44 @@ func ServeWeb(url, username, token string, store *storage.Storage, refreshingCha
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		storedPrs := store.Prs()
 		prs_ := storedPrs.Prs
+
+		if r.Method == http.MethodPost {
+			wo := strings.TrimPrefix(r.URL.Path, "/api/v0/prs/")
+			parts := strings.Split(wo, "/")
+			if len(parts) == 2 && (parts[1] == "bury" || parts[1] == "unbury") {
+				prUrlBytes, err := base64.StdEncoding.DecodeString(parts[0])
+				if err != nil {
+					w.Write([]byte("invalid PR ID"))
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+
+				ghPrUrl := string(prUrlBytes)
+				validUrl := false
+				for i, pr := range prs_ {
+					if pr.Url == ghPrUrl {
+						prs_[i].Buried = parts[1] == "bury"
+						validUrl = true
+						break
+					}
+				}
+
+				if !validUrl {
+					w.Write([]byte("couldn't find PR by given URL"))
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+
+				if err := store.StoreRepoPrs(prs_); err != nil {
+					w.Write([]byte("couldn't store PRs"))
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+
+				http.Redirect(w, r, "/", http.StatusFound)
+				return
+			}
+		}
 
 		pointsPerPrUrl := make(map[string]*points.Points)
 		for _, pr := range prs_ {

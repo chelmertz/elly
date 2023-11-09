@@ -132,10 +132,11 @@
                 {{else}}
                 {{range $index, $pr := .Prs}}
                 <article class="pr {{$pr.ReviewStatus}}">
-                    <h3><a class="pr-title" href="{{$pr.Url}}">{{if eq $.CurrentUser $pr.Author}}👤 {{end}}{{$pr.Title}}</a> <span class="boring">@{{$pr.Author}}</span></h3>
+                    <h3><a class="pr-title" href="{{$pr.Url}}" target="_blank">{{if eq $.CurrentUser $pr.Author}}👤 {{end}}{{if $pr.Buried}}🪦 {{end}}{{$pr.Title}}</a> <span class="boring">@{{$pr.Author}}</span></h3>
                     <span class="boring">{{$pr.RepoOwner}}/{{$pr.RepoName}}</span>
                     {{with $points := index $.PointsPerPrUrl $pr.Url}}
                     <span class="inline"><span class="circle ok">{{$points.Total}}</span></span>
+                    <span class="inline"><a class="bury" href="{{$pr.ToggleBuryUrl}}">🪦</a></span>
                     <div class="motivation">
                         {{range $motivation := $points.Reasons}}
                         <p>{{$motivation}}</p>
@@ -163,6 +164,7 @@
                 <ul>
                     <li><kbd>j</kbd> or <kbd>down</kbd> - focus next PR</li>
                     <li><kbd>k</kbd> or <kbd>up</kbd> - focus previous PR</li>
+                    <li><kbd>b</kbd> - bury (or unbury) PR, pushing the PR down to the latest prio available</li>
                     <li><kbd>enter</kbd> - open focused PR in Github, in a new window</li>
                     <li><kbd>shift + enter</kbd> - open all PRs in Github, in new windows (might trigger a browser warning)</li>
                     <li><kbd>?</kbd> - show this dialog</li>
@@ -229,6 +231,20 @@
                     e.preventDefault();
                 } else if (e.key === "k" || e.key === "ArrowUp") {
                     activatePr(-1);
+                    e.preventDefault();
+                } else if (e.key === "b") {
+                    const buryUrl = prs[activePr].querySelector("a.bury").href;
+                    fetch(buryUrl, {method: 'POST'}).then((response) => {
+                        // we don't modify the DOM, just reload the page. this
+                        // loses focus etc., but then again, we start from the
+                        // top (with a focused PR), which is where we should
+                        // focus. also: scroll to top, since I noticed firefox
+                        // stays in the middle of the screen (at the now-buried
+                        // PR's last seen position), but since we focus the top
+                        // one, we should make it visible.
+                        window.scrollTo(0, 0);
+                        window.location.reload();
+                    });
                     e.preventDefault();
                 } else if (e.key === "?") {
                     dialog.showModal();
