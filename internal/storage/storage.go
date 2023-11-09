@@ -4,7 +4,11 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
+	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -32,8 +36,15 @@ type StoredState struct {
 var ddl string
 
 func NewStorage(logger *slog.Logger) *Storage {
-	// TODO put db in some XDG friendly cache dir
-	db, err := sql.Open("sqlite3", "file:elly.db?mode=rwc&_journal_mode=WAL&_synchronous=NORMAL")
+	dirname, err := os.UserCacheDir()
+	check(err)
+	ourCacheDir := filepath.Join(dirname, "elly")
+	if err := os.MkdirAll(ourCacheDir, 0755); err != nil && !errors.Is(err, os.ErrExist) {
+		check(err)
+	}
+	dbFilename := filepath.Join(ourCacheDir, "elly.db")
+
+	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=rwc&_journal_mode=WAL&_synchronous=NORMAL", dbFilename))
 	check(err)
 
 	// create tables
