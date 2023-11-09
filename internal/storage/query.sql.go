@@ -88,6 +88,26 @@ func (q *Queries) CreatePr(ctx context.Context, arg CreatePrParams) (Pr, error) 
 	return i, err
 }
 
+const deletePrs = `-- name: DeletePrs :exec
+delete from prs
+`
+
+func (q *Queries) DeletePrs(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deletePrs)
+	return err
+}
+
+const getLastFetched = `-- name: GetLastFetched :one
+select value from meta where key = 'last_fetched' limit 1
+`
+
+func (q *Queries) GetLastFetched(ctx context.Context) (string, error) {
+	row := q.db.QueryRowContext(ctx, getLastFetched)
+	var value string
+	err := row.Scan(&value)
+	return value, err
+}
+
 const getPr = `-- name: GetPr :one
 select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, unresponded_threads, additions, deletions, review_requested_from_users, buried from prs where url = ? limit 1
 `
@@ -156,4 +176,13 @@ func (q *Queries) ListPrs(ctx context.Context) ([]Pr, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const storeLastFetched = `-- name: StoreLastFetched :exec
+replace into meta (key, value) values ('last_fetched', ?)
+`
+
+func (q *Queries) StoreLastFetched(ctx context.Context, value string) error {
+	_, err := q.db.ExecContext(ctx, storeLastFetched, value)
+	return err
 }

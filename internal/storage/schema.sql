@@ -1,4 +1,4 @@
-create table prs (
+create table if not exists prs (
     url text not null unique,
     review_status text not null,
     title text not null,
@@ -14,4 +14,9 @@ create table prs (
     deletions integer not null,
     review_requested_from_users text not null,
     buried boolean not null
+);
+
+create table if not exists meta (
+    key text not null unique,
+    value text not null
 );

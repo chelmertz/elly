@@ -31,7 +31,7 @@ func PossiblyRefreshPrs(token, username string, store *storage.Storage, logger *
 		return false, fmt.Errorf("could not query github: %w", err)
 	}
 
-	if err := store.StoreRepoPrs(prs, logger); err != nil {
+	if err := store.StoreRepoPrs(prs); err != nil {
 		return false, fmt.Errorf("%w: %w", ErrCouldNotStorePrs, err)
 	}
 	return true, nil

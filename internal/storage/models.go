@@ -6,6 +6,11 @@ package storage
 
 import ()
 
+type Meta struct {
+	Key   string
+	Value string
+}
+
 type Pr struct {
 	Url                      string
 	ReviewStatus             string

@@ -22,5 +22,14 @@ insert into prs (
     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 ) returning *;
 
+-- name: DeletePrs :exec
+delete from prs;
+
 -- name: ListPrs :many
 select * from prs;
+
+-- name: StoreLastFetched :exec
+replace into meta (key, value) values ('last_fetched', ?);
+
+-- name: GetLastFetched :one
+select value from meta where key = 'last_fetched' limit 1;

@@ -65,7 +65,7 @@ func main() {
 		slog.String("version", version),
 		slog.Int("timeout_minutes", *timeoutMinutes))
 
-	store := storage.NewStorage()
+	store := storage.NewStorage(logger)
 	refreshChannel := StartRefreshLoop(token, username, store)
 	ServeWeb(*url, username, token, store, refreshChannel)
 }
@@ -154,6 +154,7 @@ func ServeWeb(url, username, token string, store *storage.Storage, refreshingCha
 			}
 			return pri > prj
 		})
+		logger.Info("serving web page", slog.Time("last fetched", storedPrs.LastFetched))
 		data := IndexHtmlData{
 			Prs:            prs_,
 			PointsPerPrUrl: pointsPerPrUrl,

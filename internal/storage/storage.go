@@ -4,14 +4,8 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/chelmertz/elly/internal/types"
@@ -25,10 +19,8 @@ func check(err error) {
 }
 
 type Storage struct {
-	dirname  string
-	filename string
-	sync.Mutex
-	db *Queries
+	db     *Queries
+	logger *slog.Logger
 }
 
 type StoredState struct {
@@ -39,18 +31,9 @@ type StoredState struct {
 //go:embed schema.sql
 var ddl string
 
-func NewStorage() *Storage {
-	s := &Storage{}
-	dirname, err := os.UserCacheDir()
-	check(err)
-	s.dirname = filepath.Join(dirname, "elly")
-	if err := os.Mkdir(s.dirname, 0770); err != nil && !errors.Is(err, os.ErrExist) {
-		check(err)
-	}
-
-	s.filename = filepath.Join(s.dirname, "prs.json")
-
-	db, err := sql.Open("sqlite3", ":memory:")
+func NewStorage(logger *slog.Logger) *Storage {
+	// TODO put db in some XDG friendly cache dir
+	db, err := sql.Open("sqlite3", "file:elly.db?mode=rwc&_journal_mode=WAL&_synchronous=NORMAL")
 	check(err)
 
 	// create tables
@@ -59,28 +42,13 @@ func NewStorage() *Storage {
 		check(err)
 	}
 
-	s.db = New(db)
-
-	return s
+	return &Storage{
+		db:     New(db),
+		logger: logger,
+	}
 }
 
 func (s *Storage) Prs() StoredState {
-	s.Lock()
-	defer s.Unlock()
-
-	oldContents, err := os.ReadFile(s.filename)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			oldContents = []byte("{}")
-		} else {
-			check(err)
-		}
-	}
-
-	var prs_ = StoredState{}
-	err = json.Unmarshal(oldContents, &prs_)
-	check(err)
-
 	dbPrs, err := s.db.ListPrs(context.Background())
 	check(err)
 	prs := make([]types.ViewPr, 0)
@@ -104,28 +72,24 @@ func (s *Storage) Prs() StoredState {
 			ReviewRequestedFromUsers: strings.Split(dbPr.ReviewRequestedFromUsers, ","),
 		})
 	}
-	prs_.Prs = prs
 
-	return prs_
-}
-
-func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr, logger *slog.Logger) error {
-	s.Lock()
-	defer s.Unlock()
-	prs_ := StoredState{}
-	prs_.Prs = make([]types.ViewPr, len(orderedPrs))
-	copy(prs_.Prs, orderedPrs)
-	prs_.LastFetched = time.Now()
-
-	logger.Info("storing prs", slog.Int("prs", len(prs_.Prs)))
-
-	newContents, err := json.Marshal(prs_)
-	if err != nil {
-		return fmt.Errorf("could not marshal json: %w", err)
+	state := StoredState{
+		Prs: prs,
+	}
+	if dbLastFetched, err := s.db.GetLastFetched(context.Background()); err == nil {
+		if lastFetched, err := time.Parse(time.RFC3339, dbLastFetched); err == nil {
+			state.LastFetched = lastFetched
+		}
 	}
 
-	if err := os.WriteFile(s.filename, newContents, 0660); err != nil {
-		return fmt.Errorf("could not write file: %w", err)
+	return state
+}
+
+func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
+	s.logger.Info("storing prs", slog.Int("prs", len(orderedPrs)))
+
+	if err := s.db.DeletePrs(context.Background()); err != nil {
+		check(err)
 	}
 
 	for _, pr := range orderedPrs {
@@ -148,6 +112,16 @@ func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr, logger *slog.Logger) e
 		})
 		check(err)
 	}
+
+	now := time.Now()
+	nowFormatted := now.Format(time.RFC3339)
+	s.logger.Error("storing last fetched", slog.Time("last_fetched", now), slog.String("formatted", nowFormatted))
+	if err := s.db.StoreLastFetched(context.Background(), nowFormatted); err != nil {
+		check(err)
+	}
+
+	res, _ := s.db.GetLastFetched(context.Background())
+	s.logger.Info("GetLastFetched", slog.String("res", res))
 
 	return nil
 }
