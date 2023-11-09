@@ -37,19 +37,19 @@ func main() {
 	// TODO try out with bad github pat and make sure it fails gracefully (and is shown in GUI)
 	token := os.Getenv("GITHUB_PAT")
 	if token == "" {
-		logger.Error("missing GITHUB_PAT env var", nil)
+		logger.Error("missing GITHUB_PAT env var")
 		os.Exit(1)
 	}
 	os.Unsetenv("GITHUB_PAT")
 
 	username := os.Getenv("GITHUB_USER")
 	if token == "" {
-		logger.Warn("missing GITHUB_USER env var, will not assign points properly", nil)
+		logger.Warn("missing GITHUB_USER env var, will not assign points properly")
 	}
 	os.Unsetenv("GITHUB_USER")
 
 	if !githubUsernameRegex.Match([]byte(username)) {
-		logger.Error("GITHUB_USER env var is not a valid github username", nil)
+		logger.Error("GITHUB_USER env var is not a valid github username")
 		os.Exit(1)
 	}
 
@@ -102,7 +102,7 @@ func StartRefreshLoop(token, username string, storage *storage) chan refreshActi
 						retriesLeft--
 						if retriesLeft <= 0 {
 							refreshTimer.Stop()
-							logger.Error("too many failed github requests, giving up", nil)
+							logger.Error("too many failed github requests, giving up")
 							return
 						}
 						logger.Warn("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
