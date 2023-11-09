@@ -5,6 +5,8 @@ import (
 	"math"
 	"sort"
 	"time"
+
+	"github.com/chelmertz/elly/internal/types"
 )
 
 type Points struct {
@@ -26,7 +28,7 @@ func (p *Points) Remove(points int, reason string) {
 
 // standardPrPoints() awards points to PRs based on a set of rules.
 // These rules should be revisited often, and the points should be tweaked.
-func standardPrPoints(pr ViewPr, username string) *Points {
+func standardPrPoints(pr types.ViewPr, username string) *Points {
 	points := &Points{}
 	points.Reasons = make([]string, 0)
 

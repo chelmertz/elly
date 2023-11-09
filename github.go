@@ -11,16 +11,19 @@ import (
 	"time"
 
 	"log/slog"
+
+	"github.com/chelmertz/elly/internal/storage"
+	"github.com/chelmertz/elly/internal/types"
 )
 
 var errClient = errors.New("github returned client error")
 var errGithubServer = errors.New("github returned server error")
 var errCouldNotStorePrs = errors.New("could not store prs")
 
-func possiblyRefreshPrs(token, username string, storage *storage) (bool, error) {
+func possiblyRefreshPrs(token, username string, store *storage.Storage, logger *slog.Logger) (bool, error) {
 	// querying github once a minute should be fine,
 	// especially as long as we do the passive, loopy thing more seldom
-	if time.Since(storage.Prs().LastFetched) < time.Duration(59)*time.Second {
+	if time.Since(store.Prs().LastFetched) < time.Duration(59)*time.Second {
 		return false, nil
 	}
 	prs, err := queryGithub(token, username)
@@ -28,7 +31,7 @@ func possiblyRefreshPrs(token, username string, storage *storage) (bool, error) 
 		return false, fmt.Errorf("could not query github: %w", err)
 	}
 
-	if err := storage.StoreRepoPrs(prs); err != nil {
+	if err := store.StoreRepoPrs(prs, logger); err != nil {
 		return false, fmt.Errorf("%w: %w", errCouldNotStorePrs, err)
 	}
 	return true, nil
@@ -118,7 +121,7 @@ type prReviewThreadCommentGraphQl struct {
 	Url  string
 }
 
-func queryGithub(token string, username string) ([]ViewPr, error) {
+func queryGithub(token string, username string) ([]types.ViewPr, error) {
 	payload := struct {
 		Query string `json:"query"`
 	}{
@@ -176,7 +179,7 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 		return nil, fmt.Errorf("could not unmarshal github response: %w", err)
 	}
 
-	viewPrs := make([]ViewPr, 0)
+	viewPrs := make([]types.ViewPr, 0)
 
 	for _, prEdge := range typedResponse.Data.Search.Edges {
 		pr := prEdge.Node
@@ -200,7 +203,7 @@ func queryGithub(token string, username string) ([]ViewPr, error) {
 			reviewUsers = append(reviewUsers, u.RequestedReviewer.Login)
 		}
 
-		viewPr := ViewPr{
+		viewPr := types.ViewPr{
 			ReviewStatus:             pr.ReviewDecision,
 			Url:                      pr.Url,
 			Title:                    pr.Title,

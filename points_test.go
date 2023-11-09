@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	"github.com/chelmertz/elly/internal/types"
 )
 
 /* fuzz points:
@@ -27,10 +29,10 @@ func Fuzz_LowerLoc_HigherPoints(f *testing.F) {
 		if prIsAuthoredByCurrentUser {
 			author = "currentUser"
 		}
-		pr1points := standardPrPoints(ViewPr{Additions: pr1add, Deletions: pr1del, Author: author}, "currentUser")
+		pr1points := standardPrPoints(types.ViewPr{Additions: pr1add, Deletions: pr1del, Author: author}, "currentUser")
 		pr1diff := absSum(pr1add, pr1del)
 
-		pr2points := standardPrPoints(ViewPr{Additions: pr2add, Deletions: pr2del, Author: author}, "currentUser")
+		pr2points := standardPrPoints(types.ViewPr{Additions: pr2add, Deletions: pr2del, Author: author}, "currentUser")
 		pr2diff := absSum(pr2add, pr2del)
 
 		if pr1diff > pr2diff && pr1points.Total > pr2points.Total ||

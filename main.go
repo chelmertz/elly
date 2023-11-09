@@ -5,19 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
-	"fmt"
 	"html/template"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"runtime/debug"
 	"sort"
 	"strconv"
-	"sync"
 	"time"
 
 	"log/slog"
+
+	"github.com/chelmertz/elly/internal/storage"
+	"github.com/chelmertz/elly/internal/types"
 )
 
 func check(err error) {
@@ -63,9 +63,9 @@ func main() {
 		slog.String("version", version),
 		slog.Int("timeout_minutes", *timeoutMinutes))
 
-	storage := NewStorage()
-	refreshChannel := StartRefreshLoop(token, username, storage)
-	ServeWeb(*url, username, token, storage, refreshChannel)
+	store := storage.NewStorage()
+	refreshChannel := StartRefreshLoop(token, username, store)
+	ServeWeb(*url, username, token, store, refreshChannel)
 }
 
 type refreshAction string
@@ -77,7 +77,7 @@ const (
 	manual  refreshAction = "manual"
 )
 
-func StartRefreshLoop(token, username string, storage *storage) chan refreshAction {
+func StartRefreshLoop(token, username string, store *storage.Storage) chan refreshAction {
 	refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
 	refresh := make(chan refreshAction, 1)
 	retriesLeft := 5
@@ -92,7 +92,7 @@ func StartRefreshLoop(token, username string, storage *storage) chan refreshActi
 					refreshTimer.Stop()
 					return
 				}
-				_, err := possiblyRefreshPrs(token, username, storage)
+				_, err := possiblyRefreshPrs(token, username, store, logger)
 				if err != nil {
 					if errors.Is(err, errClient) {
 						refreshTimer.Stop()
@@ -119,110 +119,23 @@ func StartRefreshLoop(token, username string, storage *storage) chan refreshActi
 	return refresh
 }
 
-type storage struct {
-	dirname  string
-	filename string
-	sync.Mutex
-}
-
-type storedState struct {
-	Prs         []ViewPr
-	LastFetched time.Time
-}
-
-// TODO storage impl into separate file
-func NewStorage() *storage {
-	s := &storage{}
-	dirname, err := os.UserCacheDir()
-	check(err)
-	s.dirname = filepath.Join(dirname, "elly")
-	if err := os.Mkdir(s.dirname, 0770); err != nil && !errors.Is(err, os.ErrExist) {
-		check(err)
-	}
-
-	s.filename = filepath.Join(s.dirname, "prs.json")
-
-	return s
-}
-
-func (s *storage) Prs() storedState {
-	s.Lock()
-	defer s.Unlock()
-
-	oldContents, err := os.ReadFile(s.filename)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			oldContents = []byte("{}")
-		} else {
-			check(err)
-		}
-	}
-
-	var prs_ = storedState{}
-	err = json.Unmarshal(oldContents, &prs_)
-	check(err)
-
-	return prs_
-}
-
-func (s *storage) StoreRepoPrs(orderedPrs []ViewPr) error {
-	s.Lock()
-	defer s.Unlock()
-	prs_ := storedState{}
-	prs_.Prs = make([]ViewPr, len(orderedPrs))
-	copy(prs_.Prs, orderedPrs)
-	prs_.LastFetched = time.Now()
-
-	logger.Info("storing prs", slog.Int("prs", len(prs_.Prs)))
-
-	newContents, err := json.Marshal(prs_)
-	if err != nil {
-		return fmt.Errorf("could not marshal json: %w", err)
-	}
-
-	if err := os.WriteFile(s.filename, newContents, 0660); err != nil {
-		return fmt.Errorf("could not write file: %w", err)
-	}
-
-	return nil
-}
-
 type IndexHtmlData struct {
-	Prs            []ViewPr
+	Prs            []types.ViewPr
 	PointsPerPrUrl map[string]*Points
 	CurrentUser    string
 	RefreshUrl     string
 	LastRefreshed  string
 }
 
-// ViewPr must contain everything needed to order/compare them against other PRs,
-// since ViewPr is also what we store.
-type ViewPr struct {
-	ReviewStatus             string
-	Url                      string
-	Title                    string
-	Author                   string
-	RepoName                 string
-	RepoOwner                string
-	RepoUrl                  string
-	IsDraft                  bool
-	LastUpdated              time.Time
-	LastPrCommenter          string
-	UnrespondedThreads       int
-	Additions                int
-	Deletions                int
-	ReviewRequestedFromUsers []string
-}
-
 //go:embed templates/index.html
 var index embed.FS
 
-func ServeWeb(url, username, token string, storage *storage, refreshingChannel chan refreshAction) {
+func ServeWeb(url, username, token string, store *storage.Storage, refreshingChannel chan refreshAction) {
 	temp, err := template.ParseFS(index, "templates/index.html")
 	check(err)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		storedPrs := storage.Prs()
+		storedPrs := store.Prs()
 		prs_ := storedPrs.Prs
 
 		pointsPerPrUrl := make(map[string]*Points)
@@ -252,8 +165,8 @@ func ServeWeb(url, username, token string, storage *storage, refreshingChannel c
 	// Let's say that v0 represents "may change at any time", read the code.
 	// Should be bumped before tagging this repo as v1
 	http.HandleFunc("/api/v0/prs", func(w http.ResponseWriter, r *http.Request) {
-		storedPrs := storage.Prs().Prs
-		prsToReturn := make([]ViewPr, 0)
+		storedPrs := store.Prs().Prs
+		prsToReturn := make([]types.ViewPr, 0)
 
 		minimumPoints := -999
 		if minPoints := r.URL.Query().Get("minPoints"); minPoints != "" {
