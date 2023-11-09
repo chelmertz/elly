@@ -1,6 +1,9 @@
 package storage
 
 import (
+	"context"
+	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +14,7 @@ import (
 	"time"
 
 	"github.com/chelmertz/elly/internal/types"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func check(err error) {
@@ -23,12 +27,16 @@ type Storage struct {
 	dirname  string
 	filename string
 	sync.Mutex
+	db *Queries
 }
 
 type StoredState struct {
 	Prs         []types.ViewPr
 	LastFetched time.Time
 }
+
+//go:embed schema.sql
+var ddl string
 
 func NewStorage() *Storage {
 	s := &Storage{}
@@ -40,6 +48,17 @@ func NewStorage() *Storage {
 	}
 
 	s.filename = filepath.Join(s.dirname, "prs.json")
+
+	db, err := sql.Open("sqlite3", ":memory:")
+	check(err)
+
+	// create tables
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, ddl); err != nil {
+		check(err)
+	}
+
+	s.db = New(db)
 
 	return s
 }
