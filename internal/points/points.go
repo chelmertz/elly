@@ -1,4 +1,4 @@
-package main
+package points
 
 import (
 	"fmt"
@@ -26,9 +26,9 @@ func (p *Points) Remove(points int, reason string) {
 	p.Reasons = append(p.Reasons, reasonWithPrefix)
 }
 
-// standardPrPoints() awards points to PRs based on a set of rules.
+// StandardPrPoints() awards points to PRs based on a set of rules.
 // These rules should be revisited often, and the points should be tweaked.
-func standardPrPoints(pr types.ViewPr, username string) *Points {
+func StandardPrPoints(pr types.ViewPr, username string) *Points {
 	points := &Points{}
 	points.Reasons = make([]string, 0)
 

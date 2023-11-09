@@ -16,6 +16,7 @@ import (
 
 	"log/slog"
 
+	"github.com/chelmertz/elly/internal/points"
 	"github.com/chelmertz/elly/internal/storage"
 	"github.com/chelmertz/elly/internal/types"
 )
@@ -121,7 +122,7 @@ func StartRefreshLoop(token, username string, store *storage.Storage) chan refre
 
 type IndexHtmlData struct {
 	Prs            []types.ViewPr
-	PointsPerPrUrl map[string]*Points
+	PointsPerPrUrl map[string]*points.Points
 	CurrentUser    string
 	RefreshUrl     string
 	LastRefreshed  string
@@ -138,9 +139,9 @@ func ServeWeb(url, username, token string, store *storage.Storage, refreshingCha
 		storedPrs := store.Prs()
 		prs_ := storedPrs.Prs
 
-		pointsPerPrUrl := make(map[string]*Points)
+		pointsPerPrUrl := make(map[string]*points.Points)
 		for _, pr := range prs_ {
-			pointsPerPrUrl[pr.Url] = standardPrPoints(pr, username)
+			pointsPerPrUrl[pr.Url] = points.StandardPrPoints(pr, username)
 		}
 
 		sort.Slice(prs_, func(i, j int) bool {
@@ -175,9 +176,9 @@ func ServeWeb(url, username, token string, store *storage.Storage, refreshingCha
 			}
 		}
 
-		pointsPerPrUrl := make(map[string]*Points)
+		pointsPerPrUrl := make(map[string]*points.Points)
 		for _, pr := range storedPrs {
-			points := standardPrPoints(pr, username)
+			points := points.StandardPrPoints(pr, username)
 			pointsPerPrUrl[pr.Url] = points
 		}
 

@@ -1,4 +1,4 @@
-package main
+package points
 
 import (
 	"testing"
@@ -29,10 +29,10 @@ func Fuzz_LowerLoc_HigherPoints(f *testing.F) {
 		if prIsAuthoredByCurrentUser {
 			author = "currentUser"
 		}
-		pr1points := standardPrPoints(types.ViewPr{Additions: pr1add, Deletions: pr1del, Author: author}, "currentUser")
+		pr1points := StandardPrPoints(types.ViewPr{Additions: pr1add, Deletions: pr1del, Author: author}, "currentUser")
 		pr1diff := absSum(pr1add, pr1del)
 
-		pr2points := standardPrPoints(types.ViewPr{Additions: pr2add, Deletions: pr2del, Author: author}, "currentUser")
+		pr2points := StandardPrPoints(types.ViewPr{Additions: pr2add, Deletions: pr2del, Author: author}, "currentUser")
 		pr2diff := absSum(pr2add, pr2del)
 
 		if pr1diff > pr2diff && pr1points.Total > pr2points.Total ||
