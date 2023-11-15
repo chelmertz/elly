@@ -213,8 +213,9 @@
             });
 
             const timeFormat = new Intl.RelativeTimeFormat("en", {numeric: "auto"});
+            const timeEls = document.querySelectorAll("time");
             const updateTime = () => {
-                document.querySelectorAll("time").forEach((el) => {
+                timeEls.forEach((el) => {
                     const date = new Date(el.dateTime);
                     const now = new Date();
                     const  minuteDiff = Math.round((date-now) / 1000 / 60);
