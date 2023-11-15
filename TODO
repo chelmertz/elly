@@ -1,5 +1,3 @@
 if someone else has the last comment in a thread (that I started), ignore it if I gave it a thumbs up (it should mean that they're working on it and that I don't have to follow up. either they should resolve the thread, or come back with a new comment in the same thread)
 try to output features in plain text, based on tests or such. à la BDD but less square-y
-bury some PRs (forget about them altogether). case in point: auto-tagged in pr description with @calle, so that I cannot opt out, for irrelevant PR (I changed some lines close to these changes)
 think about the GUI in something called https://graphite.dev/features/inbox and see if I can borrow something (they don't rank everything, for example, boo :))
-gg for top and G for bottom (and maybe HOME and END too)
