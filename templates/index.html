@@ -241,7 +241,6 @@
                     activatePrAbsolute(activePr - 1);
                     e.preventDefault();
                 } else if (e.key === "G") {
-                    console.log(e.shiftKey, e)
                     activatePrAbsolute(prs.length-1);
                     e.preventDefault();
                 } else if (e.key === "g") {
@@ -276,7 +275,6 @@
                         if (e.shiftKey) {
                             // open all prs
                             document.querySelectorAll("a.pr-title").forEach((el) => {
-                                console.log("opening pr", el.href)
                                 window.open(el.href);
                             });
                         } else if (prs[activePr]) {
