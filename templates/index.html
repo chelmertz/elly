@@ -164,6 +164,7 @@
                 <ul>
                     <li><kbd>j</kbd> or <kbd>down</kbd> - focus next PR</li>
                     <li><kbd>k</kbd> or <kbd>up</kbd> - focus previous PR</li>
+                    <li><kbd>G</kbd> - focus last PR</li>
                     <li><kbd>b</kbd> - bury (or unbury) PR, pushing the PR down to the latest prio available</li>
                     <li><kbd>enter</kbd> - open focused PR in Github, in a new window</li>
                     <li><kbd>shift + enter</kbd> - open all PRs in Github, in new windows (might trigger a browser warning)</li>
@@ -179,10 +180,13 @@
             // advantage of that
             const prs = document.querySelectorAll(".pr");
             let activePr = 0;
-            const activatePr = (step) => {
-                if (prs[activePr+step]) {
+            const activatePrRelative = (step) => {
+                activatePrAbsolute(activePr + step);
+            };
+            const activatePrAbsolute = (position) => {
+                if (prs[position]) {
                     prs[activePr].classList.remove("active");
-                    activePr += step;
+                    activePr = position;
                     prs[activePr].classList.add("active");
                     prs[activePr].scrollIntoView();
                 }
@@ -228,10 +232,14 @@
             
             window.addEventListener("keydown", (e) => {
                 if (e.key === "j" || e.key === "ArrowDown") {
-                    activatePr(1);
+                    activatePrAbsolute(activePr + 1);
                     e.preventDefault();
                 } else if (e.key === "k" || e.key === "ArrowUp") {
-                    activatePr(-1);
+                    activatePrAbsolute(activePr - 1);
+                    e.preventDefault();
+                } else if (e.key === "G") {
+                    console.log(e.shiftKey, e)
+                    activatePrAbsolute(prs.length-1);
                     e.preventDefault();
                 } else if (e.key === "b") {
                     const buryUrl = prs[activePr].querySelector("a.bury").href;
