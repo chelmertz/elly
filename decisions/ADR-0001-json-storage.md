@@ -1,6 +1,6 @@
 # Use JSON as data store
 
-Status: in use
+Status: deprecated by ADR-0001
 
 ## Context and Problem Statement
 
