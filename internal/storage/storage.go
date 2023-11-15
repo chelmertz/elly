@@ -81,6 +81,7 @@ func (s *Storage) Prs() StoredState {
 			Additions:                int(dbPr.Additions),
 			Deletions:                int(dbPr.Deletions),
 			ReviewRequestedFromUsers: strings.Split(dbPr.ReviewRequestedFromUsers, ","),
+			Buried:                   dbPr.Buried,
 		})
 	}
 
@@ -135,4 +136,16 @@ func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 	s.logger.Info("GetLastFetched", slog.String("res", res))
 
 	return nil
+}
+
+func (s *Storage) Bury(prUrl string) error {
+	return s.db.Bury(context.Background(), prUrl)
+}
+
+func (s *Storage) Unbury(prUrl string) error {
+	return s.db.Unbury(context.Background(), prUrl)
+}
+
+func (s *Storage) GetPr(prUrl string) (Pr, error) {
+	return s.db.GetPr(context.Background(), prUrl)
 }

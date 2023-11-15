@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"html/template"
 	"net/http"
 	"os"
@@ -153,29 +154,22 @@ func ServeWeb(url, username, token string, store *storage.Storage, refreshingCha
 					return
 				}
 
+				var buryFunc func(string) error
+				if parts[1] == "bury" {
+					buryFunc = store.Bury
+				} else {
+					buryFunc = store.Unbury
+				}
+
 				ghPrUrl := string(prUrlBytes)
-				validUrl := false
-				for i, pr := range prs_ {
-					if pr.Url == ghPrUrl {
-						prs_[i].Buried = parts[1] == "bury"
-						validUrl = true
-						break
-					}
-				}
 
-				if !validUrl {
-					w.Write([]byte("couldn't find PR by given URL"))
-					w.WriteHeader(http.StatusNotFound)
-					return
-				}
-
-				if err := store.StoreRepoPrs(prs_); err != nil {
-					w.Write([]byte("couldn't store PRs"))
+				if err := buryFunc(ghPrUrl); err != nil {
+					w.Write([]byte(fmt.Sprintf("couldn't toggle bury for PR %s", ghPrUrl)))
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
 
-				http.Redirect(w, r, "/", http.StatusFound)
+				w.WriteHeader(http.StatusNoContent)
 				return
 			}
 		}

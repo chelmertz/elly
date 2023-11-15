@@ -28,6 +28,12 @@ delete from prs;
 -- name: ListPrs :many
 select * from prs;
 
+-- name: Bury :exec
+update prs set buried = true where url = ?;
+
+-- name: Unbury :exec
+update prs set buried = false where url = ?;
+
 -- name: StoreLastFetched :exec
 replace into meta (key, value) values ('last_fetched', ?);
 

@@ -9,6 +9,15 @@ import (
 	"context"
 )
 
+const bury = `-- name: Bury :exec
+update prs set buried = true where url = ?
+`
+
+func (q *Queries) Bury(ctx context.Context, url string) error {
+	_, err := q.db.ExecContext(ctx, bury, url)
+	return err
+}
+
 const createPr = `-- name: CreatePr :one
 insert into prs (
     url,
@@ -184,5 +193,14 @@ replace into meta (key, value) values ('last_fetched', ?)
 
 func (q *Queries) StoreLastFetched(ctx context.Context, value string) error {
 	_, err := q.db.ExecContext(ctx, storeLastFetched, value)
+	return err
+}
+
+const unbury = `-- name: Unbury :exec
+update prs set buried = false where url = ?
+`
+
+func (q *Queries) Unbury(ctx context.Context, url string) error {
+	_, err := q.db.ExecContext(ctx, unbury, url)
 	return err
 }
