@@ -1,5 +1,5 @@
 create table if not exists prs (
-    url text not null unique,
+    url text not null primary key,
     review_status text not null,
     title text not null,
     author text not null,
