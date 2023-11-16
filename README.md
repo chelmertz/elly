@@ -13,7 +13,7 @@ flowchart TB
     A[run ./elly] -->|Runs| B(Request PRs)
     H(systemd) -.-> A
     B -->|Timer, default 10 min| B
-    F[(prs.json)]
+    F[(sqlite)]
     B -->|Persists|F
     A -->|Runs| C(HTTP server)
     C -->|Reads| F
