@@ -219,11 +219,17 @@
 
             const timeFormat = new Intl.RelativeTimeFormat("en", {numeric: "auto"});
             const timeEls = document.querySelectorAll("time");
+            const refreshIntervalMinutes = {{.RefreshIntervalMinutes}};
             const updateTime = () => {
                 timeEls.forEach((el) => {
                     const date = new Date(el.dateTime);
                     const now = new Date();
-                    const  minuteDiff = Math.round((date-now) / 1000 / 60);
+                    const minuteDiff = Math.round((date-now) / 1000 / 60);
+                    if (Math.abs(minuteDiff) > (refreshIntervalMinutes+3)) {
+                        // if we're more than 3 minutes past the refresh interval,
+                        // the user is probably idle. let's refresh for them
+                        window.location.reload();
+                    }
                     el.innerText = timeFormat.format(minuteDiff, 'minute');
                 });
             };

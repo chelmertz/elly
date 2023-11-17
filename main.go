@@ -125,11 +125,12 @@ func StartRefreshLoop(token, username string, store *storage.Storage) chan refre
 }
 
 type IndexHtmlData struct {
-	Prs            []types.ViewPr
-	PointsPerPrUrl map[string]*points.Points
-	CurrentUser    string
-	RefreshUrl     string
-	LastRefreshed  string
+	Prs                    []types.ViewPr
+	PointsPerPrUrl         map[string]*points.Points
+	CurrentUser            string
+	RefreshUrl             string
+	LastRefreshed          string
+	RefreshIntervalMinutes int
 }
 
 //go:embed templates/index.html
@@ -190,10 +191,11 @@ func ServeWeb(url, username, token string, store *storage.Storage, refreshingCha
 		})
 		logger.Info("serving web page", slog.Time("last fetched", storedPrs.LastFetched))
 		data := IndexHtmlData{
-			Prs:            prs_,
-			PointsPerPrUrl: pointsPerPrUrl,
-			CurrentUser:    username,
-			LastRefreshed:  storedPrs.LastFetched.Format(time.RFC3339),
+			Prs:                    prs_,
+			PointsPerPrUrl:         pointsPerPrUrl,
+			CurrentUser:            username,
+			LastRefreshed:          storedPrs.LastFetched.Format(time.RFC3339),
+			RefreshIntervalMinutes: *timeoutMinutes,
 		}
 		err := temp.Execute(w, data)
 		check(err)
