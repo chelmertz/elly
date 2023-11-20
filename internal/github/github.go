@@ -102,6 +102,18 @@ type prSearchResultGraphQl struct {
 			Node prReviewThreadGraphQl
 		}
 	}
+	Reviews struct {
+		Edges []struct {
+			Node struct {
+				Author struct {
+					Login string
+				}
+				Url   string
+				Body  string
+				State string
+			}
+		}
+	}
 }
 
 type prReviewThreadGraphQl struct {
@@ -184,6 +196,8 @@ func queryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 	for _, prEdge := range typedResponse.Data.Search.Edges {
 		pr := prEdge.Node
 
+		reviewStatus := pr.ReviewDecision
+
 		updatedAt, err := time.Parse(time.RFC3339, pr.UpdatedAt)
 		if err != nil {
 			// not really a fatal error, just log it
@@ -203,8 +217,18 @@ func queryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 			reviewUsers = append(reviewUsers, u.RequestedReviewer.Login)
 		}
 
+		for _, a := range pr.Reviews.Edges {
+			// for some reason, the "Reviews" graph can contain a separate
+			// approval that is _not_ registered as the ReviewDecision,
+			// something that went unnoticed for ~5 months of using this API.
+			if a.Node.State == "APPROVED" {
+				reviewStatus = "APPROVED"
+				break
+			}
+		}
+
 		viewPr := types.ViewPr{
-			ReviewStatus:             pr.ReviewDecision,
+			ReviewStatus:             reviewStatus,
 			Url:                      pr.Url,
 			Title:                    pr.Title,
 			Author:                   pr.Author.Login,
@@ -347,6 +371,18 @@ func querySearchPrsInvolvingUser(username string) string {
                   }
                 }
               }
+            }
+          }
+          reviews(first: 20) {
+            edges {
+                node {
+                    author {
+                        login
+                    }
+                    body
+                    url
+                    state
+                }
             }
           }
         }
