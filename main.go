@@ -189,7 +189,6 @@ func ServeWeb(url, username, token string, store *storage.Storage, refreshingCha
 			}
 			return pri > prj
 		})
-		logger.Info("serving web page", slog.Time("last fetched", storedPrs.LastFetched))
 		data := IndexHtmlData{
 			Prs:                    prs_,
 			PointsPerPrUrl:         pointsPerPrUrl,
