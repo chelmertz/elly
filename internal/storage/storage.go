@@ -132,9 +132,6 @@ func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 		check(err)
 	}
 
-	res, _ := s.db.GetLastFetched(context.Background())
-	s.logger.Info("GetLastFetched", slog.String("res", res))
-
 	return nil
 }
 
