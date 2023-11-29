@@ -37,6 +37,12 @@ A Github personal access token these permissions:
 - metadata (read only)
 - pull requests (read only)
 
+Don't forget to also:
+
+- allow the token access to "all repositories"
+- adjust the "resource owner" to your personal or your workplace's organisation
+- set a proper expiration date
+
 ## Installation
 
 ```
