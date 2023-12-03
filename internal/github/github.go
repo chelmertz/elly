@@ -81,8 +81,9 @@ type prSearchResultGraphQl struct {
 				Author    struct {
 					Login string
 				}
-				Url  string
-				Body string
+				Url       string
+				Body      string
+				Reactions prReviewThreadCommentReactionGraphQl
 			}
 		}
 	}
@@ -129,8 +130,20 @@ type prReviewThreadCommentGraphQl struct {
 	Author struct {
 		Login string
 	}
-	Body string
-	Url  string
+	Body      string
+	Url       string
+	Reactions prReviewThreadCommentReactionGraphQl
+}
+
+type prReviewThreadCommentReactionGraphQl struct {
+	Edges []struct {
+		Node struct {
+			Content string
+			User    struct {
+				Login string
+			}
+		}
+	}
 }
 
 func queryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
@@ -250,6 +263,15 @@ func queryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 	return viewPrs, nil
 }
 
+func userReactedToComment(reactions prReviewThreadCommentReactionGraphQl, username string) bool {
+	for _, r := range reactions.Edges {
+		if r.Node.User.Login == username {
+			return true
+		}
+	}
+	return false
+}
+
 func actionableThreads(pr prSearchResultGraphQl, myUsername string) int {
 	unrespondedThreads := 0
 	ownPr := pr.Author.Login == myUsername
@@ -263,10 +285,13 @@ func actionableThreads(pr prSearchResultGraphQl, myUsername string) int {
 			continue
 		}
 
-		lastCommenter := t.Node.Comments.Nodes[len(t.Node.Comments.Nodes)-1].Author.Login
+		lastComment := t.Node.Comments.Nodes[len(t.Node.Comments.Nodes)-1]
+		lastCommenter := lastComment.Author.Login
+		iReactedToLastComment := userReactedToComment(lastComment.Reactions, myUsername)
 
-		if ownPr && lastCommenter != myUsername {
-			// someone else commented last, and this is our pr
+		if ownPr && lastCommenter != myUsername && !iReactedToLastComment {
+			// someone else commented last, and this is our pr, and we haven't
+			// acknowledged it yet with a reaction (emoji)
 			unrespondedThreads++
 			continue
 		}
@@ -277,9 +302,10 @@ func actionableThreads(pr prSearchResultGraphQl, myUsername string) int {
 		}
 
 		threadStarter := t.Node.Comments.Nodes[0].Author.Login
-		if threadStarter == myUsername && lastCommenter != myUsername {
-			// we started the thread, and it's still open (and someone else
-			// has the last word)
+		if threadStarter == myUsername && lastCommenter != myUsername && !iReactedToLastComment {
+			// we started the thread, and it's still open (and someone else has
+			// the last word), and we haven't acknowledged it yet with a
+			// reaction (emoji)
 			unrespondedThreads++
 			continue
 		}
@@ -292,6 +318,9 @@ func actionableThreads(pr prSearchResultGraphQl, myUsername string) int {
 }
 
 func querySearchPrsInvolvingUser(username string) string {
+	// the amount of nodes given in "first: x", etc. needs to be a bit
+	// calibrated - if everything is too high, github will complain with a
+	// MAX_NODE_LIMIT_EXCEEDED error
 	query := `query {
   search(type: ISSUE, query: "state:open involves:%s type:pr archived:false", first: 100) {
     edges {
@@ -332,6 +361,16 @@ func querySearchPrsInvolvingUser(username string) string {
                 }
                 url
                 body
+                reactions(first: 7) {
+                    edges {
+                        node {
+                            content
+                            user {
+                                login
+                            }
+                        }
+                    }
+                }
               }
             }
           }
@@ -355,19 +394,29 @@ func querySearchPrsInvolvingUser(username string) string {
               }
             }
           }
-          reviewThreads(first: 20) {
+          reviewThreads(first: 15) {
             edges {
               node {
                 isResolved
                 isOutdated
                 isCollapsed
-                comments(first: 100) {
+                comments(first: 30) {
                   nodes {
                     author {
                       login
                     }
                     body
                     url
+                    reactions(first: 7) {
+                        edges {
+                            node {
+                                content
+                                user {
+                                    login
+                                }
+                            }
+                        }
+                    }
                   }
                 }
               }
