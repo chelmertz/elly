@@ -127,7 +127,6 @@ func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 
 	now := time.Now()
 	nowFormatted := now.Format(time.RFC3339)
-	s.logger.Error("storing last fetched", slog.Time("last_fetched", now), slog.String("formatted", nowFormatted))
 	if err := s.db.StoreLastFetched(context.Background(), nowFormatted); err != nil {
 		check(err)
 	}
