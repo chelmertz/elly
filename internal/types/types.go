@@ -41,3 +41,12 @@ func (pr ViewPr) ToggleBuryUrl() string {
 		return fmt.Sprintf("/api/v0/prs/%s/bury", pr.Id())
 	}
 }
+
+type RefreshAction string
+
+const (
+	RefreshUpstart RefreshAction = "upstart"
+	RefreshStop    RefreshAction = "stop"
+	RefreshTick    RefreshAction = "tick"
+	RefreshManual  RefreshAction = "manual"
+)
