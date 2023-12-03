@@ -12,30 +12,11 @@ import (
 
 	"log/slog"
 
-	"github.com/chelmertz/elly/internal/storage"
 	"github.com/chelmertz/elly/internal/types"
 )
 
 var ErrClient = errors.New("github returned client error")
 var ErrGithubServer = errors.New("github returned server error")
-var ErrCouldNotStorePrs = errors.New("could not store prs")
-
-func PossiblyRefreshPrs(token, username string, store *storage.Storage, logger *slog.Logger) (bool, error) {
-	// querying github once a minute should be fine,
-	// especially as long as we do the passive, loopy thing more seldom
-	if time.Since(store.Prs().LastFetched) < time.Duration(59)*time.Second {
-		return false, nil
-	}
-	prs, err := queryGithub(token, username, logger)
-	if err != nil {
-		return false, fmt.Errorf("could not query github: %w", err)
-	}
-
-	if err := store.StoreRepoPrs(prs); err != nil {
-		return false, fmt.Errorf("%w: %w", ErrCouldNotStorePrs, err)
-	}
-	return true, nil
-}
 
 type querySearchPrsInvolvingMeGraphQl struct {
 	Data struct {
@@ -146,7 +127,7 @@ type prReviewThreadCommentReactionGraphQl struct {
 	}
 }
 
-func queryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
+func QueryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
 	payload := struct {
 		Query string `json:"query"`
 	}{

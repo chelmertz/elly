@@ -97,7 +97,14 @@ func StartRefreshLoop(token, username string, store *storage.Storage) chan refre
 					refreshTimer.Stop()
 					return
 				}
-				_, err := github.PossiblyRefreshPrs(token, username, store, logger)
+
+				if time.Since(store.Prs().LastFetched) < time.Duration(1)*time.Minute {
+					// querying github once a minute should be fine,
+					// especially as long as we do the passive, loopy thing more seldom
+					continue
+				}
+
+				prs, err := github.QueryGithub(token, username, logger)
 				if err != nil {
 					if errors.Is(err, github.ErrClient) {
 						refreshTimer.Stop()
@@ -111,7 +118,11 @@ func StartRefreshLoop(token, username string, store *storage.Storage) chan refre
 							return
 						}
 						logger.Warn("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
+						return
 					}
+				} else if err := store.StoreRepoPrs(prs); err != nil {
+					logger.Error("could not store prs", slog.Any("error", err))
+					return
 				}
 
 			case <-refreshTimer.C:

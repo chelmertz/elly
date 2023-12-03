@@ -101,7 +101,7 @@ func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 	s.logger.Info("storing prs", slog.Int("prs", len(orderedPrs)))
 
 	if err := s.db.DeletePrs(context.Background()); err != nil {
-		check(err)
+		return fmt.Errorf("could not delete old prs, in preparation of storing new ones: %w", err)
 	}
 
 	for _, pr := range orderedPrs {
@@ -128,7 +128,7 @@ func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 	now := time.Now()
 	nowFormatted := now.Format(time.RFC3339)
 	if err := s.db.StoreLastFetched(context.Background(), nowFormatted); err != nil {
-		check(err)
+		return fmt.Errorf("could not store last fetched time: %w", err)
 	}
 
 	return nil
