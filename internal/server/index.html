@@ -164,8 +164,8 @@
                 <ul>
                     <li><kbd>j</kbd> or <kbd>down</kbd> - focus next PR</li>
                     <li><kbd>k</kbd> or <kbd>up</kbd> - focus previous PR</li>
-                    <li><kbd>gg</kbd> - focus first PR</li>
-                    <li><kbd>G</kbd> - focus last PR</li>
+                    <li><kbd>gg</kbd> or <kbd>home</kbd> - focus first PR</li>
+                    <li><kbd>G</kbd> or <kbd>end</kbd> - focus last PR</li>
                     <li><kbd>b</kbd> - bury (or unbury) PR, pushing the PR down to the latest prio available</li>
                     <li><kbd>enter</kbd> - open focused PR in Github, in a new window</li>
                     <li><kbd>shift + enter</kbd> - open all PRs in Github, in new windows (might trigger a browser warning)</li>
@@ -246,7 +246,7 @@
                 } else if (e.key === "k" || e.key === "ArrowUp") {
                     activatePrAbsolute(activePr - 1);
                     e.preventDefault();
-                } else if (e.key === "G") {
+                } else if (e.key === "G" || e.key === "End") {
                     activatePrAbsolute(prs.length-1);
                     e.preventDefault();
                 } else if (e.key === "g") {
@@ -258,6 +258,9 @@
                     oneG = true;
                     e.preventDefault();
                     return;
+                } else if (e.key === "Home") {
+                    activatePrAbsolute(0);
+                    e.preventDefault();
                 } else if (e.key === "b") {
                     const buryUrl = prs[activePr].querySelector("a.bury").href;
                     fetch(buryUrl, {method: 'POST'}).then((response) => {
