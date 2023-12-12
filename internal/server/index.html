@@ -135,7 +135,7 @@
                     <h3><a class="pr-title" href="{{$pr.Url}}" target="_blank">{{if eq $.CurrentUser $pr.Author}}👤 {{end}}{{if $pr.Buried}}🪦 {{end}}{{$pr.Title}}</a> <span class="boring">@{{$pr.Author}}</span></h3>
                     <span class="boring">{{$pr.RepoOwner}}/{{$pr.RepoName}}</span>
                     {{with $points := index $.PointsPerPrUrl $pr.Url}}
-                    <span class="inline"><span class="circle ok">{{$points.Total}}</span></span>
+                    <span class="inline" data-points="{{$points.Total}}"><span class="circle ok">{{$points.Total}}</span></span>
                     <span class="inline"><a class="bury" href="{{$pr.ToggleBuryUrl}}">🪦</a></span>
                     <div class="motivation">
                         {{range $motivation := $points.Reasons}}
@@ -195,6 +195,14 @@
             if (prs[activePr]) {
                 // there is at least one pr
                 prs[activePr].classList.add("active");
+            }
+
+            const prsOverZeroPoints = Array.from(document.querySelectorAll("[data-points]")).filter((el) => {
+                return parseInt(el.dataset.points) > 0;
+            }).length;
+
+            if (prsOverZeroPoints > 0) {
+                document.title = `(${prsOverZeroPoints}) ${document.title}`;
             }
 
             const dialog = document.querySelector("dialog");

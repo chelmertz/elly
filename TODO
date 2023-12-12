@@ -1,5 +1,4 @@
 refresh the web page when the refresh action is taken
 try to output features in plain text, based on tests or such. à la BDD but less square-y
 think about the GUI in something called https://graphite.dev/features/inbox and see if I can borrow something (they don't rank everything, for example, boo :))
-pr count in favicon (or just prefixed in the title), if doable without minimal dependencies.. maybe enough with green circle if nothing over 0 points, red circle otherwise
 "pr 2/23" would be nice to have in the GUI, right now a long list makes me lose my orientation
