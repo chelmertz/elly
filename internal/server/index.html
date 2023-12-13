@@ -197,9 +197,9 @@
                 prs[activePr].classList.add("active");
             }
 
-            const prsOverZeroPoints = Array.from(document.querySelectorAll("[data-points]")).filter((el) => {
-                return parseInt(el.dataset.points) > 0;
-            }).length;
+            const prsOverZeroPoints = Array.from(document.querySelectorAll("[data-points]"))
+                .filter((el) => parseInt(el.dataset.points) > 0)
+                .length;
 
             if (prsOverZeroPoints > 0) {
                 document.title = `(${prsOverZeroPoints}) ${document.title}`;
