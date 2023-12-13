@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"regexp"
 	"runtime/debug"
@@ -18,11 +19,25 @@ import (
 
 var timeoutMinutes = flag.Int("timeout", 10, "refresh PRs every N minutes")
 var url = flag.String("url", "localhost:9876", "URL for web GUI")
+var versionFlag = flag.Bool("version", false, "show version")
 var logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 var githubUsernameRegex = regexp.MustCompile("[a-zA-Z0-9-]+")
 
 func main() {
 	flag.Parse()
+
+	var version string
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		version = bi.Main.Version
+	}
+	if version == "" {
+		version = "unknown"
+	}
+
+	if *versionFlag {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 
 	// TODO try out with bad github pat and make sure it fails gracefully (and is shown in GUI)
 	token := os.Getenv("GITHUB_PAT")
@@ -41,11 +56,6 @@ func main() {
 	if !githubUsernameRegex.Match([]byte(username)) {
 		logger.Error("GITHUB_USER env var is not a valid github username")
 		os.Exit(1)
-	}
-
-	version := "unknown"
-	if bi, ok := debug.ReadBuildInfo(); ok {
-		version = bi.Main.Version
 	}
 
 	logger.Info("starting elly",
