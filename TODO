@@ -1,7 +1,0 @@
-refresh the web page when the refresh action is taken
-show divider between >0 points and 0 points
-include version number in GUI's footer, for error reporting
-validate the auth token's scope and notify in GUI if something is missing: https://github.com/orgs/community/discussions/24345
-show in GUI when we're close to expiration
-capture responses and use as tests, need to fortify point system. write something that shreds valid data - maybe using json tags for those specific fields
-think about the GUI in something called https://graphite.dev/features/inbox and see if I can borrow something (they don't rank everything, for example, boo :))
