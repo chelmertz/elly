@@ -31,12 +31,13 @@ type IndexHtmlData struct {
 	RefreshUrl             string
 	LastRefreshed          string
 	RefreshIntervalMinutes int
+	Version                string
 }
 
 //go:embed index.html
 var index embed.FS
 
-func ServeWeb(url, username, token string, store *storage.Storage, refreshingChannel chan types.RefreshAction, timeoutMinutes int, logger *slog.Logger) {
+func ServeWeb(url, username string, store *storage.Storage, refreshingChannel chan types.RefreshAction, timeoutMinutes int, version string, logger *slog.Logger) {
 	temp, err := template.ParseFS(index, "index.html")
 	check(err)
 
@@ -95,6 +96,7 @@ func ServeWeb(url, username, token string, store *storage.Storage, refreshingCha
 			CurrentUser:            username,
 			LastRefreshed:          storedPrs.LastFetched.Format(time.RFC3339),
 			RefreshIntervalMinutes: timeoutMinutes,
+			Version:                version,
 		}
 		err := temp.Execute(w, data)
 		check(err)

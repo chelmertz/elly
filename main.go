@@ -58,7 +58,7 @@ func main() {
 	logger.Info("github user fetched from token", slog.String("github_user", username))
 
 	refreshChannel := StartRefreshLoop(token, username, store)
-	server.ServeWeb(*url, username, token, store, refreshChannel, *timeoutMinutes, logger)
+	server.ServeWeb(*url, username, store, refreshChannel, *timeoutMinutes, version, logger)
 }
 
 func StartRefreshLoop(token, username string, store *storage.Storage) chan types.RefreshAction {
