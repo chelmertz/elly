@@ -1,11 +1,10 @@
 # elly
 
 Github pull requests presented in a prioritized order, via a keyboard driven web
-gui & API.
+GUI & API.
 
-Configured by a Github PAT (personal access token) and the Github username,
-using the env vars `GITHUB_USER` and `GITHUB_PAT` respectively. Should be hosted
-locally.
+Configured by a Github PAT (personal access token), using the env var
+`GITHUB_PAT`. Should be hosted locally.
 
 ```mermaid
 flowchart TB
@@ -30,7 +29,7 @@ flowchart TB
 
 ## PAT Oauth permissions
 
-A Github personal access token these permissions:
+A Github personal access token these _repository_ permissions:
 
 - commit status (read only)
 - contents (read only)
@@ -60,7 +59,6 @@ See `/decisions` for ADRs.
 With a .env file containing something like:
 
 ```
-export GITHUB_USER=chelmertz
 export GITHUB_PATH=github_pat_123k135hjhhjtjethwejhtjh5jhj
 ```
 

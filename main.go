@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"regexp"
 	"runtime/debug"
 	"time"
 
@@ -21,7 +20,6 @@ var timeoutMinutes = flag.Int("timeout", 10, "refresh PRs every N minutes")
 var url = flag.String("url", "localhost:9876", "URL for web GUI")
 var versionFlag = flag.Bool("version", false, "show version")
 var logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
-var githubUsernameRegex = regexp.MustCompile("[a-zA-Z0-9-]+")
 
 func main() {
 	flag.Parse()
@@ -47,23 +45,18 @@ func main() {
 	}
 	os.Unsetenv("GITHUB_PAT")
 
-	username := os.Getenv("GITHUB_USER")
-	if token == "" {
-		logger.Warn("missing GITHUB_USER env var, will not assign points properly")
-	}
-	os.Unsetenv("GITHUB_USER")
-
-	if !githubUsernameRegex.Match([]byte(username)) {
-		logger.Error("GITHUB_USER env var is not a valid github username")
-		os.Exit(1)
-	}
-
 	logger.Info("starting elly",
-		slog.String("github_user", username),
 		slog.String("version", version),
 		slog.Int("timeout_minutes", *timeoutMinutes))
 
 	store := storage.NewStorage(logger)
+	username, err := github.UsernameFromPat(token, logger)
+	if err != nil {
+		logger.Error("could not get username from PAT", slog.Any("error", err))
+		os.Exit(1)
+	}
+	logger.Info("github user fetched from token", slog.String("github_user", username))
+
 	refreshChannel := StartRefreshLoop(token, username, store)
 	server.ServeWeb(*url, username, token, store, refreshChannel, *timeoutMinutes, logger)
 }

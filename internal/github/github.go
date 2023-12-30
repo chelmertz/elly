@@ -127,6 +127,76 @@ type prReviewThreadCommentReactionGraphQl struct {
 	}
 }
 
+// UsernameFromPat() will return the username for the given personal access
+// token, to avoid having to provide the username explicitly.
+func UsernameFromPat(token string, logger *slog.Logger) (string, error) {
+	payload := struct {
+		Query string `json:"query"`
+	}{
+		Query: `query { viewer { login } }`,
+	}
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("could not marshal username json: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+
+	httpClient := &http.Client{}
+
+	request, err := http.NewRequestWithContext(ctx, "POST", "https://api.github.com/graphql", bytes.NewReader(jsonBytes))
+	request.Header.Add("Authorization", "bearer "+token)
+	if err != nil {
+		return "", fmt.Errorf("could not construct github username request: %w", err)
+	}
+
+	logger.Info("querying github api for username")
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("could not request github for username: %w", err)
+	}
+	defer response.Body.Close()
+
+	// TODO deduplicate
+	if expiration := response.Header.Get("Github-Authentication-Token-Expiration"); expiration != "" {
+		expires, err := time.Parse("2006-01-02 15:04:05 -0700", expiration)
+		if err != nil {
+			logger.Error("could not parse github token expiration", err, slog.String("expiration", expiration))
+		} else if expires.After(time.Now().Add(-1 * 24 * 10 * time.Hour)) {
+			// less than 10 days left on token, warn!
+			logger.Warn("github token expires soon", slog.Time("expires", expires), slog.Int("days_left", int(time.Until(expires).Hours()/24)))
+		}
+	}
+
+	respBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		return "", fmt.Errorf("could not read github username response: %w", err)
+	}
+
+	if response.StatusCode >= 400 {
+		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", string(respBody)))
+		if response.StatusCode < 500 {
+			return "", ErrClient
+		}
+		return "", ErrGithubServer
+	}
+
+	var typedResponse struct {
+		Data struct {
+			Viewer struct {
+				Login string
+			}
+		}
+	}
+	err = json.Unmarshal(respBody, &typedResponse)
+	if err != nil {
+		return "", fmt.Errorf("could not unmarshal github username response: %w", err)
+	}
+
+	return typedResponse.Data.Viewer.Login, nil
+}
+
 func QueryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
 	payload := struct {
 		Query string `json:"query"`
@@ -135,7 +205,7 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 	}
 	jsonBytes, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("could not marshal json: %w", err)
+		return nil, fmt.Errorf("could not marshal pr query json: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
