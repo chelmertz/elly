@@ -137,78 +137,15 @@ func checkExpiration(expiration string, logger *slog.Logger) {
 	}
 }
 
-// UsernameFromPat() will return the username for the given personal access
-// token, to avoid having to provide the username explicitly.
-func UsernameFromPat(token string, logger *slog.Logger) (string, error) {
+func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
 	payload := struct {
 		Query string `json:"query"`
 	}{
-		Query: `query { viewer { login } }`,
+		Query: query,
 	}
 	jsonBytes, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("could not marshal username json: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	defer cancel()
-
-	httpClient := &http.Client{}
-
-	request, err := http.NewRequestWithContext(ctx, "POST", "https://api.github.com/graphql", bytes.NewReader(jsonBytes))
-	request.Header.Add("Authorization", "bearer "+token)
-	if err != nil {
-		return "", fmt.Errorf("could not construct github username request: %w", err)
-	}
-
-	logger.Info("querying github api for username")
-	response, err := httpClient.Do(request)
-	if err != nil {
-		return "", fmt.Errorf("could not request github for username: %w", err)
-	}
-	defer response.Body.Close()
-
-	if expiration := response.Header.Get("Github-Authentication-Token-Expiration"); expiration != "" {
-		checkExpiration(expiration, logger)
-	}
-
-	respBody, err := io.ReadAll(response.Body)
-	if err != nil {
-		return "", fmt.Errorf("could not read github username response: %w", err)
-	}
-
-	if response.StatusCode >= 400 {
-		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", string(respBody)))
-		if response.StatusCode < 500 {
-			return "", ErrClient
-		}
-		return "", ErrGithubServer
-	}
-
-	var typedResponse struct {
-		Data struct {
-			Viewer struct {
-				Login string
-			}
-		}
-	}
-	err = json.Unmarshal(respBody, &typedResponse)
-	if err != nil {
-		return "", fmt.Errorf("could not unmarshal github username response: %w", err)
-	}
-
-	return typedResponse.Data.Viewer.Login, nil
-}
-
-func QueryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
-	payload := struct {
-		Query string `json:"query"`
-	}{
-		Query: querySearchPrsInvolvingUser(username),
-	}
-	jsonBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("could not marshal pr query json: %w", err)
+		return nil, fmt.Errorf("could not marshal graphql json: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
@@ -235,7 +172,7 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 
 	respBody, err := io.ReadAll(response.Body)
 	if err != nil {
-		return nil, fmt.Errorf("could not read github response: %w", err)
+		return nil, fmt.Errorf("could not read github username response: %w", err)
 	}
 
 	if response.StatusCode >= 400 {
@@ -244,6 +181,37 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 			return nil, ErrClient
 		}
 		return nil, ErrGithubServer
+	}
+	return respBody, nil
+}
+
+// UsernameFromPat() will return the username for the given personal access
+// token, to avoid having to provide the username explicitly.
+func UsernameFromPat(token string, logger *slog.Logger) (string, error) {
+	respBody, err := graphqlRequest(`query { viewer { login } }`, token, logger)
+	if err != nil {
+		return "", fmt.Errorf("could not query github for username: %w", err)
+	}
+
+	var typedResponse struct {
+		Data struct {
+			Viewer struct {
+				Login string
+			}
+		}
+	}
+	err = json.Unmarshal(respBody, &typedResponse)
+	if err != nil {
+		return "", fmt.Errorf("could not unmarshal github username response: %w", err)
+	}
+
+	return typedResponse.Data.Viewer.Login, nil
+}
+
+func QueryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
+	respBody, err := graphqlRequest(querySearchPrsInvolvingUser(username), token, logger)
+	if err != nil {
+		return nil, fmt.Errorf("could not query github for PRs: %v", err)
 	}
 
 	typedResponse := querySearchPrsInvolvingMeGraphQl{}
