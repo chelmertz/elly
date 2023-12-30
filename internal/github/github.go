@@ -127,6 +127,16 @@ type prReviewThreadCommentReactionGraphQl struct {
 	}
 }
 
+func checkExpiration(expiration string, logger *slog.Logger) {
+	expires, err := time.Parse("2006-01-02 15:04:05 -0700", expiration)
+	if err != nil {
+		logger.Error("could not parse github token expiration", err, slog.String("expiration", expiration))
+	} else if expires.Before(time.Now().Add(10 * 24 * time.Hour)) {
+		// less than 10 days left on token, warn!
+		logger.Warn("github token expires soon", slog.Time("expires", expires), slog.Int("days_left", int(time.Until(expires).Hours()/24)))
+	}
+}
+
 // UsernameFromPat() will return the username for the given personal access
 // token, to avoid having to provide the username explicitly.
 func UsernameFromPat(token string, logger *slog.Logger) (string, error) {
@@ -158,15 +168,8 @@ func UsernameFromPat(token string, logger *slog.Logger) (string, error) {
 	}
 	defer response.Body.Close()
 
-	// TODO deduplicate
 	if expiration := response.Header.Get("Github-Authentication-Token-Expiration"); expiration != "" {
-		expires, err := time.Parse("2006-01-02 15:04:05 -0700", expiration)
-		if err != nil {
-			logger.Error("could not parse github token expiration", err, slog.String("expiration", expiration))
-		} else if expires.After(time.Now().Add(-1 * 24 * 10 * time.Hour)) {
-			// less than 10 days left on token, warn!
-			logger.Warn("github token expires soon", slog.Time("expires", expires), slog.Int("days_left", int(time.Until(expires).Hours()/24)))
-		}
+		checkExpiration(expiration, logger)
 	}
 
 	respBody, err := io.ReadAll(response.Body)
@@ -227,13 +230,7 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 	defer response.Body.Close()
 
 	if expiration := response.Header.Get("Github-Authentication-Token-Expiration"); expiration != "" {
-		expires, err := time.Parse("2006-01-02 15:04:05 -0700", expiration)
-		if err != nil {
-			logger.Error("could not parse github token expiration", err, slog.String("expiration", expiration))
-		} else if expires.After(time.Now().Add(-1 * 24 * 10 * time.Hour)) {
-			// less than 10 days left on token, warn!
-			logger.Warn("github token expires soon", slog.Time("expires", expires), slog.Int("days_left", int(time.Until(expires).Hours()/24)))
-		}
+		checkExpiration(expiration, logger)
 	}
 
 	respBody, err := io.ReadAll(response.Body)
