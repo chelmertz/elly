@@ -45,17 +45,17 @@ func main() {
 	}
 	os.Unsetenv("GITHUB_PAT")
 
-	logger.Info("starting elly",
-		slog.String("version", version),
-		slog.Int("timeout_minutes", *timeoutMinutes))
-
 	store := storage.NewStorage(logger)
 	username, err := github.UsernameFromPat(token, logger)
 	if err != nil {
 		logger.Error("could not get username from PAT", slog.Any("error", err))
 		os.Exit(1)
 	}
-	logger.Info("github user fetched from token", slog.String("github_user", username))
+
+	logger.Info("starting elly",
+		slog.String("version", version),
+		slog.Int("timeout_minutes", *timeoutMinutes),
+		slog.String("github_user", username))
 
 	refreshChannel := StartRefreshLoop(token, username, store)
 	server.ServeWeb(*url, username, store, refreshChannel, *timeoutMinutes, version, logger)
