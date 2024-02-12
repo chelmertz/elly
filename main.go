@@ -48,14 +48,11 @@ func main() {
 	store := storage.NewStorage(logger)
 	username, err := github.UsernameFromPat(token, logger)
 	if err != nil {
-		logger.Error("could not get username from PAT", slog.Any("error", err))
+		logger.Error("could not get username from PAT", "error", err)
 		os.Exit(1)
 	}
 
-	logger.Info("starting elly",
-		slog.String("version", version),
-		slog.Int("timeout_minutes", *timeoutMinutes),
-		slog.String("github_user", username))
+	logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "github_user", username)
 
 	refreshChannel := StartRefreshLoop(token, username, store)
 	server.ServeWeb(*url, username, store, refreshChannel, *timeoutMinutes, version, logger)
@@ -70,7 +67,7 @@ func StartRefreshLoop(token, username string, store *storage.Storage) chan types
 		for {
 			select {
 			case action := <-refresh:
-				logger.Info("refresh loop", slog.Any("action", action))
+				logger.Info("refresh loop", "action", action)
 				switch action {
 				case types.RefreshStop:
 					refreshTimer.Stop()
