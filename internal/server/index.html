@@ -38,7 +38,7 @@
                 opacity: 0.5;
             }
 
-            .pr.active {
+            .pr[aria-selected="true"] {
                 opacity: 1;
             }
 
@@ -118,12 +118,12 @@
     </head>
     <body>
         <main>
-            <section class="prs">
+            <section class="prs" {{if .Prs}} role="grid" {{end}}>
                 {{if not .Prs}}
                 <p class="done">🏝 You're done</p>
                 {{else}}
                 {{range $index, $pr := .Prs}}
-                <article class="pr {{$pr.ReviewStatus}}">
+                <article class="pr {{$pr.ReviewStatus}}" role="gridcell" aria-selected="false">
                     <h3><a class="pr-title" href="{{$pr.Url}}" target="_blank">{{if eq $.CurrentUser $pr.Author}}👤 {{end}}{{if $pr.Buried}}🪦 {{end}}{{$pr.Title}}</a> <span class="boring">@{{$pr.Author}}</span></h3>
                     <span class="boring">{{$pr.RepoOwner}}/{{$pr.RepoName}}</span>
                     {{with $points := index $.PointsPerPrUrl $pr.Url}}
@@ -178,16 +178,13 @@
             };
             const activatePrAbsolute = (position) => {
                 if (prs[position]) {
-                    prs[activePr].classList.remove("active");
+                    prs[activePr].setAttribute("aria-selected", "false");
                     activePr = position;
-                    prs[activePr].classList.add("active");
+                    prs[activePr].setAttribute("aria-selected", "true");
                     prs[activePr].scrollIntoView();
                 }
             };
-            if (prs[activePr]) {
-                // there is at least one pr
-                prs[activePr].classList.add("active");
-            }
+            activatePrAbsolute(0);
 
             const prsOverZeroPoints = Array.from(document.querySelectorAll("[data-points]"))
                 .filter((el) => parseInt(el.dataset.points) > 0)
