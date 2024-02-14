@@ -9,12 +9,12 @@ Configured by a Github PAT (personal access token), using the env var
 ```mermaid
 flowchart TB
     subgraph elly daemon
-    A[run ./elly] -->|Runs| B(Request PRs)
-    H(systemd) -.-> A
+    A[./elly] --> B(Request PRs)
+    H(systemd) -.->|Runs| A
     B -->|Timer, default 10 min| B
     F[(sqlite)]
     B -->|Persists|F
-    A -->|Runs| C(HTTP server)
+    A --> C(HTTP server)
     C -->|Reads| F
     C --> D(Server rendered GUI)
     C --> E(API)
