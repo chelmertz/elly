@@ -54,59 +54,55 @@ func main() {
 
 	logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "github_user", username)
 
-	refreshChannel := StartRefreshLoop(token, username, store)
+	refreshChannel := make(chan types.RefreshAction, 1)
+	go startRefreshLoop(token, username, store, refreshChannel)
+	refreshChannel <- types.RefreshUpstart
 	server.ServeWeb(*url, username, store, refreshChannel, *timeoutMinutes, version, logger)
 }
 
-func StartRefreshLoop(token, username string, store *storage.Storage) chan types.RefreshAction {
+func startRefreshLoop(token, username string, store *storage.Storage, refresh chan types.RefreshAction) {
 	refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
-	refresh := make(chan types.RefreshAction, 1)
 	retriesLeft := 5
 
-	go func() {
-		for {
-			select {
-			case action := <-refresh:
-				logger.Info("refresh loop", "action", action)
-				switch action {
-				case types.RefreshStop:
+	for {
+		select {
+		case action := <-refresh:
+			logger.Info("refresh loop", "action", action)
+			switch action {
+			case types.RefreshStop:
+				refreshTimer.Stop()
+				return
+			}
+
+			if time.Since(store.Prs().LastFetched) < time.Duration(1)*time.Minute {
+				// querying github once a minute should be fine,
+				// especially as long as we do the passive, loopy thing more seldom
+				continue
+			}
+
+			prs, err := github.QueryGithub(token, username, logger)
+			if err != nil {
+				if errors.Is(err, github.ErrClient) {
 					refreshTimer.Stop()
+					logger.Error("client error when querying github, giving up", err)
 					return
-				}
-
-				if time.Since(store.Prs().LastFetched) < time.Duration(1)*time.Minute {
-					// querying github once a minute should be fine,
-					// especially as long as we do the passive, loopy thing more seldom
-					continue
-				}
-
-				prs, err := github.QueryGithub(token, username, logger)
-				if err != nil {
-					if errors.Is(err, github.ErrClient) {
+				} else if errors.Is(err, github.ErrGithubServer) {
+					retriesLeft--
+					if retriesLeft <= 0 {
 						refreshTimer.Stop()
-						logger.Error("client error when querying github, giving up", err)
-						return
-					} else if errors.Is(err, github.ErrGithubServer) {
-						retriesLeft--
-						if retriesLeft <= 0 {
-							refreshTimer.Stop()
-							logger.Error("too many failed github requests, giving up")
-							return
-						}
-						logger.Warn("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
+						logger.Error("too many failed github requests, giving up")
 						return
 					}
-				} else if err := store.StoreRepoPrs(prs); err != nil {
-					logger.Error("could not store prs", slog.Any("error", err))
+					logger.Warn("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
 					return
 				}
-
-			case <-refreshTimer.C:
-				refresh <- types.RefreshTick
+			} else if err := store.StoreRepoPrs(prs); err != nil {
+				logger.Error("could not store prs", slog.Any("error", err))
+				return
 			}
-		}
-	}()
 
-	refresh <- types.RefreshUpstart
-	return refresh
+		case <-refreshTimer.C:
+			refresh <- types.RefreshTick
+		}
+	}
 }
