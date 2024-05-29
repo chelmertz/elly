@@ -224,7 +224,6 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 
 	for _, prEdge := range typedResponse.Data.Search.Edges {
 		pr := prEdge.Node
-
 		reviewStatus := pr.ReviewDecision
 
 		updatedAt, err := time.Parse(time.RFC3339, pr.UpdatedAt)
@@ -239,7 +238,7 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 			lastPrCommenter = c.Node.Author.Login
 		}
 
-		unrespondedThreads := actionableThreads(pr, username)
+		threadsActionable, threadsWaiting := actionableThreads(pr, username)
 
 		reviewUsers := make([]string, 0)
 		for _, u := range pr.ReviewRequests.Nodes {
@@ -267,7 +266,8 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 			IsDraft:                  pr.IsDraft,
 			LastUpdated:              updatedAt,
 			LastPrCommenter:          lastPrCommenter,
-			UnrespondedThreads:       unrespondedThreads, // TODO "threadsNeedingOurAction"
+			ThreadsActionable:        threadsActionable,
+			ThreadsWaiting:           threadsWaiting,
 			Additions:                pr.Additions,
 			Deletions:                pr.Deletions,
 			ReviewRequestedFromUsers: reviewUsers,
@@ -288,8 +288,7 @@ func userReactedToComment(reactions prReviewThreadCommentReactionGraphQl, userna
 	return false
 }
 
-func actionableThreads(pr prSearchResultGraphQl, myUsername string) int {
-	unrespondedThreads := 0
+func actionableThreads(pr prSearchResultGraphQl, myUsername string) (actionable int, waiting int) {
 	ownPr := pr.Author.Login == myUsername
 	for _, t := range pr.ReviewThreads.Edges {
 		if t.Node.IsCollapsed || t.Node.IsOutdated || t.Node.IsResolved {
@@ -308,12 +307,13 @@ func actionableThreads(pr prSearchResultGraphQl, myUsername string) int {
 		if ownPr && lastCommenter != myUsername && !iReactedToLastComment {
 			// someone else commented last, and this is our pr, and we haven't
 			// acknowledged it yet with a reaction (emoji)
-			unrespondedThreads++
+			actionable++
 			continue
 		}
 
 		if !ownPr && lastCommenter == myUsername {
 			// we have the currently last word, the owner should reply or resolve the thread
+			waiting++
 			continue
 		}
 
@@ -322,7 +322,7 @@ func actionableThreads(pr prSearchResultGraphQl, myUsername string) int {
 			// we started the thread, and it's still open (and someone else has
 			// the last word), and we haven't acknowledged it yet with a
 			// reaction (emoji)
-			unrespondedThreads++
+			actionable++
 			continue
 		}
 
@@ -330,7 +330,7 @@ func actionableThreads(pr prSearchResultGraphQl, myUsername string) int {
 		// commented in the middle and someone else has the last word
 	}
 
-	return unrespondedThreads
+	return
 }
 
 func querySearchPrsInvolvingUser(username string) string {

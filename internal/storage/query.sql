@@ -13,13 +13,14 @@ insert into prs (
     is_draft,
     last_updated,
     last_pr_commenter,
-    unresponded_threads,
+    threads_actionable,
+    threads_waiting,
     additions,
     deletions,
     review_requested_from_users,
     buried
 ) values (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 ) returning *;
 
 -- name: DeletePrs :exec
