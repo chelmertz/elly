@@ -19,7 +19,8 @@ type ViewPr struct {
 	IsDraft                  bool
 	LastUpdated              time.Time
 	LastPrCommenter          string
-	UnrespondedThreads       int
+	ThreadsActionable        int
+	ThreadsWaiting           int
 	Additions                int
 	Deletions                int
 	ReviewRequestedFromUsers []string

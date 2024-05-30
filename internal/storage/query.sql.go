@@ -30,14 +30,15 @@ insert into prs (
     is_draft,
     last_updated,
     last_pr_commenter,
-    unresponded_threads,
+    threads_actionable,
+    threads_waiting,
     additions,
     deletions,
     review_requested_from_users,
     buried
 ) values (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-) returning url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, unresponded_threads, additions, deletions, review_requested_from_users, buried
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+) returning url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, buried
 `
 
 type CreatePrParams struct {
@@ -51,7 +52,8 @@ type CreatePrParams struct {
 	IsDraft                  bool
 	LastUpdated              string
 	LastPrCommenter          string
-	UnrespondedThreads       int64
+	ThreadsActionable        int64
+	ThreadsWaiting           int64
 	Additions                int64
 	Deletions                int64
 	ReviewRequestedFromUsers string
@@ -70,7 +72,8 @@ func (q *Queries) CreatePr(ctx context.Context, arg CreatePrParams) (Pr, error) 
 		arg.IsDraft,
 		arg.LastUpdated,
 		arg.LastPrCommenter,
-		arg.UnrespondedThreads,
+		arg.ThreadsActionable,
+		arg.ThreadsWaiting,
 		arg.Additions,
 		arg.Deletions,
 		arg.ReviewRequestedFromUsers,
@@ -88,7 +91,8 @@ func (q *Queries) CreatePr(ctx context.Context, arg CreatePrParams) (Pr, error) 
 		&i.IsDraft,
 		&i.LastUpdated,
 		&i.LastPrCommenter,
-		&i.UnrespondedThreads,
+		&i.ThreadsActionable,
+		&i.ThreadsWaiting,
 		&i.Additions,
 		&i.Deletions,
 		&i.ReviewRequestedFromUsers,
@@ -118,7 +122,7 @@ func (q *Queries) GetLastFetched(ctx context.Context) (string, error) {
 }
 
 const getPr = `-- name: GetPr :one
-select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, unresponded_threads, additions, deletions, review_requested_from_users, buried from prs where url = ? limit 1
+select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, buried from prs where url = ? limit 1
 `
 
 func (q *Queries) GetPr(ctx context.Context, url string) (Pr, error) {
@@ -135,7 +139,8 @@ func (q *Queries) GetPr(ctx context.Context, url string) (Pr, error) {
 		&i.IsDraft,
 		&i.LastUpdated,
 		&i.LastPrCommenter,
-		&i.UnrespondedThreads,
+		&i.ThreadsActionable,
+		&i.ThreadsWaiting,
 		&i.Additions,
 		&i.Deletions,
 		&i.ReviewRequestedFromUsers,
@@ -145,7 +150,7 @@ func (q *Queries) GetPr(ctx context.Context, url string) (Pr, error) {
 }
 
 const listPrs = `-- name: ListPrs :many
-select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, unresponded_threads, additions, deletions, review_requested_from_users, buried from prs
+select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, buried from prs
 `
 
 func (q *Queries) ListPrs(ctx context.Context) ([]Pr, error) {
@@ -168,7 +173,8 @@ func (q *Queries) ListPrs(ctx context.Context) ([]Pr, error) {
 			&i.IsDraft,
 			&i.LastUpdated,
 			&i.LastPrCommenter,
-			&i.UnrespondedThreads,
+			&i.ThreadsActionable,
+			&i.ThreadsWaiting,
 			&i.Additions,
 			&i.Deletions,
 			&i.ReviewRequestedFromUsers,

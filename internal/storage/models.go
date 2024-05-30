@@ -22,7 +22,8 @@ type Pr struct {
 	IsDraft                  bool
 	LastUpdated              string
 	LastPrCommenter          string
-	UnrespondedThreads       int64
+	ThreadsActionable        int64
+	ThreadsWaiting           int64
 	Additions                int64
 	Deletions                int64
 	ReviewRequestedFromUsers string

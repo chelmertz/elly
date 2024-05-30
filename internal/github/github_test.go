@@ -6,7 +6,7 @@ import (
 )
 
 func Test_WhenReviewThreadIsEmpty_WillNotRequireAction(t *testing.T) {
-	constructedButEmpty := actionableThreads(prSearchResultGraphQl{ReviewThreads: struct {
+	constructedButEmpty, _ := actionableThreads(prSearchResultGraphQl{ReviewThreads: struct {
 		Edges []struct{ Node prReviewThreadGraphQl }
 	}{
 		Edges: []struct{ Node prReviewThreadGraphQl }{{Node: prReviewThreadGraphQl{Comments: struct {
@@ -19,10 +19,27 @@ func Test_WhenReviewThreadIsEmpty_WillNotRequireAction(t *testing.T) {
 		t.Fatalf("expected 0 actionable threads on an empty struct, got %d", constructedButEmpty)
 	}
 
-	actuallyEmpty := actionableThreads(prSearchResultGraphQl{}, "currentUser")
+	actuallyEmpty, _ := actionableThreads(prSearchResultGraphQl{}, "currentUser")
 
 	if actuallyEmpty != 0 {
 		t.Fatalf("expected 0 actionable threads for an empty pr, got %d", actuallyEmpty)
+	}
+}
+
+func Test_WhenHavingUnansweredComments_WillCountTowardsWaiting(t *testing.T) {
+	_, got := actionableThreads(prSearchResultGraphQl{ReviewThreads: struct {
+		Edges []struct{ Node prReviewThreadGraphQl }
+	}{
+		Edges: []struct{ Node prReviewThreadGraphQl }{{Node: prReviewThreadGraphQl{Comments: struct {
+			Nodes []prReviewThreadCommentGraphQl
+		}{
+			[]prReviewThreadCommentGraphQl{{Author: struct{ Login string }{Login: "currentUser"}, Body: "a question"}},
+		}}}},
+	},
+	}, "currentUser")
+
+	if wanted := 1; wanted != got {
+		t.Fatalf("expected %d waiting threads, got %d", wanted, got)
 	}
 }
 
@@ -84,11 +101,11 @@ func Fuzz_WhenReviewThreadsExist_WillCountUnresponded(f *testing.F) {
 			},
 		}
 
-		actionableThreads := actionableThreads(threads, myUsername)
+		actionableThreads, _ := actionableThreads(threads, myUsername)
 
 		if numberOfComments == 0 {
 			if actionableThreads != 0 {
-				t.Errorf("got %d unresponded threads, expected 0, since there are no comments", actionableThreads)
+				t.Errorf("got %d actionable threads, expected 0, since there are no comments", actionableThreads)
 			}
 			// no need to check anything further, skip the rest to avoid "if
 			// len(comments)>0" checks all over
@@ -97,7 +114,7 @@ func Fuzz_WhenReviewThreadsExist_WillCountUnresponded(f *testing.F) {
 
 		if myPr && lastCommentIsMine {
 			if actionableThreads != 0 {
-				t.Errorf("got %d unresponded threads, expected 0", actionableThreads)
+				t.Errorf("got %d actionable threads, expected 0", actionableThreads)
 			}
 		}
 
