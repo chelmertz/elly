@@ -50,6 +50,9 @@ func NewStorage(logger *slog.Logger) *Storage {
 	// create tables
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx, ddl); err != nil {
+		// if this fails, we should drop the old file (throwing away buried data, sadly) and retry to create the tables
+
+		// adjust the schema.sql file by adding a column, to check the behavior. I think there's a NPE or such that we hit
 		check(err)
 	}
 
