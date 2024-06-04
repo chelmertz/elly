@@ -40,7 +40,6 @@ type prSearchResultGraphQl struct {
 		}
 	}
 	ReviewDecision string
-	Mergeable      bool
 	UpdatedAt      string
 	Author         struct {
 		Login string
@@ -265,7 +264,6 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 			RepoOwner:                pr.Repository.Owner.Login,
 			RepoUrl:                  pr.Repository.Url,
 			IsDraft:                  pr.IsDraft,
-			Mergeable:                pr.Mergeable,
 			LastUpdated:              updatedAt,
 			LastPrCommenter:          lastPrCommenter,
 			ThreadsActionable:        threadsActionable,
@@ -364,7 +362,6 @@ func querySearchPrsInvolvingUser(username string) string {
             }
           }
           reviewDecision
-          mergeable
           updatedAt
           author {
             login

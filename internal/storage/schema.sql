@@ -7,7 +7,6 @@ create table if not exists prs (
     repo_owner text not null,
     repo_url text not null,
     is_draft boolean not null,
-    mergeable boolean not null,
     last_updated text not null,
     last_pr_commenter text not null,
     threads_actionable integer not null,

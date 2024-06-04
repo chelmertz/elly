@@ -117,7 +117,6 @@ func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 			RepoName:                 pr.RepoName,
 			RepoOwner:                pr.RepoOwner,
 			RepoUrl:                  pr.RepoUrl,
-			Mergeable:                pr.Mergeable,
 			IsDraft:                  pr.IsDraft,
 			LastUpdated:              pr.LastUpdated.Format(time.RFC3339),
 			LastPrCommenter:          pr.LastPrCommenter,

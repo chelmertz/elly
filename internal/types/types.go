@@ -17,7 +17,6 @@ type ViewPr struct {
 	RepoOwner                string
 	RepoUrl                  string
 	IsDraft                  bool
-	Mergeable                bool
 	LastUpdated              time.Time
 	LastPrCommenter          string
 	ThreadsActionable        int

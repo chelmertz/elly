@@ -11,7 +11,6 @@ insert into prs (
     repo_owner,
     repo_url,
     is_draft,
-    mergeable,
     last_updated,
     last_pr_commenter,
     threads_actionable,
@@ -21,7 +20,7 @@ insert into prs (
     review_requested_from_users,
     buried
 ) values (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 ) returning *;
 
 -- name: DeletePrs :exec
