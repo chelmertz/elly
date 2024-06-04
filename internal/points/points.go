@@ -57,6 +57,10 @@ func StandardPrPoints(pr types.ViewPr, username string) *Points {
 			// at it
 			points.Add(10, "You should add reviewers")
 		}
+
+		if !pr.Mergeable {
+			points.Add(150, "Some checks failed (failed build/test, merge conflicts, github actions, etc.)")
+		}
 	} else {
 		// someone else's pr, or our but the username is not set
 		if pr.ReviewStatus == "APPROVED" {
@@ -91,6 +95,10 @@ func StandardPrPoints(pr types.ViewPr, username string) *Points {
 			points.Add(20, fmt.Sprintf("PR is bigger, %d loc changed is <=300", diff))
 		case diff > 300:
 			points.Add(10, fmt.Sprintf("PR is bigish, %d loc changed is >300", diff))
+		}
+
+		if !pr.Mergeable {
+			points.Remove(150, "Some checks failed (failed build/test, merge conflicts, github actions, etc.)")
 		}
 	}
 

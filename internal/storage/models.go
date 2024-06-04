@@ -20,6 +20,7 @@ type Pr struct {
 	RepoOwner                string
 	RepoUrl                  string
 	IsDraft                  bool
+	Mergeable                bool
 	LastUpdated              string
 	LastPrCommenter          string
 	ThreadsActionable        int64
