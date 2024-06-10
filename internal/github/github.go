@@ -130,7 +130,7 @@ type prReviewThreadCommentReactionGraphQl struct {
 func checkExpiration(expiration string, logger *slog.Logger) {
 	expires, err := time.Parse("2006-01-02 15:04:05 -0700", expiration)
 	if err != nil {
-		logger.Error("could not parse github token expiration", err, slog.String("expiration", expiration))
+		logger.Error("could not parse github token expiration", slog.Any("error", err), slog.String("expiration", expiration))
 	} else if expires.Before(time.Now().Add(10 * 24 * time.Hour)) {
 		// less than 10 days left on token, warn!
 		logger.Warn("github token expires soon", slog.Time("expires", expires), slog.Int("days_left", int(time.Until(expires).Hours()/24)))

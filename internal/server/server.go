@@ -51,7 +51,7 @@ func ServeWeb(url, username string, store *storage.Storage, refreshingChannel ch
 			if len(parts) == 2 && (parts[1] == "bury" || parts[1] == "unbury") {
 				prUrlBytes, err := base64.StdEncoding.DecodeString(parts[0])
 				if err != nil {
-					w.Write([]byte("invalid PR ID"))
+					_, _ = w.Write([]byte("invalid PR ID"))
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
@@ -66,7 +66,7 @@ func ServeWeb(url, username string, store *storage.Storage, refreshingChannel ch
 				ghPrUrl := string(prUrlBytes)
 
 				if err := buryFunc(ghPrUrl); err != nil {
-					w.Write([]byte(fmt.Sprintf("couldn't toggle bury for PR %s", ghPrUrl)))
+					_, _ = w.Write([]byte(fmt.Sprintf("couldn't toggle bury for PR %s", ghPrUrl)))
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}

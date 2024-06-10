@@ -84,7 +84,7 @@ func startRefreshLoop(token, username string, store *storage.Storage, refresh ch
 			if err != nil {
 				if errors.Is(err, github.ErrClient) {
 					refreshTimer.Stop()
-					logger.Error("client error when querying github, giving up", err)
+					logger.Error("client error when querying github, giving up", slog.Any("error", err))
 					return
 				} else if errors.Is(err, github.ErrGithubServer) {
 					retriesLeft--
@@ -93,7 +93,7 @@ func startRefreshLoop(token, username string, store *storage.Storage, refresh ch
 						logger.Error("too many failed github requests, giving up")
 						return
 					}
-					logger.Warn("error refreshing PRs", err, slog.Int("retries_left", retriesLeft))
+					logger.Warn("error refreshing PRs", slog.Any("error", err), slog.Int("retries_left", retriesLeft))
 					return
 				}
 			} else if err := store.StoreRepoPrs(prs); err != nil {
