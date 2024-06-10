@@ -2,18 +2,15 @@ package storage
 
 import (
 	"context"
-	"database/sql"
 	_ "embed"
-	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/chelmertz/elly/internal/types"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/ncruces/go-sqlite3"
+	_ "github.com/ncruces/go-sqlite3/embed"
 )
 
 func check(err error) {
@@ -36,20 +33,13 @@ type StoredState struct {
 var ddl string
 
 func NewStorage(logger *slog.Logger) *Storage {
-	dirname, err := os.UserCacheDir()
-	check(err)
-	ourCacheDir := filepath.Join(dirname, "elly")
-	if err := os.MkdirAll(ourCacheDir, 0755); err != nil && !errors.Is(err, os.ErrExist) {
-		check(err)
-	}
-	dbFilename := filepath.Join(ourCacheDir, "elly.db")
+	dbFilename := ":memory:"
 
-	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=rwc&_journal_mode=WAL&_synchronous=NORMAL", dbFilename))
+	db, err := sqlite3.Open(fmt.Sprintf("file:%s?mode=rwc&_journal_mode=WAL&_synchronous=NORMAL", dbFilename))
 	check(err)
 
 	// create tables
-	ctx := context.Background()
-	if _, err := db.ExecContext(ctx, ddl); err != nil {
+	if err := db.Exec(ddl); err != nil {
 		check(err)
 	}
 
