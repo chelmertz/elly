@@ -101,7 +101,7 @@ func StandardPrPoints(pr types.ViewPr, username string) *Points {
 	}
 
 	if pr.ThreadsWaiting > 0 {
-		points.Remove(10, fmt.Sprintf("We have unresponded comments (%d comments)", pr.ThreadsWaiting))
+		points.Remove(10, fmt.Sprintf("Someone should respond to our comments (%d comments)", pr.ThreadsWaiting))
 	}
 
 	sort.Slice(points.Reasons, func(i, j int) bool {
