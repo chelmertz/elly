@@ -104,6 +104,21 @@ func (s *Storage) Prs() StoredState {
 func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 	s.logger.Info("storing prs", slog.Int("prs", len(orderedPrs)))
 
+	buriedPrs, err := s.db.BuriedPrs(context.Background())
+	if err != nil {
+		s.logger.Error("could not fetch buried prs, throwing away old buried-status", slog.Any("err", err))
+	} else {
+		// O(n^2) but n is always small, in my case (and the amount of buried prs is usually super small)
+		for i, pr := range orderedPrs {
+			for _, buriedPr := range buriedPrs {
+				if buriedPr == pr.Url {
+					orderedPrs[i].Buried = true
+					break
+				}
+			}
+		}
+	}
+
 	if err := s.db.DeletePrs(context.Background()); err != nil {
 		return fmt.Errorf("could not delete old prs, in preparation of storing new ones: %w", err)
 	}
@@ -125,7 +140,7 @@ func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 			Additions:                int64(pr.Additions),
 			Deletions:                int64(pr.Deletions),
 			ReviewRequestedFromUsers: strings.Join(pr.ReviewRequestedFromUsers, ","),
-			Buried:                   false,
+			Buried:                   pr.Buried,
 		})
 		check(err)
 	}

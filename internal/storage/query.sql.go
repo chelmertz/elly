@@ -9,6 +9,33 @@ import (
 	"context"
 )
 
+const buriedPrs = `-- name: BuriedPrs :many
+select url from prs where buried = true
+`
+
+func (q *Queries) BuriedPrs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, buriedPrs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var url string
+		if err := rows.Scan(&url); err != nil {
+			return nil, err
+		}
+		items = append(items, url)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const bury = `-- name: Bury :exec
 update prs set buried = true where url = ?
 `
