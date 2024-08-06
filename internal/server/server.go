@@ -48,31 +48,32 @@ func ServeWeb(url, username string, store *storage.Storage, refreshingChannel ch
 		if r.Method == http.MethodPost {
 			wo := strings.TrimPrefix(r.URL.Path, "/api/v0/prs/")
 			parts := strings.Split(wo, "/")
-			if len(parts) == 2 && (parts[1] == "bury" || parts[1] == "unbury") {
+			if len(parts) == 2 {
 				prUrlBytes, err := base64.StdEncoding.DecodeString(parts[0])
 				if err != nil {
 					_, _ = w.Write([]byte("invalid PR ID"))
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
-
-				var buryFunc func(string) error
-				if parts[1] == "bury" {
-					buryFunc = store.Bury
-				} else {
-					buryFunc = store.Unbury
-				}
-
 				ghPrUrl := string(prUrlBytes)
 
-				if err := buryFunc(ghPrUrl); err != nil {
-					_, _ = w.Write([]byte(fmt.Sprintf("couldn't toggle bury for PR %s", ghPrUrl)))
-					w.WriteHeader(http.StatusInternalServerError)
+				if parts[1] == "bury" || parts[1] == "unbury" {
+					var buryFunc func(string) error
+					if parts[1] == "bury" {
+						buryFunc = store.Bury
+					} else {
+						buryFunc = store.Unbury
+					}
+
+					if err := buryFunc(ghPrUrl); err != nil {
+						_, _ = w.Write([]byte(fmt.Sprintf("couldn't toggle bury for PR %s", ghPrUrl)))
+						w.WriteHeader(http.StatusInternalServerError)
+						return
+					}
+
+					w.WriteHeader(http.StatusNoContent)
 					return
 				}
-
-				w.WriteHeader(http.StatusNoContent)
-				return
 			}
 		}
 
