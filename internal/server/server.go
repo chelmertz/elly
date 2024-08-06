@@ -80,6 +80,25 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store *storage.St
 						return
 					}
 
+					var foundPr types.ViewPr
+					found := false // just to avoid dealing with an empty state PR, or mucking with a pointer
+					for _, pr := range prs_ {
+						if ghPrUrl == pr.Url {
+							// not the most effectient but I've never had more than ~30 PRs showing
+							// query the DB if this ever gets expensive
+							foundPr = pr
+							found = true
+							break
+						}
+					}
+					if !found {
+						w.WriteHeader(http.StatusNotFound)
+						_, _ = w.Write([]byte(fmt.Sprintf("couldn't turn PR %s into a golden copy, PR not found", ghPrUrl)))
+						return
+					}
+
+					logger.Info("found a pr to turn into golden copy", "pr", foundPr)
+
 					w.WriteHeader(http.StatusOK)
 					return
 				}
