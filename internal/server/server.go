@@ -37,7 +37,7 @@ type IndexHtmlData struct {
 //go:embed index.html
 var index embed.FS
 
-func ServeWeb(url, username string, store *storage.Storage, refreshingChannel chan types.RefreshAction, timeoutMinutes int, version string, logger *slog.Logger) {
+func ServeWeb(url, username string, goldenTestingEnabled bool, store *storage.Storage, refreshingChannel chan types.RefreshAction, timeoutMinutes int, version string, logger *slog.Logger) {
 	temp, err := template.ParseFS(index, "index.html")
 	check(err)
 
@@ -72,6 +72,15 @@ func ServeWeb(url, username string, store *storage.Storage, refreshingChannel ch
 					}
 
 					w.WriteHeader(http.StatusNoContent)
+					return
+				} else if parts[1] == "golden" {
+					if !goldenTestingEnabled {
+						// Nothing to see here
+						w.WriteHeader(http.StatusNotFound)
+						return
+					}
+
+					w.WriteHeader(http.StatusOK)
 					return
 				}
 			}

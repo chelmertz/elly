@@ -18,6 +18,7 @@ import (
 
 var timeoutMinutes = flag.Int("timeout", 10, "refresh PRs every N minutes")
 var url = flag.String("url", "localhost:9876", "URL for web GUI")
+var golden = flag.Bool("golden", false, "provide a button for turning a PR into a test. do NOT use outside of development")
 var versionFlag = flag.Bool("version", false, "show version")
 var logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 
@@ -52,12 +53,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "github_user", username)
+	logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "github_user", username, "golden_testing_enabled", *golden)
 
 	refreshChannel := make(chan types.RefreshAction, 1)
 	go startRefreshLoop(token, username, store, refreshChannel)
 	refreshChannel <- types.RefreshUpstart
-	server.ServeWeb(*url, username, store, refreshChannel, *timeoutMinutes, version, logger)
+	server.ServeWeb(*url, username, *golden, store, refreshChannel, *timeoutMinutes, version, logger)
 }
 
 func startRefreshLoop(token, username string, store *storage.Storage, refresh chan types.RefreshAction) {
