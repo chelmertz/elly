@@ -16,7 +16,7 @@ import (
 	"github.com/chelmertz/elly/internal/types"
 )
 
-var timeoutMinutes = flag.Int("timeout", 10, "refresh PRs every N minutes")
+var timeoutMinutes = flag.Int("timeout", 5, "refresh PRs every N minutes")
 var url = flag.String("url", "localhost:9876", "URL for web GUI")
 var golden = flag.Bool("golden", false, "provide a button for turning a PR into a test. do NOT use outside of development")
 var versionFlag = flag.Bool("version", false, "show version")
