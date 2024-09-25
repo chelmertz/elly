@@ -78,7 +78,6 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store *storage.St
 		logger.Info("found a pr to turn into golden copy", "pr", foundPr)
 
 		w.WriteHeader(http.StatusOK)
-		return
 	})
 
 	http.HandleFunc("POST /api/v0/prs/{prUrl}/{action}", func(w http.ResponseWriter, r *http.Request) {
