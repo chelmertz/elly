@@ -6,6 +6,10 @@ GUI & API.
 Configured by a Github PAT (personal access token), using the env var
 `GITHUB_PAT`. Should be hosted locally.
 
+![Screenshot of GUI](gui.png)
+
+![Screenshot of GUI's about screen](about.png)
+
 ```mermaid
 flowchart TB
     subgraph elly daemon
@@ -22,10 +26,6 @@ flowchart TB
     D -.->|Opens in browser| G(Github PR view)
     I(i3blocks) -.-> E
 ```
-
-![Screenshot of GUI](gui.png)
-
-![Screenshot of GUI's about screen](about.png)
 
 ## PAT Oauth permissions
 
