@@ -92,27 +92,25 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store *storage.St
 
 		action := r.PathValue("action")
 
-		if action == "bury" || action == "unbury" {
-			var buryFunc func(string) error
-			if action == "bury" {
-				buryFunc = store.Bury
-			} else {
-				buryFunc = store.Unbury
-			}
-
-			if err := buryFunc(ghPrUrl); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				_, _ = w.Write([]byte(fmt.Sprintf("couldn't toggle bury for PR %s", ghPrUrl)))
-				return
-			}
-
-			w.WriteHeader(http.StatusNoContent)
-			return
-		} else {
+		var buryFunc func(string) error
+		switch action {
+		case "bury":
+			buryFunc = store.Bury
+		case "unbury":
+			buryFunc = store.Unbury
+		default:
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte(fmt.Sprintf("action '%s' is not supported", action)))
 			return
 		}
+
+		if err := buryFunc(ghPrUrl); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(fmt.Sprintf("couldn't toggle bury for PR %s", ghPrUrl)))
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	})
 
 	// Let's say that v0 represents "may change at any time", read the code.
