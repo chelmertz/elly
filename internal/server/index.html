@@ -10,6 +10,7 @@
                 --muted: #ccc;
                 --positive: #27b427;
                 --negative: #b42727;
+                --buried: #333;
                 --action: #f8da22;
                 --link: #aa0606;
             }
@@ -126,7 +127,7 @@
                 }
 
                 &.buried {
-                    background: #333;
+                    background: var(--buried);
                 }
             }
 
@@ -153,6 +154,19 @@
                 display: flex;
                 justify-content: center;
                 align-items: center;
+            }
+            
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --bg: #312f2f;
+                    --fg: #e1e1e1;
+                    --muted: #555;
+                    --positive: #27b427;
+                    --negative: #b42727;
+                    --buried: #818080;
+                    --action: #f8da22;
+                    --link: #f8da22;
+                }
             }
 
         </style>
