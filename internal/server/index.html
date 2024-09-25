@@ -7,6 +7,7 @@
             :root {
                 --bg: #e1e1e1;
                 --fg: #312f2f;
+                --muted: #ccc;
                 --positive: #27b427;
                 --negative: #b42727;
                 --action: #f8da22;
@@ -36,15 +37,30 @@
 
             .pr {
                 border-radius: 5px;
-                padding: 2rem;
+                padding: 2rem 2rem 0;
                 justify-content: space-between;
                 opacity: 0.5;
+                max-width: 600px;
 
                 &[aria-selected="true"] {
                     opacity: 1;
+                }
 
-                    .pr-title {
-                        border-bottom: 1px solid var(--link);
+                &:last-of-type {
+                    padding-bottom: 2rem;
+                }
+
+                header {
+                    background-color: var(--link);
+                    color: #fff;
+                    margin: 0 0 8px -10px; /* left-align text with content of PR */
+
+                    h3 {
+                        margin: 0;
+                    }
+
+                    a {
+                        color: #fff;
                     }
                 }
             }
@@ -56,7 +72,6 @@
             .pr-title {
                 font-size: 1.5rem;
                 padding-bottom: 0.5rem;
-                border-bottom: 1px solid var(--fg);
                 margin-right: 0.5rem;
             }
 
@@ -109,6 +124,18 @@
                 &.points-positive {
                     background: var(--positive);
                 }
+
+                &.buried {
+                    background: #333;
+                }
+            }
+
+            .motivation {
+                .total-points {
+                    border-top: 2px dashed var(--muted);
+                    margin: 0;
+                    padding-top: 12px;
+                }
             }
 
             .inline {
@@ -137,21 +164,24 @@
                 {{if not .Prs}}
                 <p class="done">🏝 You're done</p>
                 {{else}}
-                {{range $index, $pr := .Prs}}
-                <article class="pr {{$pr.ReviewStatus}}" role="gridcell" aria-selected="false">
-                    <h3><a class="pr-title" href="{{$pr.Url}}" target="_blank">{{if eq $.CurrentUser $pr.Author}}👤 {{end}}{{if $pr.Buried}}🪦 {{end}}{{$pr.Title}}</a> <span class="boring">@{{$pr.Author}}</span></h3>
-                    <span class="boring">{{$pr.RepoOwner}}/{{$pr.RepoName}}</span>
-                    {{with $points := index $.PointsPerPrUrl $pr.Url}}
-                    <span class="inline rounded points-{{if gt $points.Total -1}}positive{{else}}negative{{end}}" data-points="{{$points.Total}}">{{$points.Total}}</span>
-                    <a class="inline rounded action bury" title="Toggle a -1000 point penalty, for PRs that just aren't interesting" href="{{$pr.ToggleBuryUrl}}">🪦</a>
-                    <div class="motivation">
-                        {{range $motivation := $points.Reasons}}
-                        <p>{{$motivation}}</p>
+                    {{range $index, $pr := .Prs}}
+                        {{with $points := index $.PointsPerPrUrl $pr.Url}}
+                        <article class="pr {{$pr.ReviewStatus}}" role="gridcell" aria-selected="false">
+                            <header class="rounded {{if $pr.Buried}}buried{{end}} points-{{if gt $points.Total -1}}positive{{else}}negative{{end}}">
+                                <h3><a class="pr-title" href="{{$pr.Url}}" target="_blank">{{if eq $.CurrentUser $pr.Author}}👤 {{end}}{{if $pr.Buried}}🪦 {{end}}{{$pr.Title}}</a></h3>
+                                <span class="boring">@{{$pr.Author}}</span>
+                            </header>
+                            <span class="boring">{{$pr.RepoOwner}}/{{$pr.RepoName}}</span>
+                            <a class="inline rounded action bury" title="Toggle a -1000 point penalty, for PRs that just aren't interesting" href="{{$pr.ToggleBuryUrl}}">🪦</a>
+                            <div class="motivation">
+                                {{range $motivation := $points.Reasons}}
+                                <p>{{$motivation}}</p>
+                                {{end}}
+                                <p class="total-points" data-points="{{$points.Total}}">∑ {{$points.Total}}</p>
+                            </div>
+                        </article>
                         {{end}}
-                    </div>
                     {{end}}
-                </article>
-                {{end}}
                 {{end}}
             </section>
             <aside class="meta">
