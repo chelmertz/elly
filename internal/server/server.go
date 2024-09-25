@@ -36,7 +36,7 @@ type IndexHtmlData struct {
 //go:embed index.html
 var index embed.FS
 
-func ServeWeb(url, username string, goldenTestingEnabled bool, store *storage.Storage, refreshingChannel chan types.RefreshAction, timeoutMinutes int, version string, logger *slog.Logger) {
+func ServeWeb(url, username string, goldenTestingEnabled bool, store storage.Storage, refreshingChannel chan types.RefreshAction, timeoutMinutes int, version string, logger *slog.Logger) {
 	temp, err := template.ParseFS(index, "index.html")
 	check(err)
 

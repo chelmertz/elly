@@ -19,6 +19,7 @@ import (
 var timeoutMinutes = flag.Int("timeout", 5, "refresh PRs every N minutes")
 var url = flag.String("url", "localhost:9876", "URL for web GUI")
 var golden = flag.Bool("golden", false, "provide a button for turning a PR into a test. do NOT use outside of development")
+var demo = flag.Bool("demo", false, "mock the PRs so you can take a proper screenshot of the GUI")
 var versionFlag = flag.Bool("version", false, "show version")
 var logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 
@@ -46,14 +47,18 @@ func main() {
 	}
 	os.Unsetenv("GITHUB_PAT")
 
-	store := storage.NewStorage(logger)
+	var store storage.Storage = storage.NewStorage(logger)
 	username, err := github.UsernameFromPat(token, logger)
 	if err != nil {
 		logger.Error("could not get username from PAT", "error", err)
 		os.Exit(1)
 	}
 
-	logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "github_user", username, "golden_testing_enabled", *golden)
+	logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "github_user", username, "golden_testing_enabled", *golden, "demo", *demo)
+
+	if *demo {
+		store = storage.NewStorageDemo()
+	}
 
 	refreshChannel := make(chan types.RefreshAction, 1)
 	go startRefreshLoop(token, username, store, refreshChannel)
@@ -61,7 +66,7 @@ func main() {
 	server.ServeWeb(*url, username, *golden, store, refreshChannel, *timeoutMinutes, version, logger)
 }
 
-func startRefreshLoop(token, username string, store *storage.Storage, refresh chan types.RefreshAction) {
+func startRefreshLoop(token, username string, store storage.Storage, refresh chan types.RefreshAction) {
 	refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
 	retriesLeft := 5
 

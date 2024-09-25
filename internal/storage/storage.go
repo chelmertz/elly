@@ -22,10 +22,20 @@ func check(err error) {
 	}
 }
 
-type Storage struct {
+type Storage interface {
+	Prs() StoredState
+	StoreRepoPrs(orderedPrs []types.ViewPr) error
+	Bury(prUrl string) error
+	Unbury(prUrl string) error
+	GetPr(prUrl string) (Pr, error)
+}
+
+type DbStorage struct {
 	db     *Queries
 	logger *slog.Logger
 }
+
+var _ Storage = (*DbStorage)(nil)
 
 type StoredState struct {
 	Prs         []types.ViewPr
@@ -35,7 +45,7 @@ type StoredState struct {
 //go:embed schema.sql
 var ddl string
 
-func NewStorage(logger *slog.Logger) *Storage {
+func NewStorage(logger *slog.Logger) *DbStorage {
 	dirname, err := os.UserCacheDir()
 	check(err)
 	ourCacheDir := filepath.Join(dirname, "elly")
@@ -56,13 +66,13 @@ func NewStorage(logger *slog.Logger) *Storage {
 		check(err)
 	}
 
-	return &Storage{
+	return &DbStorage{
 		db:     New(db),
 		logger: logger,
 	}
 }
 
-func (s *Storage) Prs() StoredState {
+func (s *DbStorage) Prs() StoredState {
 	dbPrs, err := s.db.ListPrs(context.Background())
 	check(err)
 	prs := make([]types.ViewPr, 0)
@@ -101,7 +111,7 @@ func (s *Storage) Prs() StoredState {
 	return state
 }
 
-func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
+func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 	s.logger.Info("storing prs", slog.Int("prs", len(orderedPrs)))
 
 	buriedPrs, err := s.db.BuriedPrs(context.Background())
@@ -154,14 +164,14 @@ func (s *Storage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 	return nil
 }
 
-func (s *Storage) Bury(prUrl string) error {
+func (s *DbStorage) Bury(prUrl string) error {
 	return s.db.Bury(context.Background(), prUrl)
 }
 
-func (s *Storage) Unbury(prUrl string) error {
+func (s *DbStorage) Unbury(prUrl string) error {
 	return s.db.Unbury(context.Background(), prUrl)
 }
 
-func (s *Storage) GetPr(prUrl string) (Pr, error) {
+func (s *DbStorage) GetPr(prUrl string) (Pr, error) {
 	return s.db.GetPr(context.Background(), prUrl)
 }
