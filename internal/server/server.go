@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 	"text/template"
 	"time"
 
@@ -41,99 +40,84 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store *storage.St
 	temp, err := template.ParseFS(index, "index.html")
 	check(err)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /api/v0/prs/{prUrl}/golden", func(w http.ResponseWriter, r *http.Request) {
+		if !goldenTestingEnabled {
+			// Nothing to see here
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
 		storedPrs := store.Prs()
 		prs_ := storedPrs.Prs
 
-		if r.Method == http.MethodPost {
-			wo := strings.TrimPrefix(r.URL.Path, "/api/v0/prs/")
-			parts := strings.Split(wo, "/")
-			if len(parts) == 2 {
-				prUrlBytes, err := base64.StdEncoding.DecodeString(parts[0])
-				if err != nil {
-					w.WriteHeader(http.StatusBadRequest)
-					_, _ = w.Write([]byte("invalid PR ID"))
-					return
-				}
-				ghPrUrl := string(prUrlBytes)
-
-				if parts[1] == "bury" || parts[1] == "unbury" {
-					var buryFunc func(string) error
-					if parts[1] == "bury" {
-						buryFunc = store.Bury
-					} else {
-						buryFunc = store.Unbury
-					}
-
-					if err := buryFunc(ghPrUrl); err != nil {
-						w.WriteHeader(http.StatusInternalServerError)
-						_, _ = w.Write([]byte(fmt.Sprintf("couldn't toggle bury for PR %s", ghPrUrl)))
-						return
-					}
-
-					w.WriteHeader(http.StatusNoContent)
-					return
-				} else if parts[1] == "golden" {
-					if !goldenTestingEnabled {
-						// Nothing to see here
-						w.WriteHeader(http.StatusNotFound)
-						return
-					}
-
-					var foundPr types.ViewPr
-					found := false // just to avoid dealing with an empty state PR, or mucking with a pointer
-					for _, pr := range prs_ {
-						if ghPrUrl == pr.Url {
-							// not the most effectient but I've never had more than ~30 PRs showing
-							// query the DB if this ever gets expensive
-							foundPr = pr
-							found = true
-							break
-						}
-					}
-					if !found {
-						w.WriteHeader(http.StatusNotFound)
-						_, _ = w.Write([]byte(fmt.Sprintf("couldn't turn PR %s into a golden copy, PR not found", ghPrUrl)))
-						return
-					}
-
-					logger.Info("found a pr to turn into golden copy", "pr", foundPr)
-
-					w.WriteHeader(http.StatusOK)
-					return
-				}
-			}
+		prUrlBytes, err := base64.StdEncoding.DecodeString(r.PathValue("prUrl"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("invalid PR ID"))
+			return
 		}
+		ghPrUrl := string(prUrlBytes)
 
-		pointsPerPrUrl := make(map[string]*points.Points)
+		var foundPr types.ViewPr
+		found := false // just to avoid dealing with an empty state PR, or mucking with a pointer
 		for _, pr := range prs_ {
-			pointsPerPrUrl[pr.Url] = points.StandardPrPoints(pr, username)
+			if ghPrUrl == pr.Url {
+				// not the most effectient but I've never had more than ~30 PRs showing
+				// query the DB if this ever gets expensive
+				foundPr = pr
+				found = true
+				break
+			}
+		}
+		if !found {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(fmt.Sprintf("couldn't turn PR %s into a golden copy, PR not found", ghPrUrl)))
+			return
 		}
 
-		sort.Slice(prs_, func(i, j int) bool {
-			pri := pointsPerPrUrl[prs_[i].Url].Total
-			prj := pointsPerPrUrl[prs_[j].Url].Total
-			if pri == prj {
-				lastUpdated := prs_[j].LastUpdated.Before(prs_[i].LastUpdated)
-				return lastUpdated
-			}
-			return pri > prj
-		})
-		data := IndexHtmlData{
-			Prs:                    prs_,
-			PointsPerPrUrl:         pointsPerPrUrl,
-			CurrentUser:            username,
-			LastRefreshed:          storedPrs.LastFetched.Format(time.RFC3339),
-			RefreshIntervalMinutes: timeoutMinutes,
-			Version:                version,
+		logger.Info("found a pr to turn into golden copy", "pr", foundPr)
+
+		w.WriteHeader(http.StatusOK)
+		return
+	})
+
+	http.HandleFunc("POST /api/v0/prs/{prUrl}/{action}", func(w http.ResponseWriter, r *http.Request) {
+		prUrlBytes, err := base64.StdEncoding.DecodeString(r.PathValue("prUrl"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("invalid PR ID"))
+			return
 		}
-		err := temp.Execute(w, data)
-		check(err)
+		ghPrUrl := string(prUrlBytes)
+
+		action := r.PathValue("action")
+
+		if action == "bury" || action == "unbury" {
+			var buryFunc func(string) error
+			if action == "bury" {
+				buryFunc = store.Bury
+			} else {
+				buryFunc = store.Unbury
+			}
+
+			if err := buryFunc(ghPrUrl); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(fmt.Sprintf("couldn't toggle bury for PR %s", ghPrUrl)))
+				return
+			}
+
+			w.WriteHeader(http.StatusNoContent)
+			return
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(fmt.Sprintf("action '%s' is not supported", action)))
+			return
+		}
 	})
 
 	// Let's say that v0 represents "may change at any time", read the code.
 	// Should be bumped before tagging this repo as v1
-	http.HandleFunc("/api/v0/prs", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("GET /api/v0/prs", func(w http.ResponseWriter, r *http.Request) {
 		storedPrs := store.Prs().Prs
 		prsToReturn := make([]types.ViewPr, 0)
 
@@ -172,14 +156,38 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store *storage.St
 		check(err)
 	})
 
-	http.HandleFunc("/api/v0/prs/refresh", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			refreshingChannel <- types.RefreshManual
-		} else if r.Method == http.MethodGet {
-		} else {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
+	http.HandleFunc("POST /api/v0/prs/refresh", func(w http.ResponseWriter, r *http.Request) {
+		refreshingChannel <- types.RefreshManual
+	})
+
+	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		storedPrs := store.Prs()
+		prs_ := storedPrs.Prs
+
+		pointsPerPrUrl := make(map[string]*points.Points)
+		for _, pr := range prs_ {
+			pointsPerPrUrl[pr.Url] = points.StandardPrPoints(pr, username)
 		}
+
+		sort.Slice(prs_, func(i, j int) bool {
+			pri := pointsPerPrUrl[prs_[i].Url].Total
+			prj := pointsPerPrUrl[prs_[j].Url].Total
+			if pri == prj {
+				lastUpdated := prs_[j].LastUpdated.Before(prs_[i].LastUpdated)
+				return lastUpdated
+			}
+			return pri > prj
+		})
+		data := IndexHtmlData{
+			Prs:                    prs_,
+			PointsPerPrUrl:         pointsPerPrUrl,
+			CurrentUser:            username,
+			LastRefreshed:          storedPrs.LastFetched.Format(time.RFC3339),
+			RefreshIntervalMinutes: timeoutMinutes,
+			Version:                version,
+		}
+		err := temp.Execute(w, data)
+		check(err)
 	})
 
 	logger.Info("starting web server at", slog.String("url", "http://"+url))
