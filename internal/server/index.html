@@ -7,6 +7,9 @@
             :root {
                 --bg: #e1e1e1;
                 --fg: #312f2f;
+                --positive: #27b427;
+                --negative: #b42727;
+                --action: #f8da22;
                 --link: #aa0606;
             }
 
@@ -90,17 +93,21 @@
                 }
             }
 
-            .circle {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                border-radius: 50%;
-                width: 40px;
-                height: 40px;
+            .rounded {
+                border-radius: 5px;
+                color: white;
+                padding: 5px 10px;
 
-                &.ok {
-                    background: rgb(39, 180, 39);
-                    color: white;
+                &.action {
+                    background: var(--action);
+                }
+
+                &.points-negative {
+                    background: var(--negative);
+                }
+
+                &.points-positive {
+                    background: var(--positive);
                 }
             }
 
@@ -135,8 +142,8 @@
                     <h3><a class="pr-title" href="{{$pr.Url}}" target="_blank">{{if eq $.CurrentUser $pr.Author}}👤 {{end}}{{if $pr.Buried}}🪦 {{end}}{{$pr.Title}}</a> <span class="boring">@{{$pr.Author}}</span></h3>
                     <span class="boring">{{$pr.RepoOwner}}/{{$pr.RepoName}}</span>
                     {{with $points := index $.PointsPerPrUrl $pr.Url}}
-                    <span class="inline" data-points="{{$points.Total}}"><span class="circle ok">{{$points.Total}}</span></span>
-                    <span class="inline"><a class="bury" href="{{$pr.ToggleBuryUrl}}">🪦</a></span>
+                    <span class="inline rounded points-{{if gt $points.Total -1}}positive{{else}}negative{{end}}" data-points="{{$points.Total}}">{{$points.Total}}</span>
+                    <a class="inline rounded action bury" title="Toggle a -1000 point penalty, for PRs that just aren't interesting" href="{{$pr.ToggleBuryUrl}}">🪦</a>
                     <div class="motivation">
                         {{range $motivation := $points.Reasons}}
                         <p>{{$motivation}}</p>
