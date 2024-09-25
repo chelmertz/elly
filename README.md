@@ -8,6 +8,8 @@ Configured by a Github PAT (personal access token), using the env var
 
 ![Screenshot of GUI](gui.png)
 
+![Screenshot of GUI, with dark mode](darkmode.png)
+
 ![Screenshot of GUI's about screen](about.png)
 
 ```mermaid
