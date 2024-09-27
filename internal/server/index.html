@@ -9,8 +9,7 @@
                 --fg: #312f2f;
                 --muted: #ccc;
                 --positive: #27b427;
-                --negative: #b42727;
-                --buried: #333;
+                --negative: #333;
                 --action: #f8da22;
                 --link: #aa0606;
             }
@@ -127,10 +126,6 @@
                 &.points-positive {
                     background: var(--positive);
                 }
-
-                &.buried {
-                    background: var(--buried);
-                }
             }
 
             .motivation {
@@ -164,8 +159,7 @@
                     --fg: #e1e1e1;
                     --muted: #555;
                     --positive: #27b427;
-                    --negative: #b42727;
-                    --buried: #818080;
+                    --negative: #818080;
                     --action: #f8da22;
                     --link: #f8da22;
                 }
@@ -194,7 +188,7 @@
                     {{range $index, $pr := .Prs}}
                         {{with $points := index $.PointsPerPrUrl $pr.Url}}
                         <article class="pr {{$pr.ReviewStatus}}" role="gridcell" aria-selected="false">
-                            <header class="rounded {{if $pr.Buried}}buried{{end}} points-{{if gt $points.Total -1}}positive{{else}}negative{{end}}">
+                            <header class="rounded points-{{if gt $points.Total -1}}positive{{else}}negative{{end}}">
                                 <h3><a class="pr-title" href="{{$pr.Url}}" target="_blank">{{if eq $.CurrentUser $pr.Author}}👤 {{end}}{{if $pr.Buried}}🪦 {{end}}{{$pr.Title}}</a></h3>
                                 <span class="boring">@{{$pr.Author}}</span>
                             </header>
