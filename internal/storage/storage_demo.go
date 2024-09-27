@@ -77,7 +77,26 @@ func (s *StorageDemo) Prs() StoredState {
 		Buried:                   false,
 	}
 
-	prs = append(prs, pr1, pr2, pr3)
+	pr4 := types.ViewPr{
+		Url:                      "4",
+		ReviewStatus:             "APPROVED",
+		Title:                    "style: fix linting errors",
+		Author:                   "olsons_beats",
+		RepoName:                 "translations",
+		RepoOwner:                "chelmertz",
+		RepoUrl:                  "",
+		IsDraft:                  false,
+		LastUpdated:              lastUpdated,
+		LastPrCommenter:          "",
+		ThreadsActionable:        0,
+		ThreadsWaiting:           0,
+		Additions:                32,
+		Deletions:                15,
+		ReviewRequestedFromUsers: []string{},
+		Buried:                   true,
+	}
+
+	prs = append(prs, pr1, pr2, pr3, pr4)
 
 	state := StoredState{
 		Prs:         prs,
