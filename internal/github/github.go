@@ -288,6 +288,15 @@ func userReactedToComment(reactions prReviewThreadCommentReactionGraphQl, userna
 	return false
 }
 
+func someoneElseReactedToComment(reactions prReviewThreadCommentReactionGraphQl, username string) bool {
+	for _, r := range reactions.Edges {
+		if r.Node.User.Login != username {
+			return true
+		}
+	}
+	return false
+}
+
 func actionableThreads(pr prSearchResultGraphQl, myUsername string) (actionable int, waiting int) {
 	ownPr := pr.Author.Login == myUsername
 	for _, t := range pr.ReviewThreads.Edges {
@@ -302,11 +311,20 @@ func actionableThreads(pr prSearchResultGraphQl, myUsername string) (actionable 
 
 		lastComment := t.Node.Comments.Nodes[len(t.Node.Comments.Nodes)-1]
 		lastCommenter := lastComment.Author.Login
+		iCommentedLast := lastCommenter == myUsername
 		iReactedToLastComment := userReactedToComment(lastComment.Reactions, myUsername)
+		someoneElseReactedMyLastComment := iCommentedLast && someoneElseReactedToComment(lastComment.Reactions, myUsername)
 
-		if ownPr && lastCommenter != myUsername && !iReactedToLastComment {
+		if ownPr && !iCommentedLast && !iReactedToLastComment {
 			// someone else commented last, and this is our pr, and we haven't
 			// acknowledged it yet with a reaction (emoji)
+			actionable++
+			continue
+		}
+
+		if ownPr && someoneElseReactedMyLastComment {
+			// we commented last, and this is our pr, and they reacted to it
+			// (thumbs up etc.) acknowledged it yet
 			actionable++
 			continue
 		}
@@ -318,7 +336,7 @@ func actionableThreads(pr prSearchResultGraphQl, myUsername string) (actionable 
 		}
 
 		threadStarter := t.Node.Comments.Nodes[0].Author.Login
-		if threadStarter == myUsername && lastCommenter != myUsername && !iReactedToLastComment {
+		if threadStarter == myUsername && !iCommentedLast && !iReactedToLastComment {
 			// we started the thread, and it's still open (and someone else has
 			// the last word), and we haven't acknowledged it yet with a
 			// reaction (emoji)

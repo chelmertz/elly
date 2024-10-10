@@ -95,7 +95,7 @@ func StandardPrPoints(pr types.ViewPr, username string) *Points {
 	}
 
 	if pr.ThreadsActionable > 0 {
-		points.Add(80, fmt.Sprintf("Someone asked us something (%d comments)", pr.ThreadsActionable))
+		points.Add(80, fmt.Sprintf("Someone asked us something, or reacted to our comment (%d comments)", pr.ThreadsActionable))
 		// we already need to go over this, don't scale the points
 		// by amount of threads though, it might go overboard
 	}
