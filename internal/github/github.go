@@ -235,6 +235,9 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 
 		lastPrCommenter := ""
 		for _, c := range pr.Comments.Edges {
+			if c.Node.Author.Login == "github-actions" {
+				continue
+			}
 			lastPrCommenter = c.Node.Author.Login
 		}
 
