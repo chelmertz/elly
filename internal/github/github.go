@@ -159,7 +159,7 @@ func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
 		return nil, fmt.Errorf("could not construct github request: %w", err)
 	}
 
-	logger.Info("querying github api")
+	logger.Debug("querying github api")
 	response, err := httpClient.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("could not request github: %w", err)

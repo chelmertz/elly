@@ -112,7 +112,7 @@ func (s *DbStorage) Prs() StoredState {
 }
 
 func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
-	s.logger.Info("storing prs", slog.Int("prs", len(orderedPrs)))
+	s.logger.Debug("storing prs", slog.Int("prs", len(orderedPrs)))
 
 	buriedPrs, err := s.db.BuriedPrs(context.Background())
 	if err != nil {

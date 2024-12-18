@@ -81,7 +81,7 @@ func startRefreshLoop(token, username string, store storage.Storage, refresh cha
 	for {
 		select {
 		case action := <-refresh:
-			logger.Info("refresh loop", "action", action)
+			logger.Debug("refresh loop", "action", action)
 			switch action {
 			case types.RefreshStop:
 				refreshTimer.Stop()
