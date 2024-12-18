@@ -21,7 +21,9 @@ var url = flag.String("url", "localhost:9876", "URL for web GUI")
 var golden = flag.Bool("golden", false, "provide a button for turning a PR into a test. do NOT use outside of development")
 var demo = flag.Bool("demo", false, "mock the PRs so you can take a proper screenshot of the GUI")
 var versionFlag = flag.Bool("version", false, "show version")
-var logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
+var verboseFlag = flag.Bool("verbose", false, "verbose logging")
+var logLevel = &slog.LevelVar{}
+var logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{AddSource: true, Level: logLevel}))
 
 func main() {
 	flag.Parse()
@@ -54,7 +56,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "github_user", username, "golden_testing_enabled", *golden, "demo", *demo)
+	if *verboseFlag {
+		logLevel.Set(slog.LevelDebug)
+	} else {
+		logLevel.Set(slog.LevelInfo)
+	}
+
+	logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "github_user", username, "golden_testing_enabled", *golden, "demo", *demo, "log_level", logLevel)
 
 	if *demo {
 		store = storage.NewStorageDemo()
