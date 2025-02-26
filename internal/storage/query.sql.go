@@ -10,22 +10,27 @@ import (
 )
 
 const buriedPrs = `-- name: BuriedPrs :many
-select url from prs where buried = true
+select url, last_updated from prs where buried = true
 `
 
-func (q *Queries) BuriedPrs(ctx context.Context) ([]string, error) {
+type BuriedPrsRow struct {
+	Url         string
+	LastUpdated string
+}
+
+func (q *Queries) BuriedPrs(ctx context.Context) ([]BuriedPrsRow, error) {
 	rows, err := q.db.QueryContext(ctx, buriedPrs)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []BuriedPrsRow
 	for rows.Next() {
-		var url string
-		if err := rows.Scan(&url); err != nil {
+		var i BuriedPrsRow
+		if err := rows.Scan(&i.Url, &i.LastUpdated); err != nil {
 			return nil, err
 		}
-		items = append(items, url)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

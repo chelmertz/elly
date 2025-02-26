@@ -36,7 +36,7 @@ update prs set buried = true where url = ?;
 update prs set buried = false where url = ?;
 
 -- name: BuriedPrs :many
-select url from prs where buried = true;
+select url, last_updated from prs where buried = true;
 
 -- name: StoreLastFetched :exec
 replace into meta (key, value) values ('last_fetched', ?);
