@@ -276,7 +276,11 @@
                 if (!isRefreshing) {
                     isRefreshing = true;
                     fetch(e.currentTarget.href, {method: 'POST'}).then((response) => {
+                        // refreshing is async in the backend, this is more to prevent a double click
                         isRefreshing = false;
+                        // entering dangerous footgun-waters: avoiding the complexity of bidirectional events (ws/sse/...),
+                        // we can just hope for the best. a local HTTP call Shoulnd't Take Long :tm:
+			window.setTimeout(() => window.location.reload(), 1500);
                     });
                 }
                 e.preventDefault()
@@ -318,7 +322,7 @@
             };
 
             updateTime();
-            setInterval(updateTime, 5000);
+            window.setInterval(updateTime, 5000);
             
             // "gg" goes to the top à la vim
             let oneG = false;
@@ -348,7 +352,8 @@
                     const buryUrl = prs[activePr].querySelector("a.bury").href;
                     bury(buryUrl);
                     e.preventDefault();
-                } else if (e.key === "r") {
+                } else if (e.key === "r" && !e.shiftKey && !e.ctrlKey) {
+                    // browser may do other stuff when modifier keys are used - don't hijack that default behavior
                     refreshElement.click();
                 } else if (e.key === "?") {
                     dialog.showModal();
