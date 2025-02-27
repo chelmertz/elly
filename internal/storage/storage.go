@@ -121,7 +121,24 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 		// O(n^2) but n is always small, in my case (and the amount of buried prs is usually super small)
 		for i, pr := range orderedPrs {
 			for _, buriedPr := range buriedPrs {
-				if buriedPr == pr.Url {
+				if buriedPr.Url == pr.Url {
+					buriedLastUpdated, err := time.Parse(time.RFC3339, buriedPr.LastUpdated)
+					if err != nil {
+						// just ignore the stored & old last updated time
+						s.logger.Info("unburying pr, old last updated time is invalid", slog.String("pr_url", pr.Url))
+						orderedPrs[i].Buried = false
+						break
+					}
+					if pr.LastUpdated.After(buriedLastUpdated) {
+						// the pr was updated since it was buried
+						s.logger.Info("unburying pr, it was updated since it was buried",
+							slog.String("pr_url", pr.Url),
+							slog.Time("stored_at", buriedLastUpdated),
+							slog.Time("new_updated_at", pr.LastUpdated),
+						)
+						orderedPrs[i].Buried = false
+						break
+					}
 					orderedPrs[i].Buried = true
 					break
 				}
