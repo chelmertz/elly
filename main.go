@@ -49,7 +49,6 @@ func main() {
 	}
 	os.Unsetenv("GITHUB_PAT")
 
-	var store storage.Storage = storage.NewStorage(logger)
 	username, err := github.UsernameFromPat(token, logger)
 	if err != nil {
 		logger.Error("could not get username from PAT", "error", err)
@@ -64,6 +63,7 @@ func main() {
 
 	logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "github_user", username, "golden_testing_enabled", *golden, "demo", *demo, "log_level", logLevel)
 
+	var store storage.Storage = storage.NewStorage(logger)
 	if *demo {
 		store = storage.NewStorageDemo()
 	}
