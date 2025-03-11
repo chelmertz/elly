@@ -175,6 +175,22 @@ func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
 		return nil, fmt.Errorf("could not read github username response: %w", err)
 	}
 
+	// since graphql returns 200 but still possibly errors, we need to check for
+	// those somewhere, and it seems more proper to do it close to the actual request
+	var errorResponse map[string]interface{}
+	jsonErr := json.Unmarshal(respBody, &errorResponse)
+	if jsonErr != nil {
+		return nil, ErrClient
+	}
+	if errorResponse["errors"] != nil {
+		//logger.Error("github returned an error", slog.Any("error", errorResponse["errors"]))
+		// TODO need to dig in here.. an invalid graphql query did enter here `(limit: 10, filter:{isResolved: false})`
+		// but we also get a lot of errors together with a VALID response that we should investigate.. graphql! ;(
+		//return nil, ErrClient
+	}
+
+	logger.Info("github response", slog.String("body", string(respBody)), slog.Int("status", response.StatusCode))
+
 	if response.StatusCode >= 400 {
 		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", string(respBody)))
 		if response.StatusCode < 500 {
@@ -431,6 +447,7 @@ func querySearchPrsInvolvingUser(username string) string {
               }
             }
           }
+		  # sigh, here we can't filter on the isResolved status, so we need to overfetch (a lot, potentially)
           reviewThreads(first: 15) {
             edges {
               node {
