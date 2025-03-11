@@ -127,7 +127,7 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store storage.Sto
 
 		pointsPerPrUrl := make(map[string]*points.Points)
 		for _, pr := range storedPrs {
-			points := points.StandardPrPoints(pr, username)
+			points := points.StandardPrPoints(pr, username, time.Now())
 			pointsPerPrUrl[pr.Url] = points
 		}
 
@@ -163,7 +163,7 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store storage.Sto
 
 		pointsPerPrUrl := make(map[string]*points.Points)
 		for _, pr := range prs_ {
-			pointsPerPrUrl[pr.Url] = points.StandardPrPoints(pr, username)
+			pointsPerPrUrl[pr.Url] = points.StandardPrPoints(pr, username, time.Now())
 		}
 
 		sort.Slice(prs_, func(i, j int) bool {

@@ -28,7 +28,10 @@ func (p *Points) Remove(points int, reason string) {
 
 // StandardPrPoints() awards points to PRs based on a set of rules.
 // These rules should be revisited often, and the points should be tweaked.
-func StandardPrPoints(pr types.ViewPr, username string) *Points {
+func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
+	if now.IsZero() {
+		panic("now is zero, please give StandardPrPoints() a valid time")
+	}
 	points := &Points{}
 	points.Reasons = make([]string, 0)
 
@@ -57,6 +60,10 @@ func StandardPrPoints(pr types.ViewPr, username string) *Points {
 			// at it
 			points.Add(10, "You should add reviewers")
 		}
+
+		if pr.LastUpdated.Before(now.Add(-14 * 24 * time.Hour)) {
+			points.Add(11, "Your PR has not been updated in a while, you should take actions")
+		}
 	} else {
 		// someone else's pr, or our but the username is not set
 		if pr.ReviewStatus == "APPROVED" {
@@ -70,7 +77,7 @@ func StandardPrPoints(pr types.ViewPr, username string) *Points {
 		}
 
 		if pr.IsDraft {
-			if pr.LastUpdated.Before(time.Now().Add(-5 * 24 * time.Hour)) {
+			if pr.LastUpdated.Before(now.Add(-5 * 24 * time.Hour)) {
 				// another person's draft might be interesting if it's new, but
 				// when the "draft" status is being used as a "WIP" status, it
 				// probably doesn't require our immediate attention
