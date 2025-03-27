@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"time"
 
 	"log/slog"
@@ -224,6 +225,8 @@ func UsernameFromPat(token string, logger *slog.Logger) (string, error) {
 	return typedResponse.Data.Viewer.Login, nil
 }
 
+var ignoredLastPrCommenters = []string{"github-actions", "vercel"}
+
 func QueryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
 	respBody, err := graphqlRequest(querySearchPrsInvolvingUser(username), token, logger)
 	if err != nil {
@@ -251,7 +254,7 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 
 		lastPrCommenter := ""
 		for _, c := range pr.Comments.Edges {
-			if c.Node.Author.Login == "github-actions" {
+			if slices.Contains(ignoredLastPrCommenters, c.Node.Author.Login) {
 				continue
 			}
 			lastPrCommenter = c.Node.Author.Login
