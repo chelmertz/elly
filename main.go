@@ -63,9 +63,11 @@ func main() {
 
 	logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "github_user", username, "golden_testing_enabled", *golden, "demo", *demo, "log_level", logLevel)
 
-	var store storage.Storage = storage.NewStorage(logger)
+	var store storage.Storage
 	if *demo {
 		store = storage.NewStorageDemo()
+	} else {
+		store = storage.NewStorage(logger)
 	}
 
 	refreshChannel := make(chan types.RefreshAction, 1)
