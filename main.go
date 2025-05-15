@@ -73,7 +73,17 @@ func main() {
 	refreshChannel := make(chan types.RefreshAction, 1)
 	go startRefreshLoop(token, username, store, refreshChannel)
 	refreshChannel <- types.RefreshUpstart
-	server.ServeWeb(*url, username, *golden, store, refreshChannel, *timeoutMinutes, version, logger)
+
+	server.ServeWeb(server.HttpServerConfig{
+		Url:                  *url,
+		Username:             username,
+		GoldenTestingEnabled: *golden,
+		Store:                store,
+		RefreshingChannel:    refreshChannel,
+		TimeoutMinutes:       *timeoutMinutes,
+		Version:              version,
+		Logger:               logger,
+	})
 }
 
 func startRefreshLoop(token, username string, store storage.Storage, refresh chan types.RefreshAction) {

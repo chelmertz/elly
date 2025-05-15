@@ -36,18 +36,29 @@ type IndexHtmlData struct {
 //go:embed index.html
 var index embed.FS
 
-func ServeWeb(url, username string, goldenTestingEnabled bool, store storage.Storage, refreshingChannel chan types.RefreshAction, timeoutMinutes int, version string, logger *slog.Logger) {
+type HttpServerConfig struct {
+	Url                  string
+	Username             string
+	GoldenTestingEnabled bool
+	Store                storage.Storage
+	TimeoutMinutes       int
+	Version              string
+	Logger               *slog.Logger
+	RefreshingChannel    chan types.RefreshAction
+}
+
+func ServeWeb(webConfig HttpServerConfig) {
 	temp, err := template.ParseFS(index, "index.html")
 	check(err)
 
 	http.HandleFunc("POST /api/v0/prs/{prUrl}/golden", func(w http.ResponseWriter, r *http.Request) {
-		if !goldenTestingEnabled {
-			// Nothing to see here
+		if !webConfig.GoldenTestingEnabled {
+			// Nothing to see here, the feature is turned off - restart with -golden to turn it on
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
-		storedPrs := store.Prs()
+		storedPrs := webConfig.Store.Prs()
 		prs_ := storedPrs.Prs
 
 		prUrlBytes, err := base64.StdEncoding.DecodeString(r.PathValue("prUrl"))
@@ -62,7 +73,7 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store storage.Sto
 		found := false // just to avoid dealing with an empty state PR, or mucking with a pointer
 		for _, pr := range prs_ {
 			if ghPrUrl == pr.Url {
-				// not the most effectient but I've never had more than ~30 PRs showing
+				// not the most efficient but I've never had more than ~30 PRs showing
 				// query the DB if this ever gets expensive
 				foundPr = pr
 				found = true
@@ -75,7 +86,7 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store storage.Sto
 			return
 		}
 
-		logger.Info("found a pr to turn into golden copy", "pr", foundPr)
+		webConfig.Logger.Info("found a pr to turn into golden copy", "pr", foundPr)
 
 		w.WriteHeader(http.StatusOK)
 	})
@@ -94,9 +105,9 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store storage.Sto
 		var buryFunc func(string) error
 		switch action {
 		case "bury":
-			buryFunc = store.Bury
+			buryFunc = webConfig.Store.Bury
 		case "unbury":
-			buryFunc = store.Unbury
+			buryFunc = webConfig.Store.Unbury
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte(fmt.Sprintf("action '%s' is not supported", action)))
@@ -115,7 +126,7 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store storage.Sto
 	// Let's say that v0 represents "may change at any time", read the code.
 	// Should be bumped before tagging this repo as v1
 	http.HandleFunc("GET /api/v0/prs", func(w http.ResponseWriter, r *http.Request) {
-		storedPrs := store.Prs().Prs
+		storedPrs := webConfig.Store.Prs().Prs
 		prsToReturn := make([]types.ViewPr, 0)
 
 		minimumPoints := -999
@@ -127,7 +138,7 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store storage.Sto
 
 		pointsPerPrUrl := make(map[string]*points.Points)
 		for _, pr := range storedPrs {
-			points := points.StandardPrPoints(pr, username, time.Now())
+			points := points.StandardPrPoints(pr, webConfig.Username, time.Now())
 			pointsPerPrUrl[pr.Url] = points
 		}
 
@@ -154,16 +165,16 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store storage.Sto
 	})
 
 	http.HandleFunc("POST /api/v0/prs/refresh", func(w http.ResponseWriter, r *http.Request) {
-		refreshingChannel <- types.RefreshManual
+		webConfig.RefreshingChannel <- types.RefreshManual
 	})
 
 	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		storedPrs := store.Prs()
+		storedPrs := webConfig.Store.Prs()
 		prs_ := storedPrs.Prs
 
 		pointsPerPrUrl := make(map[string]*points.Points)
 		for _, pr := range prs_ {
-			pointsPerPrUrl[pr.Url] = points.StandardPrPoints(pr, username, time.Now())
+			pointsPerPrUrl[pr.Url] = points.StandardPrPoints(pr, webConfig.Username, time.Now())
 		}
 
 		sort.Slice(prs_, func(i, j int) bool {
@@ -178,16 +189,16 @@ func ServeWeb(url, username string, goldenTestingEnabled bool, store storage.Sto
 		data := IndexHtmlData{
 			Prs:                    prs_,
 			PointsPerPrUrl:         pointsPerPrUrl,
-			CurrentUser:            username,
+			CurrentUser:            webConfig.Username,
 			LastRefreshed:          storedPrs.LastFetched.Format(time.RFC3339),
-			RefreshIntervalMinutes: timeoutMinutes,
-			Version:                version,
+			RefreshIntervalMinutes: webConfig.TimeoutMinutes,
+			Version:                webConfig.Version,
 		}
 		err := temp.Execute(w, data)
 		check(err)
 	})
 
-	logger.Info("starting web server at", slog.String("url", "http://"+url))
-	err = http.ListenAndServe(url, nil)
-	check(err)
+	webConfig.Logger.Info("starting web server at", slog.String("url", "http://"+webConfig.Url))
+	serverErr := http.ListenAndServe(webConfig.Url, nil)
+	check(serverErr)
 }
