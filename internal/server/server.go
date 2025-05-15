@@ -64,7 +64,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 		prUrlBytes, err := base64.StdEncoding.DecodeString(r.PathValue("prUrl"))
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte("invalid PR ID"))
+			fmt.Fprint(w, "invalid PR ID")
 			return
 		}
 		ghPrUrl := string(prUrlBytes)
@@ -82,7 +82,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 		}
 		if !found {
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(fmt.Sprintf("couldn't turn PR %s into a golden copy, PR not found", ghPrUrl)))
+			fmt.Fprintf(w, "couldn't turn PR %s into a golden copy, PR not found", ghPrUrl)
 			return
 		}
 
@@ -95,7 +95,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 		prUrlBytes, err := base64.StdEncoding.DecodeString(r.PathValue("prUrl"))
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte("invalid PR ID"))
+			fmt.Fprint(w, "invalid PR ID")
 			return
 		}
 		ghPrUrl := string(prUrlBytes)
@@ -110,13 +110,13 @@ func ServeWeb(webConfig HttpServerConfig) {
 			buryFunc = webConfig.Store.Unbury
 		default:
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(fmt.Sprintf("action '%s' is not supported", action)))
+			fmt.Fprintf(w, "action '%s' is not supported", action)
 			return
 		}
 
 		if err := buryFunc(ghPrUrl); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(fmt.Sprintf("couldn't toggle bury for PR %s", ghPrUrl)))
+			fmt.Fprintf(w, "couldn't toggle bury for PR %s", ghPrUrl)
 			return
 		}
 
