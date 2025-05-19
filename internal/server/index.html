@@ -194,6 +194,9 @@
                             </header>
                             <span class="boring">{{$pr.RepoOwner}}/{{$pr.RepoName}}</span>
                             <a class="inline rounded action bury" title="Toggle a -1000 point penalty, for PRs that just aren't interesting" href="{{$pr.ToggleBuryUrl}}">🪦</a>
+                            {{if $.GoldenTestingEnabled}}
+                            <a class="inline rounded action golden" title="Create a golden test for this PR:warning" href="{{$pr.GoldenUrl}}">🏆</a>
+                            {{end}}
                             <div class="motivation">
                                 {{range $motivation := $points.Reasons}}
                                 <p>{{$motivation}}</p>
@@ -302,6 +305,17 @@
             document.querySelector("a.bury").addEventListener("click", (e) => {
                 bury(e.currentTarget.href);
                 e.preventDefault();
+            });
+            document.querySelectorAll("a.golden").forEach(el => {
+                el.addEventListener("click", (e) => {
+                    fetch(e.currentTarget.href, {method: 'POST'})
+                    .then((response) => {
+                        // Firefox' debugger can highlight the element, this is
+                        // good enough to support debugging.
+                        console.log("golden test created", el);
+                    });
+                    e.preventDefault();
+                });
             });
 
             const timeFormat = new Intl.RelativeTimeFormat("en", {numeric: "auto"});

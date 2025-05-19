@@ -31,6 +31,7 @@ type IndexHtmlData struct {
 	LastRefreshed          string
 	RefreshIntervalMinutes int
 	Version                string
+	GoldenTestingEnabled   bool
 }
 
 //go:embed index.html
@@ -88,6 +89,13 @@ func ServeWeb(webConfig HttpServerConfig) {
 
 		webConfig.Logger.Info("found a pr to turn into golden copy", "pr", foundPr)
 
+		now := time.Now()
+		points.StoreGoldenTest(points.GoldenTest{
+			PrDomain:    foundPr,
+			Points:      *points.StandardPrPoints(foundPr, webConfig.Username, now),
+			CurrentUser: webConfig.Username,
+			CurrentTime: now,
+		})
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -142,6 +150,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 			pointsPerPrUrl[pr.Url] = points
 		}
 
+		// TODO turn into slices.DeleteFunc()
 		for _, pr := range storedPrs {
 			points := pointsPerPrUrl[pr.Url]
 			if points.Total >= minimumPoints {
@@ -193,6 +202,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 			LastRefreshed:          storedPrs.LastFetched.Format(time.RFC3339),
 			RefreshIntervalMinutes: webConfig.TimeoutMinutes,
 			Version:                webConfig.Version,
+			GoldenTestingEnabled:   webConfig.GoldenTestingEnabled,
 		}
 		err := temp.Execute(w, data)
 		check(err)
