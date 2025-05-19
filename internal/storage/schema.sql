@@ -14,7 +14,8 @@ create table if not exists prs (
     additions integer not null,
     deletions integer not null,
     review_requested_from_users text not null,
-    buried boolean not null
+    buried boolean not null,
+    raw_json_response blob not null
 );
 
 create table if not exists meta (

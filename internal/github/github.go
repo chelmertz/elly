@@ -23,7 +23,7 @@ type querySearchPrsInvolvingMeGraphQl struct {
 	Data struct {
 		Search struct {
 			Edges []struct {
-				Node prSearchResultGraphQl
+				Node json.RawMessage
 			}
 		}
 	}
@@ -233,16 +233,23 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 		return nil, fmt.Errorf("could not query github for PRs: %v", err)
 	}
 
-	typedResponse := querySearchPrsInvolvingMeGraphQl{}
-	err = json.Unmarshal(respBody, &typedResponse)
+	// Using a map[string]any for the response, so that we can store the raw
+	// JSON (not the parsed response) of each PR, for debugging reasons.
+	// Debugging > efficiency, in this case.
+	var rawResponse querySearchPrsInvolvingMeGraphQl
+	err = json.Unmarshal(respBody, &rawResponse)
 	if err != nil {
 		return nil, fmt.Errorf("could not unmarshal github response: %w", err)
 	}
 
 	viewPrs := make([]types.ViewPr, 0)
 
-	for _, prEdge := range typedResponse.Data.Search.Edges {
-		pr := prEdge.Node
+	for _, prEdge := range rawResponse.Data.Search.Edges {
+		var pr prSearchResultGraphQl
+		err = json.Unmarshal(prEdge.Node, &pr)
+		if err != nil {
+			return nil, fmt.Errorf("could not re-marshal github PR, to store raw json for debugging (url=%s): %w", pr.Url, err)
+		}
 		reviewStatus := pr.ReviewDecision
 
 		updatedAt, err := time.Parse(time.RFC3339, pr.UpdatedAt)
@@ -268,10 +275,14 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 		}
 
 		for _, a := range pr.Reviews.Edges {
-			// for some reason, the "Reviews" graph can contain a separate
+			// For some reason, the "Reviews" graph can contain a separate
 			// approval that is _not_ registered as the ReviewDecision,
 			// something that went unnoticed for ~5 months of using this API.
-			if a.Node.State == "APPROVED" {
+			//
+			// Note that the general "reviewDecision" can be "CHANGES_REQUESTED"
+			// which weighs higher. Only set "APPROVED" if the reviewDecision is
+			// empty.
+			if a.Node.State == "APPROVED" && reviewStatus == "" {
 				reviewStatus = "APPROVED"
 				break
 			}
@@ -293,6 +304,7 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 			Additions:                pr.Additions,
 			Deletions:                pr.Deletions,
 			ReviewRequestedFromUsers: reviewUsers,
+			RawJsonResponse:          prEdge.Node,
 		}
 		logger.Debug("fetched a pr", slog.Any("pr", viewPr))
 		viewPrs = append(viewPrs, viewPr)

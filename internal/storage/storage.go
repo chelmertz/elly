@@ -96,6 +96,7 @@ func (s *DbStorage) Prs() StoredState {
 			Deletions:                int(dbPr.Deletions),
 			ReviewRequestedFromUsers: strings.Split(dbPr.ReviewRequestedFromUsers, ","),
 			Buried:                   dbPr.Buried,
+			RawJsonResponse:          dbPr.RawJsonResponse,
 		})
 	}
 
@@ -168,6 +169,7 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 			Deletions:                int64(pr.Deletions),
 			ReviewRequestedFromUsers: strings.Join(pr.ReviewRequestedFromUsers, ","),
 			Buried:                   pr.Buried,
+			RawJsonResponse:          pr.RawJsonResponse,
 		})
 		check(err)
 	}
