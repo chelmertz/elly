@@ -1,3 +1,6 @@
 .env
 prs.json
 elly
+
+# until we properly scrub golden tests: keep them local
+internal/points/golden_test*json
