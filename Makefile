@@ -9,7 +9,8 @@ tag:
 	git tag -a $$version;
 
 models:
-	which sqlc || go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
-	sqlc generate
+	go get -tool github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+	go mod tidy
+	go tool sqlc generate
 
 .PHONY: test tag models
