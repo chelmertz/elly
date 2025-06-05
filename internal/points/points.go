@@ -35,6 +35,16 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 	points := &Points{}
 	points.Reasons = make([]string, 0)
 
+	if pr.ThreadsActionable > 0 {
+		points.Add(80, fmt.Sprintf("Someone asked us something, or reacted to our comment (%d comments)", pr.ThreadsActionable))
+		// we already need to go over this, don't scale the points
+		// by amount of threads though, it might go overboard
+	}
+
+	if pr.ThreadsWaiting > 0 {
+		points.Remove(10, fmt.Sprintf("Someone should respond to our comments (%d comments)", pr.ThreadsWaiting))
+	}
+
 	if pr.Author == username {
 		// our pr
 		if pr.ReviewStatus == "APPROVED" {
@@ -87,28 +97,24 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 			}
 		}
 
-		// reward short prs
-		diff := int(math.Abs(float64(pr.Additions)) + math.Abs(float64(pr.Deletions)))
-		switch {
-		case diff < 50:
-			points.Add(50, fmt.Sprintf("PR is small, %d loc changed is <50", diff))
-		case diff < 150:
-			points.Add(30, fmt.Sprintf("PR is smallish, %d loc changed is <150", diff))
-		case diff <= 300:
-			points.Add(20, fmt.Sprintf("PR is bigger, %d loc changed is <=300", diff))
-		case diff > 300:
-			points.Add(10, fmt.Sprintf("PR is bigish, %d loc changed is >300", diff))
+		// Reward short prs, but only award points to "0 point PRs", i.e.
+		// everything else matters more (points for "unresponded comments"
+		// shouldn't have to compete with points for "short PRs").
+		if points.Total == 0 {
+			// Sort unreviewed PRs by size, the smallest ones LoC-wise first, so
+			// that the reviewer gets help to get rid of the smallest tasks.
+			diff := int(math.Abs(float64(pr.Additions)) + math.Abs(float64(pr.Deletions)))
+			switch {
+			case diff < 50:
+				points.Add(50, fmt.Sprintf("PR is small, %d loc changed is <50", diff))
+			case diff < 150:
+				points.Add(30, fmt.Sprintf("PR is smallish, %d loc changed is <150", diff))
+			case diff <= 300:
+				points.Add(20, fmt.Sprintf("PR is bigger, %d loc changed is <=300", diff))
+			case diff > 300:
+				points.Add(10, fmt.Sprintf("PR is bigish, %d loc changed is >300", diff))
+			}
 		}
-	}
-
-	if pr.ThreadsActionable > 0 {
-		points.Add(80, fmt.Sprintf("Someone asked us something, or reacted to our comment (%d comments)", pr.ThreadsActionable))
-		// we already need to go over this, don't scale the points
-		// by amount of threads though, it might go overboard
-	}
-
-	if pr.ThreadsWaiting > 0 {
-		points.Remove(10, fmt.Sprintf("Someone should respond to our comments (%d comments)", pr.ThreadsWaiting))
 	}
 
 	sort.Slice(points.Reasons, func(i, j int) bool {
