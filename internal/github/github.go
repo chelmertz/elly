@@ -19,6 +19,14 @@ import (
 var ErrClient = errors.New("github returned client error")
 var ErrGithubServer = errors.New("github returned server error")
 
+type ErrRateLimited struct {
+	NextAllowedAfter time.Duration
+}
+
+func (e *ErrRateLimited) Error() string {
+	return fmt.Sprintf("%v: rate limited, next allowed after %s", ErrClient, e.NextAllowedAfter)
+}
+
 type querySearchPrsInvolvingMeGraphQl struct {
 	Data struct {
 		Search struct {
@@ -178,16 +186,39 @@ func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
 
 	// since graphql returns 200 but still possibly errors, we need to check for
 	// those somewhere, and it seems more proper to do it close to the actual request
-	var errorResponse map[string]interface{}
+	var errorResponse struct {
+		Errors []struct {
+			Type    string
+			Message string
+		}
+	}
 	jsonErr := json.Unmarshal(respBody, &errorResponse)
 	if jsonErr != nil {
-		return nil, ErrClient
+		return nil, fmt.Errorf("%v: json unmarshal error", ErrClient)
 	}
-	if errorResponse["errors"] != nil {
-		//logger.Error("github returned an error", slog.Any("error", errorResponse["errors"]))
-		// TODO need to dig in here.. an invalid graphql query did enter here `(limit: 10, filter:{isResolved: false})`
-		// but we also get a lot of errors together with a VALID response that we should investigate.. graphql! ;(
-		//return nil, ErrClient
+	if len(errorResponse.Errors) > 0 {
+		for _, e := range errorResponse.Errors {
+			if e.Type == "RATE_LIMITED" {
+				// There are a lot of complexity about "points" and trying to
+				// estimate what the "cost" is, which is too hard for me to
+				// grasp on this page:
+				// https://docs.github.com/en/graphql/overview/rate-limits-and-query-limits-for-the-graphql-api#exceeding-the-rate-limit
+				// but the specific advice on listening to the x-ratelimit-reset
+				// header seems easy to follow (but they just had to complement
+				// it with a retry-after header as well, so... look for both of
+				// those)
+
+				// example of response found in logs (note that there are more
+				// properties than `error` that might look like a success
+				// (seriously, why just not speak HTTP and status codes?), but
+				// we need to verify the error case like this:
+				//
+				// {"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded for user ID 213477."}]}
+				logger.Error("github rate limited", slog.Any("response_body_graphql_errors", errorResponse.Errors), slog.Any("response_headers", response.Header))
+				// TODO after examining the logs, refactor to use ErrRateLimited
+				return nil, fmt.Errorf("%v: rate limit", ErrClient)
+			}
+		}
 	}
 
 	logger.Info("github response", slog.String("body", string(respBody)), slog.Int("status", response.StatusCode))
