@@ -108,7 +108,16 @@ func startRefreshLoop(token, username string, store storage.Storage, refresh cha
 
 			prs, err := github.QueryGithub(token, username, logger)
 			if err != nil {
-				if errors.Is(err, github.ErrClient) {
+				var rateLimitedError *github.ErrRateLimited
+				if errors.As(err, &rateLimitedError) {
+					logger.Error("rate limited, aborting", slog.Any("error", err))
+					// TODO store "earliest retry" together with last fetched
+					// time/now and fetch that value first in each tick. The
+					// rate limit must be respected even after restarting elly,
+					// storing the rate limit in memory alone is not enough.
+					refreshTimer.Stop()
+					return
+				} else if errors.Is(err, github.ErrClient) {
 					refreshTimer.Stop()
 					logger.Error("client error when querying github, giving up", slog.Any("error", err))
 					return

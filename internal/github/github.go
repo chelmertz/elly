@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strconv"
 	"time"
 
 	"log/slog"
@@ -20,11 +21,11 @@ var ErrClient = errors.New("github returned client error")
 var ErrGithubServer = errors.New("github returned server error")
 
 type ErrRateLimited struct {
-	NextAllowedAfter time.Duration
+	UnblockedAt time.Time
 }
 
 func (e *ErrRateLimited) Error() string {
-	return fmt.Sprintf("%v: rate limited, next allowed after %s", ErrClient, e.NextAllowedAfter)
+	return fmt.Sprintf("%v: rate limited, next allowed after %s", ErrClient, e.UnblockedAt)
 }
 
 type querySearchPrsInvolvingMeGraphQl struct {
@@ -208,15 +209,36 @@ func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
 				// it with a retry-after header as well, so... look for both of
 				// those)
 
-				// example of response found in logs (note that there are more
-				// properties than `error` that might look like a success
-				// (seriously, why just not speak HTTP and status codes?), but
-				// we need to verify the error case like this:
+				// Example of response found in logs, but note that there are
+				// more properties than `error` that might look like a success
+				// (HTTP's status codes are overrated?):
 				//
-				// {"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded for user ID 213477."}]}
-				logger.Error("github rate limited", slog.Any("response_body_graphql_errors", errorResponse.Errors), slog.Any("response_headers", response.Header))
-				// TODO after examining the logs, refactor to use ErrRateLimited
-				return nil, fmt.Errorf("%v: rate limit", ErrClient)
+				// {"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded for user ID 123456."}]}
+				var earliestRetry time.Time
+				xRateLimitReset := response.Header.Get("x-ratelimit-reset")
+				if xRateLimitReset != "" {
+					xRateLimitResetInt, err := strconv.ParseInt(xRateLimitReset, 10, 64)
+					if err == nil {
+						earliestRetry = time.Unix(xRateLimitResetInt, 0)
+					}
+				}
+				retryAfter := response.Header.Get("retry-after")
+				if retryAfter != "" {
+					retryAfterInt, err := strconv.ParseInt(retryAfter, 10, 64)
+					if err == nil {
+						retryAfterDate := time.Now().Add(time.Duration(retryAfterInt) * time.Second)
+						if retryAfterDate.After(earliestRetry) {
+							earliestRetry = retryAfterDate
+						}
+					}
+				}
+				if earliestRetry.IsZero() {
+					logger.Warn("github rate limited, no retry time found", slog.Any("response_body_graphql_errors", errorResponse.Errors), slog.Any("response_headers", response.Header))
+					return nil, fmt.Errorf("%v: github rate limited, no retry time found", ErrClient)
+				} else {
+					logger.Error("github rate limited", slog.Any("response_body_graphql_errors", errorResponse.Errors), slog.Time("earliest_retry", earliestRetry), slog.String("x-ratelimit-reset", xRateLimitReset), slog.String("retry-after", retryAfter))
+					return nil, &ErrRateLimited{UnblockedAt: earliestRetry}
+				}
 			}
 		}
 	}
