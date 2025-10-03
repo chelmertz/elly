@@ -264,7 +264,7 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 		return nil, fmt.Errorf("could not query github for PRs: %v", err)
 	}
 
-	// Using a map[string]any for the response, so that we can store the raw
+	// Using json.RawMessage for the response, so that we can store the raw
 	// JSON (not the parsed response) of each PR, for debugging reasons.
 	// Debugging > efficiency, in this case.
 	var rawResponse querySearchPrsInvolvingMeGraphQl
