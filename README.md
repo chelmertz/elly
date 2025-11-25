@@ -46,24 +46,17 @@ Don't forget to also:
 
 ## Installation
 
-```
+```shell
 go install github.com/chelmertz/elly@latest
 ```
+
 will fetch you the latest binary. See contrib/elly.service for a systemd
 example of managing the service.
 
-## Design decisions
-
-See `/decisions` for ADRs.
-
 ## Developing
 
-With a .env file containing something like:
+See [dev.md](dev.md) for some useful commands during development.
 
-```
-export GITHUB_PATH=github_pat_123k135hjhhjtjethwejhtjh5jhj
-```
+## Design decisions
 
-```sh
-find . | grep -E 'html|go' | entr -r -s 'source .env && go run .'
-```
+See [decisions/](decisions/) for ADRs.
