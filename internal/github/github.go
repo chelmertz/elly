@@ -243,7 +243,7 @@ func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
 		}
 	}
 
-	logger.Info("github response", slog.String("body", string(respBody)), slog.Int("status", response.StatusCode))
+	logger.Debug("github response", slog.String("body", string(respBody)), slog.Int("status", response.StatusCode))
 
 	if response.StatusCode >= 400 {
 		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", string(respBody)))
