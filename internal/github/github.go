@@ -283,7 +283,7 @@ var ignoredLastPrCommenters = []string{"github-actions", "vercel"}
 func QueryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
 	respBody, err := graphqlRequest(querySearchPrsInvolvingUser(username), token, logger)
 	if err != nil {
-		return nil, fmt.Errorf("could not query github for PRs: %v", err)
+		return nil, fmt.Errorf("could not query github for PRs: %w", err)
 	}
 
 	// Using json.RawMessage for the response, so that we can store the raw
