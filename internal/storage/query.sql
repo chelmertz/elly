@@ -44,3 +44,12 @@ replace into meta (key, value) values ('last_fetched', ?);
 
 -- name: GetLastFetched :one
 select value from meta where key = 'last_fetched' limit 1;
+
+-- name: StoreRateLimitUntil :exec
+replace into meta (key, value) values ('rate_limit_until', ?);
+
+-- name: GetRateLimitUntil :one
+select value from meta where key = 'rate_limit_until' limit 1;
+
+-- name: ClearRateLimitUntil :exec
+delete from meta where key = 'rate_limit_until';

@@ -28,6 +28,11 @@ type Storage interface {
 	Bury(prUrl string) error
 	Unbury(prUrl string) error
 	GetPr(prUrl string) (Pr, error)
+	// SetRateLimitUntil stores the rate limit expiry time.
+	SetRateLimitUntil(t time.Time) error
+	// IsRateLimitActive returns true if a rate limit is in effect (caller should skip querying).
+	// If the rate limit has expired, it is automatically cleared and false is returned.
+	IsRateLimitActive(now time.Time) bool
 }
 
 type DbStorage struct {
@@ -193,4 +198,35 @@ func (s *DbStorage) Unbury(prUrl string) error {
 
 func (s *DbStorage) GetPr(prUrl string) (Pr, error) {
 	return s.db.GetPr(context.Background(), prUrl)
+}
+
+func (s *DbStorage) SetRateLimitUntil(t time.Time) error {
+	hoursLeft := time.Until(t).Hours()
+	s.logger.Warn("rate limited", slog.Time("will_unblock_at", t), slog.Float64("hours_left", hoursLeft))
+	return s.db.StoreRateLimitUntil(context.Background(), t.Format(time.RFC3339))
+}
+
+func (s *DbStorage) IsRateLimitActive(now time.Time) bool {
+	val, err := s.db.GetRateLimitUntil(context.Background())
+	if errors.Is(err, sql.ErrNoRows) {
+		// "clear rate limit" deletes row, so this means we're not rate limited
+		return false
+	}
+	if err != nil {
+		s.logger.Error("could not read stored rate limit time, assume rate limited (worst case)", slog.Any("error", err))
+		return true
+	}
+	rateLimitUntil, err := time.Parse(time.RFC3339, val)
+	if err != nil {
+		s.logger.Error("could not parse stored rate limit time, assume rate limited (worst case). requires you to modify the database manually", slog.Any("error", err), slog.String("rate_limit_until", val))
+		return true
+	}
+	if now.Before(rateLimitUntil) {
+		return true
+	}
+
+	// rate limit expired, clear it (ignore errors - stale value will be checked again next tick)
+	_ = s.db.ClearRateLimitUntil(context.Background())
+	s.logger.Info("no longer rate limited")
+	return false
 }

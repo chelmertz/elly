@@ -121,3 +121,11 @@ func (s *StorageDemo) Unbury(prUrl string) error {
 func (s *StorageDemo) GetPr(prUrl string) (Pr, error) {
 	return Pr{}, nil
 }
+
+func (s *StorageDemo) SetRateLimitUntil(t time.Time) error {
+	return nil
+}
+
+func (s *StorageDemo) IsRateLimitActive(now time.Time) bool {
+	return false
+}

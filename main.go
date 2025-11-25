@@ -100,6 +100,10 @@ func startRefreshLoop(token, username string, store storage.Storage, refresh cha
 				return
 			}
 
+			if store.IsRateLimitActive(time.Now()) {
+				continue
+			}
+
 			if time.Since(store.Prs().LastFetched) < time.Duration(1)*time.Minute {
 				// querying github once a minute should be fine,
 				// especially as long as we do the passive, loopy thing more seldom
@@ -110,13 +114,13 @@ func startRefreshLoop(token, username string, store storage.Storage, refresh cha
 			if err != nil {
 				var rateLimitedError *github.ErrRateLimited
 				if errors.As(err, &rateLimitedError) {
-					logger.Error("rate limited, aborting", slog.Any("error", err))
-					// TODO store "earliest retry" together with last fetched
-					// time/now and fetch that value first in each tick. The
-					// rate limit must be respected even after restarting elly,
-					// storing the rate limit in memory alone is not enough.
-					refreshTimer.Stop()
-					return
+					if err := store.SetRateLimitUntil(rateLimitedError.UnblockedAt); err != nil {
+						logger.Error("could not store rate limit time, exiting",
+							slog.Any("error", err),
+							slog.Time("rate_limit_until", rateLimitedError.UnblockedAt))
+						os.Exit(1)
+					}
+					continue
 				} else if errors.Is(err, github.ErrClient) {
 					refreshTimer.Stop()
 					logger.Error("client error when querying github, giving up", slog.Any("error", err))

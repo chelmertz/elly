@@ -50,6 +50,15 @@ func (q *Queries) Bury(ctx context.Context, url string) error {
 	return err
 }
 
+const clearRateLimitUntil = `-- name: ClearRateLimitUntil :exec
+delete from meta where key = 'rate_limit_until'
+`
+
+func (q *Queries) ClearRateLimitUntil(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, clearRateLimitUntil)
+	return err
+}
+
 const createPr = `-- name: CreatePr :one
 insert into prs (
     url,
@@ -186,6 +195,17 @@ func (q *Queries) GetPr(ctx context.Context, url string) (Pr, error) {
 	return i, err
 }
 
+const getRateLimitUntil = `-- name: GetRateLimitUntil :one
+select value from meta where key = 'rate_limit_until' limit 1
+`
+
+func (q *Queries) GetRateLimitUntil(ctx context.Context) (string, error) {
+	row := q.db.QueryRowContext(ctx, getRateLimitUntil)
+	var value string
+	err := row.Scan(&value)
+	return value, err
+}
+
 const listPrs = `-- name: ListPrs :many
 select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, buried, raw_json_response from prs
 `
@@ -237,6 +257,15 @@ replace into meta (key, value) values ('last_fetched', ?)
 
 func (q *Queries) StoreLastFetched(ctx context.Context, value string) error {
 	_, err := q.db.ExecContext(ctx, storeLastFetched, value)
+	return err
+}
+
+const storeRateLimitUntil = `-- name: StoreRateLimitUntil :exec
+replace into meta (key, value) values ('rate_limit_until', ?)
+`
+
+func (q *Queries) StoreRateLimitUntil(ctx context.Context, value string) error {
+	_, err := q.db.ExecContext(ctx, storeRateLimitUntil, value)
 	return err
 }
 
