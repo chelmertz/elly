@@ -236,7 +236,7 @@ func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
 					logger.Warn("github rate limited, no retry time found", slog.Any("response_body_graphql_errors", errorResponse.Errors), slog.Any("response_headers", response.Header))
 					return nil, fmt.Errorf("%v: github rate limited, no retry time found", ErrClient)
 				} else {
-					logger.Error("github rate limited", slog.Any("response_body_graphql_errors", errorResponse.Errors), slog.Time("earliest_retry", earliestRetry), slog.String("x-ratelimit-reset", xRateLimitReset), slog.String("retry-after", retryAfter))
+					logger.Error("github rate limited", slog.Any("response_body_graphql_errors", errorResponse.Errors), slog.Time("earliest_retry", earliestRetry), slog.String("header_x-ratelimit-reset", xRateLimitReset), slog.String("header_retry-after", retryAfter))
 					return nil, &ErrRateLimited{UnblockedAt: earliestRetry}
 				}
 			}
