@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/chelmertz/elly/internal/types"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 func check(err error) {
