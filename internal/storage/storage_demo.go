@@ -129,3 +129,7 @@ func (s *StorageDemo) SetRateLimitUntil(t time.Time) error {
 func (s *StorageDemo) IsRateLimitActive(now time.Time) bool {
 	return false
 }
+
+func (s *StorageDemo) GetRateLimitUntil() time.Time {
+	return time.Time{}
+}

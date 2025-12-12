@@ -33,6 +33,8 @@ type Storage interface {
 	// IsRateLimitActive returns true if a rate limit is in effect (caller should skip querying).
 	// If the rate limit has expired, it is automatically cleared and false is returned.
 	IsRateLimitActive(now time.Time) bool
+	// GetRateLimitUntil returns the rate limit expiry time, or zero time if not rate limited.
+	GetRateLimitUntil() time.Time
 }
 
 type DbStorage struct {
@@ -229,4 +231,16 @@ func (s *DbStorage) IsRateLimitActive(now time.Time) bool {
 	_ = s.db.ClearRateLimitUntil(context.Background())
 	s.logger.Info("no longer rate limited")
 	return false
+}
+
+func (s *DbStorage) GetRateLimitUntil() time.Time {
+	val, err := s.db.GetRateLimitUntil(context.Background())
+	if err != nil {
+		return time.Time{}
+	}
+	rateLimitUntil, err := time.Parse(time.RFC3339, val)
+	if err != nil {
+		return time.Time{}
+	}
+	return rateLimitUntil
 }

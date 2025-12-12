@@ -105,6 +105,10 @@
                         &:first-child {
                             margin-left: 0;
                         }
+
+                        &[hidden] {
+                            display: none;
+                        }
                     }
                 }
             }
@@ -212,6 +216,7 @@
                 <ul>
                     <li>👤 {{.CurrentUser}}</li>
                     <li><a class="refresh" href="/api/v0/prs/refresh">🗘 <time datetime="{{.LastRefreshed}}">{{.LastRefreshed}}</time></a></li>
+                    <li class="rate-limit" data-until="{{.RateLimitedUntil}}" hidden>⚠️ Rate limited until <time datetime="{{.RateLimitedUntil}}">{{.RateLimitedUntil}}</time></li>
                     <li><a class="about" href="/about">About elly{{if .Version}} {{.Version}}{{end}}</a></li>
                 </ul>
             </aside>
@@ -319,7 +324,7 @@
             });
 
             const timeFormat = new Intl.RelativeTimeFormat("en", {numeric: "auto"});
-            const timeEls = document.querySelectorAll("time");
+            const timeEls = document.querySelectorAll(".refresh time");
             const refreshIntervalMinutes = {{.RefreshIntervalMinutes}};
             const pageLoadTime = new Date();
             const updateTime = () => {
@@ -343,7 +348,30 @@
 
             updateTime();
             window.setInterval(updateTime, 5000);
-            
+
+            // Show rate limit warning if active
+            const rateLimitEl = document.querySelector(".rate-limit");
+            const rateLimitTimeEl = rateLimitEl.querySelector("time");
+            const updateRateLimit = () => {
+                const untilStr = rateLimitEl.dataset.until;
+                // Only show if rate limit is set (non-empty) and still in the future
+                if (!untilStr) {
+                    rateLimitEl.hidden = true;
+                    return;
+                }
+                const rateLimitUntil = new Date(untilStr);
+                const now = new Date();
+                if (rateLimitUntil > now) {
+                    rateLimitEl.hidden = false;
+                    const minutesLeft = Math.ceil((rateLimitUntil - now) / 1000 / 60);
+                    rateLimitTimeEl.innerText = timeFormat.format(minutesLeft, 'minute');
+                } else {
+                    rateLimitEl.hidden = true;
+                }
+            };
+            updateRateLimit();
+            window.setInterval(updateRateLimit, 5000);
+
             // "gg" goes to the top à la vim
             let oneG = false;
             window.addEventListener("keydown", (e) => {

@@ -32,6 +32,7 @@ type IndexHtmlData struct {
 	RefreshIntervalMinutes int
 	Version                string
 	GoldenTestingEnabled   bool
+	RateLimitedUntil       string
 }
 
 //go:embed index.html
@@ -195,6 +196,11 @@ func ServeWeb(webConfig HttpServerConfig) {
 			}
 			return pri > prj
 		})
+		rateLimitUntil := webConfig.Store.GetRateLimitUntil()
+		rateLimitUntilStr := ""
+		if !rateLimitUntil.IsZero() {
+			rateLimitUntilStr = rateLimitUntil.Format(time.RFC3339)
+		}
 		data := IndexHtmlData{
 			Prs:                    prs_,
 			PointsPerPrUrl:         pointsPerPrUrl,
@@ -203,6 +209,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 			RefreshIntervalMinutes: webConfig.TimeoutMinutes,
 			Version:                webConfig.Version,
 			GoldenTestingEnabled:   webConfig.GoldenTestingEnabled,
+			RateLimitedUntil:       rateLimitUntilStr,
 		}
 		err := temp.Execute(w, data)
 		check(err)
