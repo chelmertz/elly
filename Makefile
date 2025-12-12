@@ -4,7 +4,7 @@ test:
 # testing: will not fuzz, -fuzz matches more than one fuzz test: [Fuzz_WhenReviewThreadsExist_WillCountUnresponded Fuzz_LowerLoc_HigherPoints]
 	./fuzz_multiple.sh
 
-tag:
+release:
 	version=$(shell gorelease | grep Suggested | cut -d' ' -f3); \
 	git tag -a $$version;
 
@@ -13,4 +13,4 @@ models:
 	go mod tidy
 	go tool sqlc generate
 
-.PHONY: test tag models
+.PHONY: test release models
