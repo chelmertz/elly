@@ -21,3 +21,8 @@ Assumes using contrib/elly.service
 git fetch --all; rm -f $(which elly); go install github.com/chelmertz/elly@$(git tag --sort=version:refname | tail -n1) && systemctl restart --user elly
 ```
 
+## Tag new release
+
+```shell { name=release }
+make release
+```
