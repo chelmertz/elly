@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -52,16 +50,8 @@ type StoredState struct {
 //go:embed schema.sql
 var ddl string
 
-func NewStorage(logger *slog.Logger) *DbStorage {
-	dirname, err := os.UserCacheDir()
-	check(err)
-	ourCacheDir := filepath.Join(dirname, "elly")
-	if err := os.MkdirAll(ourCacheDir, 0755); err != nil && !errors.Is(err, os.ErrExist) {
-		check(err)
-	}
-	dbFilename := filepath.Join(ourCacheDir, "elly.db")
-
-	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=rwc&_journal_mode=WAL&_synchronous=NORMAL", dbFilename))
+func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
+	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=rwc&_journal_mode=WAL&_synchronous=NORMAL", dbPath))
 	check(err)
 
 	// create tables

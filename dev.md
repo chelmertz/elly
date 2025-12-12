@@ -10,7 +10,7 @@ export GITHUB_PATH=github_pat_123k135hjhhjtjethwejhtjh5jhj
 ```
 
 ```sh { name=watch }
-find . | grep -E 'html|go' | entr -r -s 'source .env && go run .'
+find . | grep -E 'html|go' | entr -r -s 'source .env && go run . -db ~/.cache/elly/elly.db'
 ```
 
 ## Install the latest released version

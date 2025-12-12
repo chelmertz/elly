@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 
 var timeoutMinutes = flag.Int("timeout", 5, "refresh PRs every N minutes")
 var url = flag.String("url", "localhost:9876", "URL for web GUI")
+var dbPath = flag.String("db", "", "path to SQLite database file (required)")
 var golden = flag.Bool("golden", false, "provide a button for turning a PR into a test. do NOT use outside of development")
 var demo = flag.Bool("demo", false, "mock the PRs so you can take a proper screenshot of the GUI")
 var versionFlag = flag.Bool("version", false, "show version")
@@ -39,6 +41,19 @@ func main() {
 	if *versionFlag {
 		fmt.Println(version)
 		os.Exit(0)
+	}
+
+	if *dbPath == "" {
+		logger.Error("missing required -db flag")
+		os.Exit(1)
+	}
+	dbDir := filepath.Dir(*dbPath)
+	if info, err := os.Stat(dbDir); err != nil {
+		logger.Error("database directory does not exist", "dir", dbDir, "error", err)
+		os.Exit(1)
+	} else if !info.IsDir() {
+		logger.Error("database path parent is not a directory", "path", dbDir)
+		os.Exit(1)
 	}
 
 	// TODO try out with bad github pat and make sure it fails gracefully (and is shown in GUI)
@@ -67,7 +82,7 @@ func main() {
 	if *demo {
 		store = storage.NewStorageDemo()
 	} else {
-		store = storage.NewStorage(logger)
+		store = storage.NewStorage(logger, *dbPath)
 	}
 
 	refreshChannel := make(chan types.RefreshAction, 1)
