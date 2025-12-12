@@ -1,5 +1,7 @@
 # Development recipes
 
+I'm trying out [runme](https://docs.runme.dev/) as a playbook-runner-thingy. Install it and run `runme` from the `elly/` folder.
+
 ## Local dev
 With a .env file containing something like:
 
@@ -7,7 +9,7 @@ With a .env file containing something like:
 export GITHUB_PATH=github_pat_123k135hjhhjtjethwejhtjh5jhj
 ```
 
-```sh
+```sh { name=watch }
 find . | grep -E 'html|go' | entr -r -s 'source .env && go run .'
 ```
 
@@ -15,7 +17,7 @@ find . | grep -E 'html|go' | entr -r -s 'source .env && go run .'
 
 Assumes using contrib/elly.service
 
-```shell
+```shell { name=upgrade }
 git fetch --all; rm -f $(which elly); go install github.com/chelmertz/elly@$(git tag --sort=version:refname | tail -n1) && systemctl restart --user elly
 ```
 
