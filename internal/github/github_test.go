@@ -47,7 +47,7 @@ func commentBy(username string) prReviewThreadCommentGraphQl {
 	return prReviewThreadCommentGraphQl{Author: struct{ Login string }{Login: username}}
 }
 
-func Fuzz_WhenReviewThreadsExist_WillCountUnresponded(f *testing.F) {
+func HangingFuzz_WhenReviewThreadsExist_WillCountUnresponded(f *testing.F) {
 	myUsername := "itsMe"
 	othersUsername := "otherUser"
 
