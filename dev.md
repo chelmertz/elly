@@ -26,3 +26,11 @@ git fetch --all; rm -f $(which elly); go install github.com/chelmertz/elly@$(git
 ```shell { name=release }
 make release
 ```
+
+## Run with Docker Compose
+
+Requires a `.env` file with `GITHUB_PAT=...` (no `export` prefix).
+
+```sh { name=docker }
+docker compose up --build
+```

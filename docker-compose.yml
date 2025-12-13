@@ -1,0 +1,18 @@
+services:
+  elly:
+    build: .
+    ports:
+      - "9876:9876"
+    environment:
+      - GITHUB_PAT=${GITHUB_PAT}
+    volumes:
+      - elly-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9876/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  elly-data:
