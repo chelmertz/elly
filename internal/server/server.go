@@ -215,6 +215,11 @@ func ServeWeb(webConfig HttpServerConfig) {
 		check(err)
 	})
 
+	http.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "ok")
+	})
+
 	webConfig.Logger.Info("starting web server at", slog.String("url", "http://"+webConfig.Url))
 	serverErr := http.ListenAndServe(webConfig.Url, nil)
 	check(serverErr)
