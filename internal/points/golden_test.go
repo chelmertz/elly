@@ -27,7 +27,7 @@ func TestGoldenTests(t *testing.T) {
 	}
 
 	thisDir := filepath.Dir(thisFile)
-	filepath.Walk(thisDir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(thisDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			t.Fatalf("path error in Walk() for %s: %v", path, err)
 		}
@@ -38,6 +38,9 @@ func TestGoldenTests(t *testing.T) {
 
 		return nil
 	})
+	if err != nil {
+		t.Fatalf("filepath.Walk error: %v", err)
+	}
 
 	t.Logf("found %d golden tests", len(goldenTests))
 

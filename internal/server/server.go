@@ -66,7 +66,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 		prUrlBytes, err := base64.StdEncoding.DecodeString(r.PathValue("prUrl"))
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, "invalid PR ID")
+			fmt.Fprint(w, "invalid PR ID") //nolint:errcheck // best-effort response body
 			return
 		}
 		ghPrUrl := string(prUrlBytes)
@@ -84,7 +84,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 		}
 		if !found {
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w, "couldn't turn PR %s into a golden copy, PR not found", ghPrUrl)
+			fmt.Fprintf(w, "couldn't turn PR %s into a golden copy, PR not found", ghPrUrl) //nolint:errcheck // best-effort response body
 			return
 		}
 
@@ -104,7 +104,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 		prUrlBytes, err := base64.StdEncoding.DecodeString(r.PathValue("prUrl"))
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, "invalid PR ID")
+			fmt.Fprint(w, "invalid PR ID") //nolint:errcheck // best-effort response body
 			return
 		}
 		ghPrUrl := string(prUrlBytes)
@@ -119,13 +119,13 @@ func ServeWeb(webConfig HttpServerConfig) {
 			buryFunc = webConfig.Store.Unbury
 		default:
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w, "action '%s' is not supported", action)
+			fmt.Fprintf(w, "action '%s' is not supported", action) //nolint:errcheck // best-effort response body
 			return
 		}
 
 		if err := buryFunc(ghPrUrl); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "couldn't toggle bury for PR %s", ghPrUrl)
+			fmt.Fprintf(w, "couldn't toggle bury for PR %s", ghPrUrl) //nolint:errcheck // best-effort response body
 			return
 		}
 
@@ -217,7 +217,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 
 	http.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "ok")
+		fmt.Fprint(w, "ok") //nolint:errcheck // best-effort response body
 	})
 
 	webConfig.Logger.Info("starting web server at", slog.String("url", "http://"+webConfig.Url))

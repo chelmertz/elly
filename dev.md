@@ -2,6 +2,14 @@
 
 I'm trying out [runme](https://docs.runme.dev/) as a playbook-runner-thingy. Install it and run `runme` from the `elly/` folder.
 
+## Lint
+
+Run golangci-lint locally (same version as CI):
+
+```sh { name=lint }
+go tool golangci-lint run
+```
+
 ## Local dev
 With a .env file containing something like:
 

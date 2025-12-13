@@ -62,7 +62,7 @@ func main() {
 		logger.Error("missing GITHUB_PAT env var")
 		os.Exit(1)
 	}
-	os.Unsetenv("GITHUB_PAT")
+	os.Unsetenv("GITHUB_PAT") //nolint:errcheck // best-effort security cleanup
 
 	username, err := github.UsernameFromPat(token, logger)
 	if err != nil {

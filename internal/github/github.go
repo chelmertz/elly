@@ -174,7 +174,7 @@ func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not request github: %w", err)
 	}
-	defer response.Body.Close()
+	defer response.Body.Close() //nolint:errcheck // error on close is not actionable
 
 	if expiration := response.Header.Get("Github-Authentication-Token-Expiration"); expiration != "" {
 		checkExpiration(expiration, logger)
