@@ -51,7 +51,7 @@ type StoredState struct {
 var ddl string
 
 func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
-	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=rwc&_journal_mode=WAL&_synchronous=NORMAL", dbPath))
+	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=rwc&_journal_mode=WAL&_synchronous=NORMAL", dbPath))
 	check(err)
 
 	// create tables
