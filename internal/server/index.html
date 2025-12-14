@@ -35,6 +35,23 @@
                 gap: 1em;
             }
 
+            section.settings {
+                display: flex;
+                flex-direction: column;
+
+                &>div {
+                    display: flex;
+
+                    &>div:nth-child(1) {
+                        flex: 1;
+                    }
+
+                    &>div:nth-child(2) {
+                        flex: 2;
+                    }
+                }
+            }
+
             .pr {
                 border-radius: 5px;
                 padding: 2rem 2rem 0;
@@ -150,25 +167,6 @@
                 }
             }
 
-            .settings-status {
-                display: flex;
-                flex-wrap: wrap;
-                margin: 0;
-
-                dt {
-                    flex: 0 0 7em;
-                    font-weight: bold;
-                    text-align: right;
-                    padding-right: 1em;
-                    margin-bottom: 0.3em;
-                }
-
-                dd {
-                    flex: 1 0 calc(100% - 7em);
-                    margin: 0 0 0.3em 0;
-                }
-            }
-
             .done {
                 font-size: 4rem;
                 display: flex;
@@ -264,15 +262,23 @@
             </dialog>
             <dialog class="settings-dialog">
                 <h2>Settings</h2>
-                <dl class="settings-status">
-                    <dt>Status</dt>
-                    <dd><span class="status-text">Loading...</span></dd>
-                    <dt class="status-username" hidden>Username</dt>
-                    <dd class="status-username" hidden><span></span></dd>
-                    <dt class="status-stored-at" hidden>PAT stored</dt>
-                    <dd class="status-stored-at" hidden><time></time></dd>
-                    <dt class="status-expires-at" hidden>PAT expires</dt>
-                    <dd class="status-expires-at" hidden><time></time> <span class="expiry-warning" hidden style="color: #c00;">⚠️ Expiring soon!</span></dd>
+                <section class="settings">
+                    <div>
+                        <div>Status</div>
+                        <div><span class="status-text">Loading...</span></div>
+                    </div>
+                    <div class="status-username">
+                        <div>Username</div>
+                        <div><span></span></div>
+                    </div>
+                    <div class="status-stored-at">
+                        <div>PAT stored</div>
+                        <div><time></time></div>
+                    </div>
+                    <div class="status-expires-at">
+                        <div>PAT expires</div>
+                        <div><time></time> <span class="expiry-warning" hidden style="color: #c00;">⚠️ Expiring soon!</span></div>
+                    </div>
                 </dl>
                 <hr>
                 <form class="pat-form">
@@ -334,9 +340,9 @@
                     .then(r => r.json())
                     .then(data => {
                         const statusText = settingsDialog.querySelector('.status-text');
-                        const usernameEls = settingsDialog.querySelectorAll('.status-username');
-                        const storedAtEls = settingsDialog.querySelectorAll('.status-stored-at');
-                        const expiresAtEls = settingsDialog.querySelectorAll('.status-expires-at');
+                        const usernameEl = settingsDialog.querySelector('.status-username');
+                        const storedAtEl = settingsDialog.querySelector('.status-stored-at');
+                        const expiresAtEl = settingsDialog.querySelector('.status-expires-at');
                         const clearBtn = settingsDialog.querySelector('.clear-pat');
                         const closeBtn = settingsDialog.querySelector('.close-settings');
 
@@ -344,20 +350,20 @@
                             statusText.textContent = 'Connected';
                             statusText.style.color = 'var(--positive)';
 
-                            usernameEls.forEach(el => el.hidden = false);
-                            settingsDialog.querySelector('.status-username span').textContent = '@' + data.username;
+                            usernameEl.hidden = false;
+                            usernameEl.querySelector('span').textContent = '@' + data.username;
 
-                            storedAtEls.forEach(el => el.hidden = false);
+                            storedAtEl.hidden = false;
                             const storedAt = new Date(data.stored_at);
-                            const storedAtTime = settingsDialog.querySelector('.status-stored-at time');
+                            const storedAtTime = storedAtEl.querySelector('time');
                             storedAtTime.textContent = storedAt.toLocaleString();
                             storedAtTime.dateTime = data.stored_at;
 
                             if (data.expires_at) {
-                                expiresAtEls.forEach(el => el.hidden = false);
+                                expiresAtEl.hidden = false;
                                 const expiresAt = new Date(data.expires_at);
                                 const daysLeft = Math.ceil((expiresAt - new Date()) / (1000 * 60 * 60 * 24));
-                                const expiresAtTime = settingsDialog.querySelector('.status-expires-at time');
+                                const expiresAtTime = expiresAtEl.querySelector('time');
                                 expiresAtTime.textContent = expiresAt.toLocaleDateString() + ' (' + daysLeft + ' days)';
                                 expiresAtTime.dateTime = data.expires_at;
                                 expiresAtTime.title = daysLeft + ' days remaining';
@@ -365,7 +371,7 @@
                                 const warningEl = settingsDialog.querySelector('.expiry-warning');
                                 warningEl.hidden = daysLeft > 5;
                             } else {
-                                expiresAtEls.forEach(el => el.hidden = true);
+                                expiresAtEl.hidden = true;
                             }
 
                             clearBtn.hidden = false;
@@ -373,9 +379,9 @@
                         } else {
                             statusText.textContent = 'Not configured';
                             statusText.style.color = 'var(--negative)';
-                            usernameEls.forEach(el => el.hidden = true);
-                            storedAtEls.forEach(el => el.hidden = true);
-                            expiresAtEls.forEach(el => el.hidden = true);
+                            usernameEl.hidden = true;
+                            storedAtEl.hidden = true;
+                            expiresAtEl.hidden = true;
                             clearBtn.hidden = true;
                             // In setup mode, don't allow closing without configuring
                             closeBtn.hidden = setupMode;
