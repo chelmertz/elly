@@ -27,4 +27,7 @@ models:
 	go mod tidy
 	go tool sqlc generate
 
+lint: Dockerfile
+	docker run --rm -i hadolint/hadolint < $^
+
 .PHONY: test release models
