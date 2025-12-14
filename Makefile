@@ -4,8 +4,9 @@ test:
 # testing: will not fuzz, -fuzz matches more than one fuzz test: [Fuzz_WhenReviewThreadsExist_WillCountUnresponded Fuzz_LowerLoc_HigherPoints]
 	./fuzz_multiple.sh
 
+# GOPROXY is set explicitly to avoid local caching issues when determining the latest version
 release:
-	@version=$$(go tool gorelease | grep Suggested | cut -d' ' -f3); \
+	@version=$$(GOPROXY=https://proxy.golang.org,direct go tool gorelease | grep Suggested | cut -d' ' -f3); \
 	if [ -z "$$version" ]; then \
 		echo "Error: gorelease did not suggest a version"; \
 		exit 1; \
