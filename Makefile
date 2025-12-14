@@ -20,7 +20,7 @@ release:
 	fi; \
 	git tag -a "$$version" -m "Release $$version"; \
 	git push origin "$$version"; \
-	gh release create "$$version" --title "$$version" --notes "## Changelog"$$'\n'"$$changelog"
+	printf '## Changelog\n%s\n' "$$changelog" | gh release create "$$version" --title "$$version" --notes-file -
 
 models:
 	go get -tool github.com/sqlc-dev/sqlc/cmd/sqlc@latest
