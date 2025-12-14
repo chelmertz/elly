@@ -248,7 +248,7 @@ func (q *Queries) GetRateLimitUntil(ctx context.Context) (string, error) {
 }
 
 const insertPAT = `-- name: InsertPAT :exec
-insert into pat (pat, expires_at, username, active) values (?, ?, ?, 1)
+insert or replace into pat (pat, expires_at, username, active) values (?, ?, ?, 1)
 `
 
 type InsertPATParams struct {

@@ -61,7 +61,7 @@ select pat, set_at, expires_at, username from pat where active = 1 limit 1;
 update pat set active = 0 where active = 1;
 
 -- name: InsertPAT :exec
-insert into pat (pat, expires_at, username, active) values (?, ?, ?, 1);
+insert or replace into pat (pat, expires_at, username, active) values (?, ?, ?, 1);
 
 -- name: ClearActivePAT :exec
 update pat set active = 0 where active = 1;
