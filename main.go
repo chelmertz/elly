@@ -43,6 +43,12 @@ func main() {
 		os.Exit(0)
 	}
 
+	if *verboseFlag {
+		logLevel.Set(slog.LevelDebug)
+	} else {
+		logLevel.Set(slog.LevelInfo)
+	}
+
 	if *dbPath == "" {
 		logger.Error("missing required -db flag")
 		os.Exit(1)
@@ -56,28 +62,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO try out with bad github pat and make sure it fails gracefully (and is shown in GUI)
-	token := os.Getenv("GITHUB_PAT")
-	if token == "" {
-		logger.Error("missing GITHUB_PAT env var")
-		os.Exit(1)
-	}
-	os.Unsetenv("GITHUB_PAT") //nolint:errcheck // best-effort security cleanup
-
-	username, err := github.UsernameFromPat(token, logger)
-	if err != nil {
-		logger.Error("could not get username from PAT", "error", err)
-		os.Exit(1)
-	}
-
-	if *verboseFlag {
-		logLevel.Set(slog.LevelDebug)
-	} else {
-		logLevel.Set(slog.LevelInfo)
-	}
-
-	logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "github_user", username, "golden_testing_enabled", *golden, "demo", *demo, "log_level", logLevel)
-
 	var store storage.Storage
 	if *demo {
 		store = storage.NewStorageDemo()
@@ -85,23 +69,75 @@ func main() {
 		store = storage.NewStorage(logger, *dbPath)
 	}
 
+	setupMode, err := initPAT(store)
+	if err != nil {
+		logger.Error("failed to initialize PAT", slog.Any("error", err))
+		os.Exit(1)
+	}
+
 	refreshChannel := make(chan types.RefreshAction, 1)
-	go startRefreshLoop(token, username, store, refreshChannel)
+
+	if setupMode {
+		logger.Info("starting elly in setup mode", "version", version)
+	} else {
+		logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "golden_testing_enabled", *golden, "demo", *demo)
+	}
+
+	go startRefreshLoop(store, refreshChannel)
 	refreshChannel <- types.RefreshUpstart
 
 	server.ServeWeb(server.HttpServerConfig{
 		Url:                  *url,
-		Username:             username,
 		GoldenTestingEnabled: *golden,
 		Store:                store,
 		RefreshingChannel:    refreshChannel,
 		TimeoutMinutes:       *timeoutMinutes,
 		Version:              version,
 		Logger:               logger,
+		SetupMode:            setupMode,
 	})
 }
 
-func startRefreshLoop(token, username string, store storage.Storage, refresh chan types.RefreshAction) {
+// initPAT initializes the PAT from env var or storage.
+// Returns (setupMode, error) where setupMode=true means no valid PAT is configured.
+func initPAT(store storage.Storage) (bool, error) {
+	envToken := os.Getenv("GITHUB_PAT")
+	if envToken != "" {
+		os.Unsetenv("GITHUB_PAT") //nolint:errcheck // best-effort security cleanup
+		username, expiresAt, err := github.UsernameFromPat(envToken, logger)
+		if err != nil {
+			logger.Warn("GITHUB_PAT env var is invalid, ignoring", slog.Any("error", err))
+			return true, nil
+		}
+		if err := store.StorePAT(envToken, username, expiresAt); err != nil {
+			return false, fmt.Errorf("could not store PAT from env var: %w", err)
+		}
+		return false, nil
+	}
+
+	storedPat, found, err := store.GetPAT()
+	if err != nil {
+		logger.Warn("could not read stored PAT, starting in setup mode", slog.Any("error", err))
+		return true, nil
+	}
+	if !found {
+		logger.Info("no PAT configured, starting in setup mode")
+		return true, nil
+	}
+
+	// Validate stored PAT
+	if _, _, err := github.UsernameFromPat(storedPat.Token, logger); err != nil {
+		logger.Warn("stored PAT is no longer valid, starting in setup mode", slog.Any("error", err))
+		if clearErr := store.ClearPAT(); clearErr != nil {
+			logger.Warn("could not clear invalid PAT", slog.Any("error", clearErr))
+		}
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func startRefreshLoop(store storage.Storage, refresh chan types.RefreshAction) {
 	refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
 	retriesLeft := 5
 
@@ -115,6 +151,13 @@ func startRefreshLoop(token, username string, store storage.Storage, refresh cha
 				return
 			}
 
+			// Get PAT from store - skip if not configured
+			storedPat, found, _ := store.GetPAT()
+			if !found {
+				logger.Debug("no PAT configured, skipping refresh")
+				continue
+			}
+
 			if store.IsRateLimitActive(time.Now()) {
 				continue
 			}
@@ -125,7 +168,7 @@ func startRefreshLoop(token, username string, store storage.Storage, refresh cha
 				continue
 			}
 
-			prs, err := github.QueryGithub(token, username, logger)
+			prs, err := github.QueryGithub(storedPat.Token, storedPat.Username, logger)
 			if err != nil {
 				var rateLimitedError *github.ErrRateLimited
 				if errors.As(err, &rateLimitedError) {
@@ -148,7 +191,7 @@ func startRefreshLoop(token, username string, store storage.Storage, refresh cha
 						return
 					}
 					logger.Warn("error refreshing PRs", slog.Any("error", err), slog.Int("retries_left", retriesLeft))
-					return
+					continue
 				}
 			} else if err := store.StoreRepoPrs(prs); err != nil {
 				logger.Error("could not store prs", slog.Any("error", err))

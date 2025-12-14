@@ -255,12 +255,57 @@ func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
 	return respBody, nil
 }
 
-// UsernameFromPat() will return the username for the given personal access
-// token, to avoid having to provide the username explicitly.
-func UsernameFromPat(token string, logger *slog.Logger) (string, error) {
-	respBody, err := graphqlRequest(`query { viewer { login } }`, token, logger)
+// UsernameFromPat returns the username and expiration date for the given PAT.
+// The expiration time is zero if the token doesn't expire.
+func UsernameFromPat(token string, logger *slog.Logger) (username string, expiresAt time.Time, err error) {
+	query := `query { viewer { login } }`
+	payload := struct {
+		Query string `json:"query"`
+	}{
+		Query: query,
+	}
+	jsonBytes, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("could not query github for username: %w", err)
+		return "", time.Time{}, fmt.Errorf("could not marshal graphql json: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+
+	httpClient := &http.Client{}
+	request, err := http.NewRequestWithContext(ctx, "POST", "https://api.github.com/graphql", bytes.NewReader(jsonBytes))
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("could not construct github request: %w", err)
+	}
+	request.Header.Add("Authorization", "bearer "+token)
+
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("could not request github: %w", err)
+	}
+	defer response.Body.Close() //nolint:errcheck // error on close is not actionable
+
+	// Parse expiration header
+	if expiration := response.Header.Get("Github-Authentication-Token-Expiration"); expiration != "" {
+		// Format: "2006-01-02 15:04:05 -0700"
+		parsed, parseErr := time.Parse("2006-01-02 15:04:05 -0700", expiration)
+		if parseErr != nil {
+			logger.Warn("could not parse github token expiration header", slog.Any("error", parseErr), slog.String("expiration", expiration))
+		} else {
+			expiresAt = parsed
+		}
+	}
+
+	if response.StatusCode >= 400 {
+		if response.StatusCode < 500 {
+			return "", time.Time{}, fmt.Errorf("%w: github response code %d", ErrClient, response.StatusCode)
+		}
+		return "", time.Time{}, fmt.Errorf("%w: github response code %d", ErrGithubServer, response.StatusCode)
+	}
+
+	respBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("could not read github username response: %w", err)
 	}
 
 	var typedResponse struct {
@@ -269,13 +314,21 @@ func UsernameFromPat(token string, logger *slog.Logger) (string, error) {
 				Login string
 			}
 		}
+		Errors []struct {
+			Type    string
+			Message string
+		}
 	}
 	err = json.Unmarshal(respBody, &typedResponse)
 	if err != nil {
-		return "", fmt.Errorf("could not unmarshal github username response: %w", err)
+		return "", time.Time{}, fmt.Errorf("could not unmarshal github username response: %w", err)
 	}
 
-	return typedResponse.Data.Viewer.Login, nil
+	if len(typedResponse.Errors) > 0 {
+		return "", time.Time{}, fmt.Errorf("%w: github returned errors: %v", ErrClient, typedResponse.Errors)
+	}
+
+	return typedResponse.Data.Viewer.Login, expiresAt, nil
 }
 
 var ignoredLastPrCommenters = []string{"github-actions", "vercel"}

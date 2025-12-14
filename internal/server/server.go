@@ -12,6 +12,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/chelmertz/elly/internal/github"
 	"github.com/chelmertz/elly/internal/points"
 	"github.com/chelmertz/elly/internal/storage"
 	"github.com/chelmertz/elly/internal/types"
@@ -33,6 +34,7 @@ type IndexHtmlData struct {
 	Version                string
 	GoldenTestingEnabled   bool
 	RateLimitedUntil       string
+	SetupMode              bool
 }
 
 //go:embed index.html
@@ -40,13 +42,22 @@ var index embed.FS
 
 type HttpServerConfig struct {
 	Url                  string
-	Username             string
 	GoldenTestingEnabled bool
 	Store                storage.Storage
 	TimeoutMinutes       int
 	Version              string
 	Logger               *slog.Logger
 	RefreshingChannel    chan types.RefreshAction
+	SetupMode            bool // True if no PAT configured (initial state only)
+}
+
+// getCurrentUsername returns the username from the stored PAT, or empty string if not configured.
+func getCurrentUsername(store storage.Storage) string {
+	storedPat, found, _ := store.GetPAT()
+	if !found {
+		return ""
+	}
+	return storedPat.Username
 }
 
 func ServeWeb(webConfig HttpServerConfig) {
@@ -91,10 +102,11 @@ func ServeWeb(webConfig HttpServerConfig) {
 		webConfig.Logger.Info("found a pr to turn into golden copy", "pr", foundPr)
 
 		now := time.Now()
+		currentUser := getCurrentUsername(webConfig.Store)
 		points.StoreGoldenTest(points.GoldenTest{
 			PrDomain:    foundPr,
-			Points:      *points.StandardPrPoints(foundPr, webConfig.Username, now),
-			CurrentUser: webConfig.Username,
+			Points:      *points.StandardPrPoints(foundPr, currentUser, now),
+			CurrentUser: currentUser,
 			CurrentTime: now,
 		})
 		w.WriteHeader(http.StatusOK)
@@ -145,9 +157,10 @@ func ServeWeb(webConfig HttpServerConfig) {
 			}
 		}
 
+		currentUser := getCurrentUsername(webConfig.Store)
 		pointsPerPrUrl := make(map[string]*points.Points)
 		for _, pr := range storedPrs {
-			points := points.StandardPrPoints(pr, webConfig.Username, time.Now())
+			points := points.StandardPrPoints(pr, currentUser, time.Now())
 			pointsPerPrUrl[pr.Url] = points
 		}
 
@@ -182,9 +195,14 @@ func ServeWeb(webConfig HttpServerConfig) {
 		storedPrs := webConfig.Store.Prs()
 		prs_ := storedPrs.Prs
 
+		// Check if PAT is configured dynamically
+		_, found, _ := webConfig.Store.GetPAT()
+		setupMode := !found
+		currentUser := getCurrentUsername(webConfig.Store)
+
 		pointsPerPrUrl := make(map[string]*points.Points)
 		for _, pr := range prs_ {
-			pointsPerPrUrl[pr.Url] = points.StandardPrPoints(pr, webConfig.Username, time.Now())
+			pointsPerPrUrl[pr.Url] = points.StandardPrPoints(pr, currentUser, time.Now())
 		}
 
 		sort.Slice(prs_, func(i, j int) bool {
@@ -204,12 +222,13 @@ func ServeWeb(webConfig HttpServerConfig) {
 		data := IndexHtmlData{
 			Prs:                    prs_,
 			PointsPerPrUrl:         pointsPerPrUrl,
-			CurrentUser:            webConfig.Username,
+			CurrentUser:            currentUser,
 			LastRefreshed:          storedPrs.LastFetched.Format(time.RFC3339),
 			RefreshIntervalMinutes: webConfig.TimeoutMinutes,
 			Version:                webConfig.Version,
 			GoldenTestingEnabled:   webConfig.GoldenTestingEnabled,
 			RateLimitedUntil:       rateLimitUntilStr,
+			SetupMode:              setupMode,
 		}
 		err := temp.Execute(w, data)
 		check(err)
@@ -218,6 +237,99 @@ func ServeWeb(webConfig HttpServerConfig) {
 	http.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok") //nolint:errcheck // best-effort response body
+	})
+
+	http.HandleFunc("PUT /api/v0/config/pat", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid JSON"})
+			return
+		}
+
+		if req.Token == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "token is required"})
+			return
+		}
+
+		// Validate the token with GitHub
+		username, expiresAt, err := github.UsernameFromPat(req.Token, webConfig.Logger)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid token: " + err.Error()})
+			return
+		}
+
+		// Store in SQLite
+		if err := webConfig.Store.StorePAT(req.Token, username, expiresAt); err != nil {
+			webConfig.Logger.Error("could not store PAT", slog.Any("error", err))
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "could not store token"})
+			return
+		}
+
+		// Trigger a refresh so the new PAT is used immediately
+		if webConfig.RefreshingChannel != nil {
+			select {
+			case webConfig.RefreshingChannel <- types.RefreshManual:
+			default:
+				// channel full, skip without blocking
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		response := map[string]any{
+			"username": username,
+		}
+		if !expiresAt.IsZero() {
+			response["expires_at"] = expiresAt.Format(time.RFC3339)
+		}
+		_ = json.NewEncoder(w).Encode(response)
+	})
+
+	http.HandleFunc("GET /api/v0/config/status", func(w http.ResponseWriter, r *http.Request) {
+		storedPat, found, _ := webConfig.Store.GetPAT()
+		if !found {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"configured": false,
+			})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		response := map[string]any{
+			"configured": true,
+			"username":   storedPat.Username,
+			"stored_at":  storedPat.SetAt.Format(time.RFC3339),
+		}
+		if !storedPat.ExpiresAt.IsZero() {
+			response["expires_at"] = storedPat.ExpiresAt.Format(time.RFC3339)
+		}
+		_ = json.NewEncoder(w).Encode(response)
+	})
+
+	http.HandleFunc("DELETE /api/v0/config/pat", func(w http.ResponseWriter, r *http.Request) {
+		if err := webConfig.Store.ClearPAT(); err != nil {
+			webConfig.Logger.Error("could not clear PAT", slog.Any("error", err))
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "could not clear token"})
+			return
+		}
+
+		// Signal refresh loop to stop
+		if webConfig.RefreshingChannel != nil {
+			select {
+			case webConfig.RefreshingChannel <- types.RefreshStop:
+			default:
+				// channel full, skip without blocking
+			}
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	})
 
 	webConfig.Logger.Info("starting web server at", slog.String("url", "http://"+webConfig.Url))

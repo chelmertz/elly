@@ -133,3 +133,20 @@ func (s *StorageDemo) IsRateLimitActive(now time.Time) bool {
 func (s *StorageDemo) GetRateLimitUntil() time.Time {
 	return time.Time{}
 }
+
+func (s *StorageDemo) StorePAT(token, username string, expiresAt time.Time) error {
+	return nil
+}
+
+func (s *StorageDemo) GetPAT() (StoredPAT, bool, error) {
+	return StoredPAT{
+		Token:     "demo-token",
+		Username:  "demo-user",
+		SetAt:     time.Now().Add(-24 * time.Hour),
+		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+	}, true, nil
+}
+
+func (s *StorageDemo) ClearPAT() error {
+	return nil
+}

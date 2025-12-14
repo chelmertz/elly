@@ -53,3 +53,15 @@ select value from meta where key = 'rate_limit_until' limit 1;
 
 -- name: ClearRateLimitUntil :exec
 delete from meta where key = 'rate_limit_until';
+
+-- name: GetActivePAT :one
+select pat, set_at, expires_at, username from pat where active = 1 limit 1;
+
+-- name: DeactivateAllPATs :exec
+update pat set active = 0 where active = 1;
+
+-- name: InsertPAT :exec
+insert into pat (pat, expires_at, username, active) values (?, ?, ?, 1);
+
+-- name: ClearActivePAT :exec
+update pat set active = 0 where active = 1;

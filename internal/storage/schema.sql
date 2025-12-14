@@ -22,3 +22,11 @@ create table if not exists meta (
     key text not null unique,
     value text not null
 );
+
+create table if not exists pat (
+    pat text primary key,
+    set_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    expires_at text not null,
+    username text not null,
+    active integer not null check (active in (0, 1))
+);

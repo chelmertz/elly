@@ -20,6 +20,14 @@ func check(err error) {
 	}
 }
 
+// StoredPAT represents a stored PAT with metadata.
+type StoredPAT struct {
+	Token     string
+	Username  string
+	SetAt     time.Time
+	ExpiresAt time.Time // Zero time if non-expiring
+}
+
 type Storage interface {
 	Prs() StoredState
 	StoreRepoPrs(orderedPrs []types.ViewPr) error
@@ -33,10 +41,18 @@ type Storage interface {
 	IsRateLimitActive(now time.Time) bool
 	// GetRateLimitUntil returns the rate limit expiry time, or zero time if not rate limited.
 	GetRateLimitUntil() time.Time
+	// StorePAT stores a new PAT, deactivating any existing active PAT.
+	StorePAT(token, username string, expiresAt time.Time) error
+	// GetPAT returns the active PAT. Returns (pat, true, nil) if found,
+	// (zero, false, nil) if not configured, or (zero, false, err) on error.
+	GetPAT() (StoredPAT, bool, error)
+	// ClearPAT deactivates the active PAT.
+	ClearPAT() error
 }
 
 type DbStorage struct {
 	db     *Queries
+	rawDb  *sql.DB
 	logger *slog.Logger
 }
 
@@ -65,6 +81,7 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 
 	return &DbStorage{
 		db:     New(db),
+		rawDb:  db,
 		logger: logger,
 	}
 }
@@ -233,4 +250,77 @@ func (s *DbStorage) GetRateLimitUntil() time.Time {
 		return time.Time{}
 	}
 	return rateLimitUntil
+}
+
+func (s *DbStorage) StorePAT(token, username string, expiresAt time.Time) error {
+	ctx := context.Background()
+	tx, err := s.rawDb.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("could not begin PAT transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback() // no-op if committed
+	}()
+
+	qtx := s.db.WithTx(tx)
+
+	if err := qtx.DeactivateAllPATs(ctx); err != nil {
+		return fmt.Errorf("could not deactivate existing PATs: %w", err)
+	}
+
+	expiresAtStr := ""
+	if !expiresAt.IsZero() {
+		expiresAtStr = expiresAt.Format(time.RFC3339)
+	}
+
+	if err := qtx.InsertPAT(ctx, InsertPATParams{
+		Pat:       token,
+		ExpiresAt: expiresAtStr,
+		Username:  username,
+	}); err != nil {
+		return fmt.Errorf("could not insert PAT: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("could not commit PAT transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (s *DbStorage) GetPAT() (StoredPAT, bool, error) {
+	row, err := s.db.GetActivePAT(context.Background())
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return StoredPAT{}, false, nil
+		}
+		return StoredPAT{}, false, fmt.Errorf("could not get PAT: %w", err)
+	}
+
+	setAt, err := time.Parse(time.RFC3339, row.SetAt)
+	if err != nil {
+		return StoredPAT{}, false, fmt.Errorf("could not parse set_at: %w", err)
+	}
+
+	var expiresAt time.Time
+	if row.ExpiresAt != "" {
+		expiresAt, err = time.Parse(time.RFC3339, row.ExpiresAt)
+		if err != nil {
+			return StoredPAT{}, false, fmt.Errorf("could not parse expires_at: %w", err)
+		}
+	}
+
+	return StoredPAT{
+		Token:     row.Pat,
+		Username:  row.Username,
+		SetAt:     setAt,
+		ExpiresAt: expiresAt,
+	}, true, nil
+}
+
+func (s *DbStorage) ClearPAT() error {
+	if err := s.db.ClearActivePAT(context.Background()); err != nil {
+		return fmt.Errorf("could not clear PAT: %w", err)
+	}
+	return nil
 }

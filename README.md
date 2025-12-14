@@ -3,8 +3,9 @@
 Github pull requests presented in a prioritized order, via a keyboard driven web
 GUI & API.
 
-Configured by a Github PAT (personal access token), using the env var
-`GITHUB_PAT`. Should be hosted locally.
+Requires a Github PAT (personal access token). Configure it through the web UI
+settings, or pass it via the `GITHUB_PAT` environment variable. elly should be hosted
+locally.
 
 ![Screenshot of GUI](gui.png)
 
@@ -52,6 +53,42 @@ go install github.com/chelmertz/elly@latest
 
 will fetch you the latest binary. See contrib/elly.service for a systemd
 example of managing the service.
+
+## Docker Installation
+
+```shell
+docker run -d \
+  --name elly \
+  --restart unless-stopped \
+  -e GITHUB_PAT=ghp_your_token_here \
+  -v elly-data:/data \
+  -p 9876:9876 \
+  ghcr.io/chelmertz/elly:latest
+```
+
+If you have `gh` CLI installed and authenticated, you can use `$(gh auth token)` instead of a PAT:
+
+```shell
+docker run -d \
+  --name elly \
+  --restart unless-stopped \
+  -e GITHUB_PAT=$(gh auth token) \
+  -v elly-data:/data \
+  -p 9876:9876 \
+  ghcr.io/chelmertz/elly:latest
+```
+
+This creates a named volume `elly-data` for the SQLite database (Docker manages it automatically).
+The `--restart unless-stopped` flag ensures elly starts automatically on boot.
+
+**Useful commands:**
+
+```shell
+docker logs -f elly                             # View logs
+docker stop elly                                # Stop
+docker rm elly                                  # Remove
+docker pull ghcr.io/chelmertz/elly:latest       # Update image
+```
 
 ## Developing
 

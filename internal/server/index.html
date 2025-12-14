@@ -150,6 +150,25 @@
                 }
             }
 
+            .settings-status {
+                display: flex;
+                flex-wrap: wrap;
+                margin: 0;
+
+                dt {
+                    flex: 0 0 7em;
+                    font-weight: bold;
+                    text-align: right;
+                    padding-right: 1em;
+                    margin-bottom: 0.3em;
+                }
+
+                dd {
+                    flex: 1 0 calc(100% - 7em);
+                    margin: 0 0 0.3em 0;
+                }
+            }
+
             .done {
                 font-size: 4rem;
                 display: flex;
@@ -214,13 +233,14 @@
             </section>
             <aside class="meta">
                 <ul>
-                    <li>👤 {{.CurrentUser}}</li>
+                    <li>👤 {{if .CurrentUser}}{{.CurrentUser}}{{else}}<em>Not configured</em>{{end}}</li>
                     <li><a class="refresh" href="/api/v0/prs/refresh">🗘 <time datetime="{{.LastRefreshed}}">{{.LastRefreshed}}</time></a></li>
-                    <li class="rate-limit" data-until="{{.RateLimitedUntil}}" hidden>⚠️ Rate limited until <time datetime="{{.RateLimitedUntil}}">{{.RateLimitedUntil}}</time></li>
+                    <li class="rate-limit" data-until="{{.RateLimitedUntil}}" hidden>⚠️ Rate limited, retry <time datetime="{{.RateLimitedUntil}}">{{.RateLimitedUntil}}</time></li>
+                    <li><a class="settings" href="/settings">⚙ Settings</a></li>
                     <li><a class="about" href="/about">About elly{{if .Version}} {{.Version}}{{end}}</a></li>
                 </ul>
             </aside>
-            <dialog>
+            <dialog class="about-dialog">
                 <h2>About</h2>
                 <p>PRs that you should interact with are all listed on a single
                 page, ranked by certain factors that are explained inline.</p>
@@ -241,6 +261,33 @@
                 </ul>
                 <p>Source code and project page: <a href="https://github.com/chelmertz/elly">elly@Github</a></p>
                 <button>OK</button>
+            </dialog>
+            <dialog class="settings-dialog">
+                <h2>Settings</h2>
+                <dl class="settings-status">
+                    <dt>Status</dt>
+                    <dd><span class="status-text">Loading...</span></dd>
+                    <dt class="status-username" hidden>Username</dt>
+                    <dd class="status-username" hidden><span></span></dd>
+                    <dt class="status-stored-at" hidden>PAT stored</dt>
+                    <dd class="status-stored-at" hidden><time></time></dd>
+                    <dt class="status-expires-at" hidden>PAT expires</dt>
+                    <dd class="status-expires-at" hidden><time></time> <span class="expiry-warning" hidden style="color: #c00;">⚠️ Expiring soon!</span></dd>
+                </dl>
+                <hr>
+                <form class="pat-form">
+                    <label for="pat-input"><strong>GitHub Personal Access Token:</strong></label>
+                    <p style="margin: 0.5em 0; font-size: 0.9em; color: var(--muted);">
+                        Create a PAT at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a>
+                    </p>
+                    <input type="password" id="pat-input" name="token" placeholder="ghp_..." style="width: 100%; padding: 0.5em; margin: 0.5em 0; box-sizing: border-box;">
+                    <p class="form-error" hidden style="color: #c00;"></p>
+                    <div style="display: flex; gap: 1em; margin-top: 1em;">
+                        <button type="submit" class="save-pat">Save PAT</button>
+                        <button type="button" class="clear-pat" hidden>Clear PAT</button>
+                        <button type="button" class="close-settings">Close</button>
+                    </div>
+                </form>
             </dialog>
         </main>
         <script type="text/javascript">
@@ -269,14 +316,142 @@
                 document.title = `(${prsOverZeroPoints}) ${document.title}`;
             }
 
-            const dialog = document.querySelector("dialog");
-            dialog.querySelector("button").addEventListener("click", (e) => {
-                dialog.close();
+            const aboutDialog = document.querySelector("dialog.about-dialog");
+            aboutDialog.querySelector("button").addEventListener("click", (e) => {
+                aboutDialog.close();
             });
             document.querySelector("a.about").addEventListener("click", (e) => {
                 e.preventDefault();
-                dialog.showModal();
+                aboutDialog.showModal();
             });
+
+            // Settings dialog
+            const settingsDialog = document.querySelector("dialog.settings-dialog");
+            const setupMode = {{.SetupMode}};
+
+            const loadSettingsStatus = () => {
+                fetch('/api/v0/config/status')
+                    .then(r => r.json())
+                    .then(data => {
+                        const statusText = settingsDialog.querySelector('.status-text');
+                        const usernameEls = settingsDialog.querySelectorAll('.status-username');
+                        const storedAtEls = settingsDialog.querySelectorAll('.status-stored-at');
+                        const expiresAtEls = settingsDialog.querySelectorAll('.status-expires-at');
+                        const clearBtn = settingsDialog.querySelector('.clear-pat');
+                        const closeBtn = settingsDialog.querySelector('.close-settings');
+
+                        if (data.configured) {
+                            statusText.textContent = 'Connected';
+                            statusText.style.color = 'var(--positive)';
+
+                            usernameEls.forEach(el => el.hidden = false);
+                            settingsDialog.querySelector('.status-username span').textContent = '@' + data.username;
+
+                            storedAtEls.forEach(el => el.hidden = false);
+                            const storedAt = new Date(data.stored_at);
+                            const storedAtTime = settingsDialog.querySelector('.status-stored-at time');
+                            storedAtTime.textContent = storedAt.toLocaleString();
+                            storedAtTime.dateTime = data.stored_at;
+
+                            if (data.expires_at) {
+                                expiresAtEls.forEach(el => el.hidden = false);
+                                const expiresAt = new Date(data.expires_at);
+                                const daysLeft = Math.ceil((expiresAt - new Date()) / (1000 * 60 * 60 * 24));
+                                const expiresAtTime = settingsDialog.querySelector('.status-expires-at time');
+                                expiresAtTime.textContent = expiresAt.toLocaleDateString() + ' (' + daysLeft + ' days)';
+                                expiresAtTime.dateTime = data.expires_at;
+                                expiresAtTime.title = daysLeft + ' days remaining';
+
+                                const warningEl = settingsDialog.querySelector('.expiry-warning');
+                                warningEl.hidden = daysLeft > 5;
+                            } else {
+                                expiresAtEls.forEach(el => el.hidden = true);
+                            }
+
+                            clearBtn.hidden = false;
+                            closeBtn.hidden = false;
+                        } else {
+                            statusText.textContent = 'Not configured';
+                            statusText.style.color = 'var(--negative)';
+                            usernameEls.forEach(el => el.hidden = true);
+                            storedAtEls.forEach(el => el.hidden = true);
+                            expiresAtEls.forEach(el => el.hidden = true);
+                            clearBtn.hidden = true;
+                            // In setup mode, don't allow closing without configuring
+                            closeBtn.hidden = setupMode;
+                        }
+                    });
+            };
+
+            document.querySelector("a.settings").addEventListener("click", (e) => {
+                e.preventDefault();
+                loadSettingsStatus();
+                settingsDialog.showModal();
+            });
+
+            settingsDialog.querySelector('.close-settings').addEventListener('click', () => {
+                settingsDialog.close();
+            });
+
+            settingsDialog.querySelector('.pat-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const token = e.target.querySelector('#pat-input').value;
+                const errorEl = settingsDialog.querySelector('.form-error');
+                const submitBtn = settingsDialog.querySelector('.save-pat');
+
+                if (!token) {
+                    errorEl.textContent = 'Please enter a token';
+                    errorEl.hidden = false;
+                    return;
+                }
+
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Validating...';
+                errorEl.hidden = true;
+
+                fetch('/api/v0/config/pat', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({token: token})
+                })
+                .then(r => {
+                    if (r.ok) {
+                        window.location.reload();
+                    } else {
+                        return r.json().then(data => {
+                            errorEl.textContent = data.error || 'Failed to save PAT';
+                            errorEl.hidden = false;
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Save PAT';
+                        });
+                    }
+                })
+                .catch(err => {
+                    errorEl.textContent = 'Network error: ' + err.message;
+                    errorEl.hidden = false;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Save PAT';
+                });
+            });
+
+            settingsDialog.querySelector('.clear-pat').addEventListener('click', () => {
+                if (!confirm('Are you sure you want to clear the PAT? You will need to reconfigure it to use elly.')) {
+                    return;
+                }
+
+                fetch('/api/v0/config/pat', {method: 'DELETE'})
+                    .then(r => {
+                        if (r.ok) {
+                            window.location.reload();
+                        }
+                    });
+            });
+
+            // Auto-open settings in setup mode
+            if (setupMode) {
+                loadSettingsStatus();
+                settingsDialog.showModal();
+            }
 
             const refreshElement = document.querySelector("a.refresh");
             let isRefreshing = false;
@@ -404,10 +579,12 @@
                     // browser may do other stuff when modifier keys are used - don't hijack that default behavior
                     refreshElement.click();
                 } else if (e.key === "?") {
-                    dialog.showModal();
+                    aboutDialog.showModal();
                 } else if (e.key === "Enter") {
-                    if (dialog.open) {
-                        dialog.close();
+                    if (aboutDialog.open) {
+                        aboutDialog.close();
+                    } else if (settingsDialog.open) {
+                        // Don't handle enter in settings dialog - let form handle it
                     } else {
                         if (e.shiftKey) {
                             // open all prs

@@ -9,6 +9,14 @@ type Meta struct {
 	Value string
 }
 
+type Pat struct {
+	Pat       string
+	SetAt     string
+	ExpiresAt string
+	Username  string
+	Active    int64
+}
+
 type Pr struct {
 	Url                      string
 	ReviewStatus             string

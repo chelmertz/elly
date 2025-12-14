@@ -50,6 +50,15 @@ func (q *Queries) Bury(ctx context.Context, url string) error {
 	return err
 }
 
+const clearActivePAT = `-- name: ClearActivePAT :exec
+update pat set active = 0 where active = 1
+`
+
+func (q *Queries) ClearActivePAT(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, clearActivePAT)
+	return err
+}
+
 const clearRateLimitUntil = `-- name: ClearRateLimitUntil :exec
 delete from meta where key = 'rate_limit_until'
 `
@@ -146,6 +155,15 @@ func (q *Queries) CreatePr(ctx context.Context, arg CreatePrParams) (Pr, error) 
 	return i, err
 }
 
+const deactivateAllPATs = `-- name: DeactivateAllPATs :exec
+update pat set active = 0 where active = 1
+`
+
+func (q *Queries) DeactivateAllPATs(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deactivateAllPATs)
+	return err
+}
+
 const deletePrs = `-- name: DeletePrs :exec
 delete from prs
 `
@@ -153,6 +171,29 @@ delete from prs
 func (q *Queries) DeletePrs(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, deletePrs)
 	return err
+}
+
+const getActivePAT = `-- name: GetActivePAT :one
+select pat, set_at, expires_at, username from pat where active = 1 limit 1
+`
+
+type GetActivePATRow struct {
+	Pat       string
+	SetAt     string
+	ExpiresAt string
+	Username  string
+}
+
+func (q *Queries) GetActivePAT(ctx context.Context) (GetActivePATRow, error) {
+	row := q.db.QueryRowContext(ctx, getActivePAT)
+	var i GetActivePATRow
+	err := row.Scan(
+		&i.Pat,
+		&i.SetAt,
+		&i.ExpiresAt,
+		&i.Username,
+	)
+	return i, err
 }
 
 const getLastFetched = `-- name: GetLastFetched :one
@@ -204,6 +245,21 @@ func (q *Queries) GetRateLimitUntil(ctx context.Context) (string, error) {
 	var value string
 	err := row.Scan(&value)
 	return value, err
+}
+
+const insertPAT = `-- name: InsertPAT :exec
+insert into pat (pat, expires_at, username, active) values (?, ?, ?, 1)
+`
+
+type InsertPATParams struct {
+	Pat       string
+	ExpiresAt string
+	Username  string
+}
+
+func (q *Queries) InsertPAT(ctx context.Context, arg InsertPATParams) error {
+	_, err := q.db.ExecContext(ctx, insertPAT, arg.Pat, arg.ExpiresAt, arg.Username)
+	return err
 }
 
 const listPrs = `-- name: ListPrs :many
