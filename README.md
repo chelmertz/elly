@@ -56,17 +56,18 @@ example of managing the service.
 
 ## Docker Installation
 
-```shell
+```shell { name=docker }
 docker run -d \
   --name elly \
   --restart unless-stopped \
-  -e GITHUB_PAT=ghp_your_token_here \
   -v elly-data:/data \
   -p 9876:9876 \
   ghcr.io/chelmertz/elly:latest
 ```
 
-If you have `gh` CLI installed and authenticated, you can use `$(gh auth token)` instead of a PAT:
+You can provide `GITHUB_PAT` via an environment variable. If you have `gh` CLI
+installed and authenticated, you can use `$(gh auth token)` instead of a PAT
+you stashed away somewhere:
 
 ```shell
 docker run -d \
@@ -79,6 +80,7 @@ docker run -d \
 ```
 
 This creates a named volume `elly-data` for the SQLite database (Docker manages it automatically).
+
 The `--restart unless-stopped` flag ensures elly starts automatically on boot.
 
 **Useful commands:**

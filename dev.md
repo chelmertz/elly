@@ -39,6 +39,6 @@ make release
 
 Requires a `.env` file with `GITHUB_PAT=...` (no `export` prefix).
 
-```sh { name=docker }
+```sh { name=docker-compose }
 docker compose up --build
 ```
