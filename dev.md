@@ -42,3 +42,9 @@ Requires a `.env` file with `GITHUB_PAT=...` (no `export` prefix).
 ```sh { name=docker-compose }
 docker compose up --build
 ```
+
+## Install or update docker image locally
+
+```sh { name=update-docker }
+docker pull ghcr.io/chelmertz/elly:latest
+```
