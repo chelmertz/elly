@@ -255,8 +255,8 @@ func ServeWeb(webConfig HttpServerConfig) {
 			return
 		}
 
-		// Validate the token with GitHub
-		username, expiresAt, err := github.UsernameFromPat(req.Token, webConfig.Logger)
+		// Validate the token with GitHub (checks both authentication and required scopes)
+		username, expiresAt, err := github.ValidatePAT(req.Token, webConfig.Logger)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid token: " + err.Error()})

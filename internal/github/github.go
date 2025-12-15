@@ -255,6 +255,23 @@ func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
 	return respBody, nil
 }
 
+// ValidatePAT validates a PAT by checking authentication and required scopes.
+// Returns username, expiration time, and error if invalid.
+func ValidatePAT(token string, logger *slog.Logger) (username string, expiresAt time.Time, err error) {
+	username, expiresAt, err = UsernameFromPat(token, logger)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("token authentication failed: %w", err)
+	}
+
+	// Validate scopes by attempting a PR query
+	_, err = QueryGithub(token, username, logger)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("token lacks required permissions (needs: commit status, contents, metadata, pull requests read access): %w", err)
+	}
+
+	return username, expiresAt, nil
+}
+
 // UsernameFromPat returns the username and expiration date for the given PAT.
 // The expiration time is zero if the token doesn't expire.
 func UsernameFromPat(token string, logger *slog.Logger) (username string, expiresAt time.Time, err error) {

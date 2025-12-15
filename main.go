@@ -104,7 +104,7 @@ func initPAT(store storage.Storage) (bool, error) {
 	envToken := os.Getenv("GITHUB_PAT")
 	if envToken != "" {
 		os.Unsetenv("GITHUB_PAT") //nolint:errcheck // best-effort security cleanup
-		username, expiresAt, err := github.UsernameFromPat(envToken, logger)
+		username, expiresAt, err := github.ValidatePAT(envToken, logger)
 		if err != nil {
 			logger.Warn("GITHUB_PAT env var is invalid, ignoring", slog.Any("error", err))
 			return true, nil
@@ -126,7 +126,7 @@ func initPAT(store storage.Storage) (bool, error) {
 	}
 
 	// Validate stored PAT
-	if _, _, err := github.UsernameFromPat(storedPat.Token, logger); err != nil {
+	if _, _, err := github.ValidatePAT(storedPat.Token, logger); err != nil {
 		logger.Warn("stored PAT is no longer valid, starting in setup mode", slog.Any("error", err))
 		if clearErr := store.ClearPAT(); clearErr != nil {
 			logger.Warn("could not clear invalid PAT", slog.Any("error", clearErr))
