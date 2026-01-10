@@ -2,7 +2,7 @@
 
 # Requires curl and jq
 
-set -euo pipefail
+set -eo pipefail
 
 text_or_icon="$1"
 
@@ -10,7 +10,7 @@ elly_url=http://localhost:9876
 prs=$(curl -q "$elly_url/api/v0/prs?minPoints=1")
 
 # left click - open elly in browser
-if [ "$BLOCK_BUTTON" -eq 1 ]; then
+if [ "$BLOCK_BUTTON" = "1" ]; then
 	xdg-open "$elly_url" &
 	wmctrl -a firefox
 fi
@@ -22,7 +22,7 @@ if [ "$count" -gt 0 ]; then
 	echo "#00ff00"
 
 	# right click - open all PRs in browser, one by one
-	if [ "$BLOCK_BUTTON" -eq 3 ]; then
+	if [ "$BLOCK_BUTTON" = "3" ]; then
 		for u in $(jq -r '.[].Url' <(echo "$prs")); do
 			xdg-open "$u" &
 		done
