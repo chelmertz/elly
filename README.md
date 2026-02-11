@@ -47,6 +47,9 @@ Don't forget to also:
 
 ## Installation
 
+
+### Go package
+
 ```shell
 go install github.com/chelmertz/elly@latest
 ```
@@ -54,7 +57,7 @@ go install github.com/chelmertz/elly@latest
 will fetch you the latest binary. See contrib/elly.service for a systemd
 example of managing the service.
 
-## Docker Installation
+### Docker
 
 ```shell { name=docker }
 docker run -d \
@@ -80,6 +83,15 @@ docker stop elly                                # Stop
 docker rm elly                                  # Remove
 docker pull ghcr.io/chelmertz/elly:latest       # Update image
 ```
+
+### Nix
+
+Run directly: `nix run github:chelmertz/elly`
+
+Or, install permanently:
+
+- Add the flake to your system configuration
+- Or: `nix profile install github:chelmertz/elly`
 
 ## Developing
 
