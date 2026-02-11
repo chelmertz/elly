@@ -4,3 +4,6 @@ elly
 
 # until we properly scrub golden tests: keep them local
 internal/points/golden_test*json
+
+# flake, result of `nix build`
+result
