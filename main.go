@@ -102,13 +102,13 @@ func initPAT(store storage.Storage) (bool, error) {
 		os.Unsetenv("GITHUB_PAT") //nolint:errcheck // best-effort security cleanup
 		username, expiresAt, err := github.ValidatePAT(envToken, logger)
 		if err != nil {
-			logger.Warn("GITHUB_PAT env var is invalid, ignoring", slog.Any("error", err))
-			return true, nil
+			logger.Warn("GITHUB_PAT env var is invalid, falling back to stored PAT", slog.Any("error", err))
+		} else {
+			if err := store.StorePAT(envToken, username, expiresAt); err != nil {
+				return false, fmt.Errorf("could not store PAT from env var: %w", err)
+			}
+			return false, nil
 		}
-		if err := store.StorePAT(envToken, username, expiresAt); err != nil {
-			return false, fmt.Errorf("could not store PAT from env var: %w", err)
-		}
-		return false, nil
 	}
 
 	storedPat, found, err := store.GetPAT()
