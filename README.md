@@ -65,19 +65,8 @@ docker run -d \
   ghcr.io/chelmertz/elly:latest
 ```
 
-You can provide `GITHUB_PAT` via an environment variable. If you have `gh` CLI
-installed and authenticated, you can use `$(gh auth token)` instead of a PAT
-you stashed away somewhere:
-
-```shell
-docker run -d \
-  --name elly \
-  --restart unless-stopped \
-  -e GITHUB_PAT=$(gh auth token) \
-  -v elly-data:/data \
-  -p 9876:9876 \
-  ghcr.io/chelmertz/elly:latest
-```
+If you have `gh` CLI installed and authenticated, you can use `$(gh auth
+token)` instead of a PAT you stashed away somewhere:
 
 This creates a named volume `elly-data` for the SQLite database (Docker manages it automatically).
 
