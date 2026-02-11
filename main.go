@@ -19,7 +19,7 @@ import (
 
 var timeoutMinutes = flag.Int("timeout", 5, "refresh PRs every N minutes")
 var url = flag.String("url", "localhost:9876", "URL for web GUI")
-var dbPath = flag.String("db", "", "path to SQLite database file (required)")
+var dbPath = flag.String("db", "", "path to SQLite database file (default: OS-appropriate data dir)")
 var golden = flag.Bool("golden", false, "provide a button for turning a PR into a test. do NOT use outside of development")
 var demo = flag.Bool("demo", false, "mock the PRs so you can take a proper screenshot of the GUI")
 var versionFlag = flag.Bool("version", false, "show version")
@@ -50,15 +50,11 @@ func main() {
 	}
 
 	if *dbPath == "" {
-		logger.Error("missing required -db flag")
-		os.Exit(1)
+		*dbPath = defaultDBPath()
 	}
 	dbDir := filepath.Dir(*dbPath)
-	if info, err := os.Stat(dbDir); err != nil {
-		logger.Error("database directory does not exist", "dir", dbDir, "error", err)
-		os.Exit(1)
-	} else if !info.IsDir() {
-		logger.Error("database path parent is not a directory", "path", dbDir)
+	if err := os.MkdirAll(dbDir, 0o700); err != nil {
+		logger.Error("could not create database directory", "dir", dbDir, "error", err)
 		os.Exit(1)
 	}
 
@@ -78,9 +74,9 @@ func main() {
 	refreshChannel := make(chan types.RefreshAction, 1)
 
 	if setupMode {
-		logger.Info("starting elly in setup mode", "version", version)
+		logger.Info("starting elly in setup mode", "version", version, "db", *dbPath)
 	} else {
-		logger.Info("starting elly", "version", version, "timeout_minutes", *timeoutMinutes, "golden_testing_enabled", *golden, "demo", *demo)
+		logger.Info("starting elly", "version", version, "db", *dbPath, "timeout_minutes", *timeoutMinutes, "golden_testing_enabled", *golden, "demo", *demo)
 	}
 
 	go startRefreshLoop(store, refreshChannel)

@@ -3,7 +3,7 @@ Description=elly - monitoring Github for work to be done
 After=network.target
 
 [Service]
-ExecStart=/home/ch/go/bin/elly -db /home/ch/.cache/elly/elly.db
+ExecStart=/home/ch/go/bin/elly
 Type=simple
 Restart=on-failure
 # create elly env file with GITHUB_TOKEN=...

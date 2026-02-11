@@ -18,7 +18,7 @@ export GITHUB_PATH=github_pat_123k135hjhhjtjethwejhtjh5jhj
 ```
 
 ```sh { name=watch }
-find . | grep -E 'html|go' | entr -r -s 'source .env && go run . -db ~/.cache/elly/elly.db'
+find . | grep -E 'html|go' | entr -r -s 'source .env && go run .'
 ```
 
 ## Install the latest released version
