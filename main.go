@@ -11,10 +11,10 @@ import (
 
 	"log/slog"
 
+	"github.com/chelmertz/elly/internal/backoff"
 	"github.com/chelmertz/elly/internal/github"
 	"github.com/chelmertz/elly/internal/server"
 	"github.com/chelmertz/elly/internal/storage"
-	"github.com/chelmertz/elly/internal/types"
 )
 
 var timeoutMinutes = flag.Int("timeout", 5, "refresh PRs every N minutes")
@@ -71,22 +71,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	refreshChannel := make(chan types.RefreshAction, 1)
-
 	if setupMode {
 		logger.Info("starting elly in setup mode", "version", version, "db", *dbPath)
 	} else {
 		logger.Info("starting elly", "version", version, "db", *dbPath, "timeout_minutes", *timeoutMinutes, "golden_testing_enabled", *golden, "demo", *demo)
 	}
 
-	go startRefreshLoop(store, refreshChannel)
-	refreshChannel <- types.RefreshUpstart
+	tracker := backoff.New(logger, time.Duration(*timeoutMinutes)*time.Minute)
+
+	go startRefreshLoop(store, tracker)
 
 	server.ServeWeb(server.HttpServerConfig{
 		Url:                  *url,
 		GoldenTestingEnabled: *golden,
 		Store:                store,
-		RefreshingChannel:    refreshChannel,
+		Tracker:              tracker,
 		TimeoutMinutes:       *timeoutMinutes,
 		Version:              version,
 		Logger:               logger,
@@ -133,69 +132,40 @@ func initPAT(store storage.Storage) (bool, error) {
 	return false, nil
 }
 
-func startRefreshLoop(store storage.Storage, refresh chan types.RefreshAction) {
-	refreshTimer := time.NewTicker(time.Duration(*timeoutMinutes) * time.Minute)
-	retriesLeft := 5
+func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker) {
+	for tracker.Tick() {
+		storedPat, found, _ := store.GetPAT()
+		if !found {
+			logger.Debug("no PAT configured, skipping refresh")
+			continue
+		}
 
-	for {
-		select {
-		case action := <-refresh:
-			logger.Debug("refresh loop", "action", action)
-			switch action {
-			case types.RefreshStop:
-				refreshTimer.Stop()
+		if store.IsRateLimitActive(time.Now()) {
+			continue
+		}
+
+		if time.Since(store.Prs().LastFetched) < tracker.BaseInterval() {
+			continue
+		}
+
+		prs, err := github.QueryGithub(storedPat.Token, storedPat.Username, logger)
+		if err != nil {
+			var rl *github.ErrRateLimited
+			if errors.As(err, &rl) {
+				tracker.RateLimited()
+				store.SetRateLimitUntil(rl.UnblockedAt) //nolint:errcheck // best-effort persistence
+			} else if errors.Is(err, github.ErrClient) {
+				logger.Error("client error, giving up", "error", err)
+				tracker.Stop()
 				return
+			} else if errors.Is(err, github.ErrGithubServer) {
+				tracker.ServerErrored()
 			}
-
-			// Get PAT from store - skip if not configured
-			storedPat, found, _ := store.GetPAT()
-			if !found {
-				logger.Debug("no PAT configured, skipping refresh")
-				continue
-			}
-
-			if store.IsRateLimitActive(time.Now()) {
-				continue
-			}
-
-			if time.Since(store.Prs().LastFetched) < time.Duration(1)*time.Minute {
-				// querying github once a minute should be fine,
-				// especially as long as we do the passive, loopy thing more seldom
-				continue
-			}
-
-			prs, err := github.QueryGithub(storedPat.Token, storedPat.Username, logger)
-			if err != nil {
-				var rateLimitedError *github.ErrRateLimited
-				if errors.As(err, &rateLimitedError) {
-					if err := store.SetRateLimitUntil(rateLimitedError.UnblockedAt); err != nil {
-						logger.Error("could not store rate limit time, exiting",
-							slog.Any("error", err),
-							slog.Time("rate_limit_until", rateLimitedError.UnblockedAt))
-						os.Exit(1)
-					}
-					continue
-				} else if errors.Is(err, github.ErrClient) {
-					refreshTimer.Stop()
-					logger.Error("client error when querying github, giving up", slog.Any("error", err))
-					return
-				} else if errors.Is(err, github.ErrGithubServer) {
-					retriesLeft--
-					if retriesLeft <= 0 {
-						refreshTimer.Stop()
-						logger.Error("too many failed github requests, giving up")
-						return
-					}
-					logger.Warn("error refreshing PRs", slog.Any("error", err), slog.Int("retries_left", retriesLeft))
-					continue
-				}
-			} else if err := store.StoreRepoPrs(prs); err != nil {
-				logger.Error("could not store prs", slog.Any("error", err))
-				return
-			}
-
-		case <-refreshTimer.C:
-			refresh <- types.RefreshTick
+			continue
+		}
+		tracker.Succeeded()
+		if err := store.StoreRepoPrs(prs); err != nil {
+			logger.Error("could not store prs", slog.Any("error", err))
 		}
 	}
 }

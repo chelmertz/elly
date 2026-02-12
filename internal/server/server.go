@@ -12,10 +12,12 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/chelmertz/elly/internal/backoff"
 	"github.com/chelmertz/elly/internal/github"
 	"github.com/chelmertz/elly/internal/points"
 	"github.com/chelmertz/elly/internal/storage"
 	"github.com/chelmertz/elly/internal/types"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func check(err error) {
@@ -47,7 +49,7 @@ type HttpServerConfig struct {
 	TimeoutMinutes       int
 	Version              string
 	Logger               *slog.Logger
-	RefreshingChannel    chan types.RefreshAction
+	Tracker              *backoff.Tracker
 	SetupMode            bool // True if no PAT configured (initial state only)
 }
 
@@ -188,7 +190,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 	})
 
 	http.HandleFunc("POST /api/v0/prs/refresh", func(w http.ResponseWriter, r *http.Request) {
-		webConfig.RefreshingChannel <- types.RefreshManual
+		webConfig.Tracker.RequestRefresh()
 	})
 
 	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
@@ -234,6 +236,8 @@ func ServeWeb(webConfig HttpServerConfig) {
 		check(err)
 	})
 
+	http.Handle("GET /metrics", promhttp.Handler())
+
 	http.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok") //nolint:errcheck // best-effort response body
@@ -272,13 +276,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 		}
 
 		// Trigger a refresh so the new PAT is used immediately
-		if webConfig.RefreshingChannel != nil {
-			select {
-			case webConfig.RefreshingChannel <- types.RefreshManual:
-			default:
-				// channel full, skip without blocking
-			}
-		}
+		webConfig.Tracker.RequestRefresh()
 
 		w.Header().Set("Content-Type", "application/json")
 		response := map[string]any{
@@ -320,14 +318,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 			return
 		}
 
-		// Signal refresh loop to stop
-		if webConfig.RefreshingChannel != nil {
-			select {
-			case webConfig.RefreshingChannel <- types.RefreshStop:
-			default:
-				// channel full, skip without blocking
-			}
-		}
+		webConfig.Tracker.Stop()
 
 		w.WriteHeader(http.StatusNoContent)
 	})

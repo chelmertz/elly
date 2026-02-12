@@ -194,6 +194,8 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 		return fmt.Errorf("could not store last fetched time: %w", err)
 	}
 
+	trackPRs(orderedPrs)
+
 	return nil
 }
 

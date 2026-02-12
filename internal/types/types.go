@@ -60,11 +60,3 @@ func (pr ViewPr) String() string {
 	return string(b)
 }
 
-type RefreshAction string
-
-const (
-	RefreshUpstart RefreshAction = "upstart"
-	RefreshStop    RefreshAction = "stop"
-	RefreshTick    RefreshAction = "tick"
-	RefreshManual  RefreshAction = "manual"
-)

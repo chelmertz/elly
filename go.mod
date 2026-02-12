@@ -6,6 +6,7 @@ retract v0.0.0-20230721200106-0458e08d3047 // Publish with the wrong repo name i
 
 require (
 	github.com/google/go-cmp v0.7.0
+	github.com/prometheus/client_golang v1.12.1
 	modernc.org/sqlite v1.44.2
 )
 
@@ -165,7 +166,6 @@ require (
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20250324122243-d51e00e5bbf0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/polyfloyd/go-errorlint v1.8.0 // indirect
-	github.com/prometheus/client_golang v1.12.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect

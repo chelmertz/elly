@@ -351,6 +351,24 @@ func UsernameFromPat(token string, logger *slog.Logger) (username string, expire
 var ignoredLastPrCommenters = []string{"github-actions", "vercel"}
 
 func QueryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
+	prs, err := queryGithub(token, username, logger)
+	if err != nil {
+		var rl *ErrRateLimited
+		if errors.As(err, &rl) {
+			githubRequestsTotal.WithLabelValues("rate_limited").Inc()
+			rateLimitEventsTotal.Inc()
+		} else if errors.Is(err, ErrGithubServer) {
+			githubRequestsTotal.WithLabelValues("server_error").Inc()
+		} else {
+			githubRequestsTotal.WithLabelValues("client_error").Inc()
+		}
+		return nil, err
+	}
+	githubRequestsTotal.WithLabelValues("success").Inc()
+	return prs, nil
+}
+
+func queryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
 	respBody, err := graphqlRequest(querySearchPrsInvolvingUser(username), token, logger)
 	if err != nil {
 		return nil, fmt.Errorf("could not query github for PRs: %w", err)

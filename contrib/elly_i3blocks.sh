@@ -15,10 +15,17 @@ if [ "$BLOCK_BUTTON" = "1" ]; then
 	wmctrl -a firefox
 fi
 
+# show backoff multiplier if > 1
+backoff_suffix=""
+multiplier=$(curl -sf "$elly_url/metrics" | grep '^elly_backoff_multiplier ' | awk '{printf "%.0f", $2}') || true
+if [ -n "$multiplier" ] && [ "$multiplier" -gt 1 ] 2>/dev/null; then
+	backoff_suffix=" (${multiplier}x)"
+fi
+
 count=$(jq 'length' <(echo "$prs"))
 if [ "$count" -gt 0 ]; then
-	echo "$text_or_icon $count"
-	echo "$text_or_icon $count"
+	echo "$text_or_icon $count$backoff_suffix"
+	echo "$text_or_icon $count$backoff_suffix"
 	echo "#00ff00"
 
 	# right click - open all PRs in browser, one by one
@@ -29,5 +36,5 @@ if [ "$count" -gt 0 ]; then
 		wmctrl -a firefox
 	fi
 else
-	echo "$text_or_icon $count"
+	echo "$text_or_icon $count$backoff_suffix"
 fi
