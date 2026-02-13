@@ -13,7 +13,7 @@
       packages.x86_64-linux.default = pkgs.buildGoModule {
         pname = "elly";
         version = self.shortRev or "dirty";
-        vendorHash = "sha256-GMVbDKiNB3K/mmwTutB4bVM98j2euivpjmwVvV/H4Kc=";
+        vendorHash = "sha256-YxbXc+IS4FkaskNWTKFJy/vjxB077b1wcSQ66a6elFo=";
         src = ./.;
       };
 
