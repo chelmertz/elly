@@ -24,11 +24,12 @@ var golden = flag.Bool("golden", false, "provide a button for turning a PR into 
 var demo = flag.Bool("demo", false, "mock the PRs so you can take a proper screenshot of the GUI")
 var versionFlag = flag.Bool("version", false, "show version")
 var verboseFlag = flag.Bool("verbose", false, "verbose logging")
-var logLevel = &slog.LevelVar{}
-var logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{AddSource: true, Level: logLevel}))
 
 func main() {
 	flag.Parse()
+
+	logLevel := &slog.LevelVar{}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{AddSource: true, Level: logLevel}))
 
 	var version string
 	if bi, ok := debug.ReadBuildInfo(); ok {
@@ -65,7 +66,7 @@ func main() {
 		store = storage.NewStorage(logger, *dbPath)
 	}
 
-	setupMode, err := initPAT(store)
+	setupMode, err := initPAT(store, github.DefaultAPIURL, logger)
 	if err != nil {
 		logger.Error("failed to initialize PAT", slog.Any("error", err))
 		os.Exit(1)
@@ -79,7 +80,7 @@ func main() {
 
 	tracker := backoff.New(logger, time.Duration(*timeoutMinutes)*time.Minute)
 
-	go startRefreshLoop(store, tracker)
+	go startRefreshLoop(store, tracker, logger)
 
 	server.ServeWeb(server.HttpServerConfig{
 		Url:                  *url,
@@ -95,11 +96,11 @@ func main() {
 
 // initPAT initializes the PAT from env var or storage.
 // Returns (setupMode, error) where setupMode=true means no valid PAT is configured.
-func initPAT(store storage.Storage) (bool, error) {
+func initPAT(store storage.Storage, githubBaseURL string, logger *slog.Logger) (bool, error) {
 	envToken := os.Getenv("GITHUB_PAT")
 	if envToken != "" {
 		os.Unsetenv("GITHUB_PAT") //nolint:errcheck // best-effort security cleanup
-		username, expiresAt, err := github.ValidatePAT(envToken, logger)
+		username, expiresAt, err := github.ValidatePAT(githubBaseURL, envToken, logger)
 		if err != nil {
 			logger.Warn("GITHUB_PAT env var is invalid, falling back to stored PAT", slog.Any("error", err))
 		} else {
@@ -121,18 +122,23 @@ func initPAT(store storage.Storage) (bool, error) {
 	}
 
 	// Validate stored PAT
-	if _, _, err := github.ValidatePAT(storedPat.Token, logger); err != nil {
-		logger.Warn("stored PAT is no longer valid, starting in setup mode", slog.Any("error", err))
-		if clearErr := store.ClearPAT(); clearErr != nil {
-			logger.Warn("could not clear invalid PAT", slog.Any("error", clearErr))
+	if _, _, err := github.ValidatePAT(githubBaseURL, storedPat.Token, logger); err != nil {
+		if errors.Is(err, github.ErrInvalidToken) {
+			logger.Warn("stored PAT is no longer valid, starting in setup mode", slog.Any("error", err))
+			if clearErr := store.ClearPAT(); clearErr != nil {
+				logger.Warn("could not clear invalid PAT", slog.Any("error", clearErr))
+			}
+			return true, nil
 		}
-		return true, nil
+		// Transient error (rate limit, server error, network issue) — keep the PAT
+		logger.Warn("could not validate stored PAT due to transient error, assuming it is still valid", slog.Any("error", err))
+		return false, nil
 	}
 
 	return false, nil
 }
 
-func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker) {
+func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, logger *slog.Logger) {
 	for tracker.Tick() {
 		storedPat, found, _ := store.GetPAT()
 		if !found {
@@ -148,7 +154,7 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker) {
 			continue
 		}
 
-		prs, err := github.QueryGithub(storedPat.Token, storedPat.Username, logger)
+		prs, err := github.QueryGithub(github.DefaultAPIURL, storedPat.Token, storedPat.Username, logger)
 		if err != nil {
 			var rl *github.ErrRateLimited
 			if errors.As(err, &rl) {

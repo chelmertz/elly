@@ -19,6 +19,9 @@ import (
 
 var ErrClient = errors.New("github returned client error")
 var ErrGithubServer = errors.New("github returned server error")
+var ErrInvalidToken = errors.New("github token is invalid")
+
+const DefaultAPIURL = "https://api.github.com"
 
 type ErrRateLimited struct {
 	UnblockedAt time.Time
@@ -147,7 +150,7 @@ func checkExpiration(expiration string, logger *slog.Logger) {
 	}
 }
 
-func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
+func graphqlRequest(baseURL, query, token string, logger *slog.Logger) ([]byte, error) {
 	payload := struct {
 		Query string `json:"query"`
 	}{
@@ -163,11 +166,11 @@ func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
 
 	httpClient := &http.Client{}
 
-	request, err := http.NewRequestWithContext(ctx, "POST", "https://api.github.com/graphql", bytes.NewReader(jsonBytes))
-	request.Header.Add("Authorization", "bearer "+token)
+	request, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/graphql", bytes.NewReader(jsonBytes))
 	if err != nil {
 		return nil, fmt.Errorf("could not construct github request: %w", err)
 	}
+	request.Header.Add("Authorization", "bearer "+token)
 
 	logger.Debug("querying github api")
 	response, err := httpClient.Do(request)
@@ -257,16 +260,23 @@ func graphqlRequest(query, token string, logger *slog.Logger) ([]byte, error) {
 
 // ValidatePAT validates a PAT by checking authentication and required scopes.
 // Returns username, expiration time, and error if invalid.
-func ValidatePAT(token string, logger *slog.Logger) (username string, expiresAt time.Time, err error) {
-	username, expiresAt, err = UsernameFromPat(token, logger)
+func ValidatePAT(baseURL, token string, logger *slog.Logger) (username string, expiresAt time.Time, err error) {
+	username, expiresAt, err = UsernameFromPat(baseURL, token, logger)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("token authentication failed: %w", err)
 	}
 
 	// Validate scopes by attempting a PR query
-	_, err = QueryGithub(token, username, logger)
+	_, err = QueryGithub(baseURL, token, username, logger)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("token lacks required permissions (needs: commit status, contents, metadata, pull requests read access): %w", err)
+		// Client errors (except rate limiting) indicate the token lacks
+		// required permissions — treat as invalid token.
+		var rl *ErrRateLimited
+		if errors.Is(err, ErrClient) && !errors.As(err, &rl) {
+			return "", time.Time{}, fmt.Errorf("%w: token lacks required permissions: %w", ErrInvalidToken, err)
+		}
+		// Transient errors (rate limit, server error, network) — propagate as-is.
+		return "", time.Time{}, fmt.Errorf("token validation failed: %w", err)
 	}
 
 	return username, expiresAt, nil
@@ -274,7 +284,7 @@ func ValidatePAT(token string, logger *slog.Logger) (username string, expiresAt 
 
 // UsernameFromPat returns the username and expiration date for the given PAT.
 // The expiration time is zero if the token doesn't expire.
-func UsernameFromPat(token string, logger *slog.Logger) (username string, expiresAt time.Time, err error) {
+func UsernameFromPat(baseURL, token string, logger *slog.Logger) (username string, expiresAt time.Time, err error) {
 	query := `query { viewer { login } }`
 	payload := struct {
 		Query string `json:"query"`
@@ -290,7 +300,7 @@ func UsernameFromPat(token string, logger *slog.Logger) (username string, expire
 	defer cancel()
 
 	httpClient := &http.Client{}
-	request, err := http.NewRequestWithContext(ctx, "POST", "https://api.github.com/graphql", bytes.NewReader(jsonBytes))
+	request, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/graphql", bytes.NewReader(jsonBytes))
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("could not construct github request: %w", err)
 	}
@@ -313,6 +323,9 @@ func UsernameFromPat(token string, logger *slog.Logger) (username string, expire
 		}
 	}
 
+	if response.StatusCode == 401 || response.StatusCode == 403 {
+		return "", time.Time{}, fmt.Errorf("%w: github response code %d", ErrInvalidToken, response.StatusCode)
+	}
 	if response.StatusCode >= 400 {
 		if response.StatusCode < 500 {
 			return "", time.Time{}, fmt.Errorf("%w: github response code %d", ErrClient, response.StatusCode)
@@ -350,8 +363,8 @@ func UsernameFromPat(token string, logger *slog.Logger) (username string, expire
 
 var ignoredLastPrCommenters = []string{"github-actions", "vercel"}
 
-func QueryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
-	prs, err := queryGithub(token, username, logger)
+func QueryGithub(baseURL, token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
+	prs, err := queryGithub(baseURL, token, username, logger)
 	if err != nil {
 		var rl *ErrRateLimited
 		if errors.As(err, &rl) {
@@ -368,8 +381,8 @@ func QueryGithub(token string, username string, logger *slog.Logger) ([]types.Vi
 	return prs, nil
 }
 
-func queryGithub(token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
-	respBody, err := graphqlRequest(querySearchPrsInvolvingUser(username), token, logger)
+func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
+	respBody, err := graphqlRequest(baseURL, querySearchPrsInvolvingUser(username), token, logger)
 	if err != nil {
 		return nil, fmt.Errorf("could not query github for PRs: %w", err)
 	}
