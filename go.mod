@@ -7,7 +7,7 @@ retract v0.0.0-20230721200106-0458e08d3047 // Publish with the wrong repo name i
 require (
 	github.com/google/go-cmp v0.7.0
 	github.com/prometheus/client_golang v1.12.1
-	modernc.org/sqlite v1.44.2
+	modernc.org/sqlite v1.46.1
 )
 
 require (
