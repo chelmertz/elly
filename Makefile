@@ -1,6 +1,4 @@
-# test depends on hooks so that `make test` (the most common entry point)
-# transparently installs the pre-commit hook without a separate setup step
-test: .git/hooks/pre-commit
+test:
 	go test -v ./...
 # can't do go test -v -fuzz=Fuzz -fuzztime=10s ./... which errors out with:
 # testing: will not fuzz, -fuzz matches more than one fuzz test: [Fuzz_WhenReviewThreadsExist_WillCountUnresponded Fuzz_LowerLoc_HigherPoints]
@@ -31,8 +29,5 @@ models:
 
 lint: Dockerfile
 	docker run --rm -i hadolint/hadolint < $^
-
-.git/hooks/pre-commit: .githooks/pre-commit
-	ln -sf "$$(pwd)/.githooks/pre-commit" .git/hooks/pre-commit
 
 .PHONY: test release models
