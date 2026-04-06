@@ -23,6 +23,8 @@
           pkgs.go
           pkgs.pinact
           pkgs.zizmor
+          pkgs.golangci-lint
+          pkgs.hadolint
         ];
         shellHook = ''
           git config core.hooksPath .githooks

@@ -22,16 +22,15 @@ release:
 	git push origin "$$version"; \
 	printf '## Changelog\n%s\n' "$$changelog" | gh release create "$$version" --title "$$version" --notes-file -
 
-github-actions:
+lint:
 	pinact run --update
 	zizmor .
+	golangci-lint run
+	hadolint Dockerfile
 
 models:
 	go get -tool github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 	go mod tidy
 	go tool sqlc generate
 
-lint: Dockerfile
-	docker run --rm -i hadolint/hadolint < $^
-
-.PHONY: test release github-actions models
+.PHONY: test release lint models
