@@ -22,6 +22,10 @@ release:
 	git push origin "$$version"; \
 	printf '## Changelog\n%s\n' "$$changelog" | gh release create "$$version" --title "$$version" --notes-file -
 
+github-actions:
+	pinact run --update
+	zizmor .
+
 models:
 	go get -tool github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 	go mod tidy
@@ -30,4 +34,4 @@ models:
 lint: Dockerfile
 	docker run --rm -i hadolint/hadolint < $^
 
-.PHONY: test release models
+.PHONY: test release github-actions models

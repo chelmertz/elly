@@ -19,7 +19,11 @@
       };
 
       devShells.x86_64-linux.default = pkgs.mkShell {
-        buildInputs = [ pkgs.go ];
+        buildInputs = [
+          pkgs.go
+          pkgs.pinact
+          pkgs.zizmor
+        ];
         shellHook = ''
           git config core.hooksPath .githooks
         '';
