@@ -140,14 +140,26 @@ type prReviewThreadCommentReactionGraphQl struct {
 	}
 }
 
-func checkExpiration(expiration string, logger *slog.Logger) {
-	expires, err := time.Parse("2006-01-02 15:04:05 -0700", expiration)
-	if err != nil {
-		logger.Error("could not parse github token expiration", slog.Any("error", err), slog.String("expiration", expiration))
-	} else if expires.Before(time.Now().Add(10 * 24 * time.Hour)) {
-		// less than 10 days left on token, warn!
-		logger.Warn("github token expires soon", slog.Time("expires", expires), slog.Int("days_left", int(time.Until(expires).Hours()/24)))
+func ghExpiration(expiration string, logger *slog.Logger) (time.Time, bool) {
+	// I used to get offset but recently got an error due to a named TZ instead
+	// - let's try both (and more in the future, when they change their minds
+	// again)
+	for _, layout := range []string{
+		"2006-01-02 15:04:05 -0700",
+		"2006-01-02 15:04:05 MST",
+	} {
+		t, err := time.Parse(layout, expiration)
+		if err == nil {
+			if t.Before(time.Now().Add(10 * 24 * time.Hour)) {
+				// less than 10 days left on token, warn!
+				logger.Warn("github token expires soon", slog.Time("expires", t), slog.Int("days_left", int(time.Until(t).Hours()/24)))
+			}
+			return t, true
+		}
 	}
+
+	logger.Error("could not parse github token expiration", slog.String("expiration", expiration))
+	return time.Time{}, false
 }
 
 func graphqlRequest(baseURL, query, token string, logger *slog.Logger) ([]byte, error) {
@@ -180,7 +192,7 @@ func graphqlRequest(baseURL, query, token string, logger *slog.Logger) ([]byte, 
 	defer response.Body.Close() //nolint:errcheck // error on close is not actionable
 
 	if expiration := response.Header.Get("Github-Authentication-Token-Expiration"); expiration != "" {
-		checkExpiration(expiration, logger)
+		_, _ = ghExpiration(expiration, logger)
 	}
 
 	respBody, err := io.ReadAll(response.Body)
@@ -312,13 +324,8 @@ func UsernameFromPat(baseURL, token string, logger *slog.Logger) (username strin
 	}
 	defer response.Body.Close() //nolint:errcheck // error on close is not actionable
 
-	// Parse expiration header
 	if expiration := response.Header.Get("Github-Authentication-Token-Expiration"); expiration != "" {
-		// Format: "2006-01-02 15:04:05 -0700"
-		parsed, parseErr := time.Parse("2006-01-02 15:04:05 -0700", expiration)
-		if parseErr != nil {
-			logger.Warn("could not parse github token expiration header", slog.Any("error", parseErr), slog.String("expiration", expiration))
-		} else {
+		if parsed, ok := ghExpiration(expiration, logger); ok {
 			expiresAt = parsed
 		}
 	}
