@@ -32,7 +32,7 @@
       };
 
       overlays.default = final: prev: {
-        elly = self.packages.${final.system}.default;
+        elly = self.packages.${final.stdenv.hostPlatform.system}.default;
       };
     };
 }
