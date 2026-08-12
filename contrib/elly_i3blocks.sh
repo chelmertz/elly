@@ -7,7 +7,7 @@ set -eo pipefail
 text_or_icon="$1"
 
 elly_url=http://localhost:9876
-prs=$(curl -q "$elly_url/api/v0/prs?minPoints=1")
+prs=$(curl -sf "$elly_url/api/v0/prs?minPoints=1")
 
 # left click - open elly in browser
 if [ "$BLOCK_BUTTON" = "1" ]; then
