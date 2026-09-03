@@ -80,7 +80,7 @@ func main() {
 
 	tracker := backoff.New(logger, time.Duration(*timeoutMinutes)*time.Minute)
 
-	go startRefreshLoop(store, tracker, logger)
+	go startRefreshLoop(store, tracker, github.DefaultAPIURL, logger)
 
 	server.ServeWeb(server.HttpServerConfig{
 		Url:                  *url,
@@ -138,7 +138,7 @@ func initPAT(store storage.Storage, githubBaseURL string, logger *slog.Logger) (
 	return false, nil
 }
 
-func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, logger *slog.Logger) {
+func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL string, logger *slog.Logger) {
 	for tracker.Tick() {
 		storedPat, found, _ := store.GetPAT()
 		if !found {
@@ -154,18 +154,17 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, logger *s
 			continue
 		}
 
-		prs, err := github.QueryGithub(github.DefaultAPIURL, storedPat.Token, storedPat.Username, logger)
+		prs, err := github.QueryGithub(baseURL, storedPat.Token, storedPat.Username, logger)
 		if err != nil {
 			var rl *github.ErrRateLimited
 			if errors.As(err, &rl) {
 				tracker.RateLimited()
 				store.SetRateLimitUntil(rl.UnblockedAt) //nolint:errcheck // best-effort persistence
-			} else if errors.Is(err, github.ErrClient) {
-				logger.Error("client error, giving up", "error", err)
-				tracker.Stop()
-				return
-			} else if errors.Is(err, github.ErrGithubServer) {
-				tracker.ServerErrored()
+			} else {
+				// 4xx, 5xx, network and parse errors are all treated as
+				// transient: back off and try again on the next tick
+				logger.Warn("could not fetch prs from github", slog.Any("error", err))
+				tracker.Errored()
 			}
 			continue
 		}
