@@ -99,8 +99,8 @@ func (t *Tracker) RateLimited() {
 		slog.Duration("interval", t.currentIntervalLocked()))
 }
 
-// ServerErrored handles a server error: 1.5x backoff, timer reset, log.
-func (t *Tracker) ServerErrored() {
+// Errored handles a failed fetch (anything but a rate limit): 1.5x backoff, log.
+func (t *Tracker) Errored() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.consecutiveOK = 0
@@ -109,7 +109,7 @@ func (t *Tracker) ServerErrored() {
 		t.multiplier = t.maxMultiplier
 	}
 	t.syncGauges()
-	t.logger.Warn("server error from github, backing off",
+	t.logger.Warn("github fetch failed, backing off",
 		slog.Duration("interval", t.currentIntervalLocked()))
 }
 

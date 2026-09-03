@@ -35,12 +35,12 @@ func TestRateLimitedDoublesInterval(t *testing.T) {
 	})
 }
 
-func TestServerErroredIncreasesInterval(t *testing.T) {
+func TestErroredIncreasesInterval(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		bt := New(discardLogger(), 10*time.Minute)
 		defer bt.Stop()
 
-		bt.ServerErrored()
+		bt.Errored()
 		if got, want := bt.currentInterval(), 15*time.Minute; got != want {
 			t.Fatalf("after 1 server error: got %v, want %v", got, want)
 		}

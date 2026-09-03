@@ -7,9 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/chelmertz/elly/internal/backoff"
 	"github.com/chelmertz/elly/internal/github"
 	"github.com/chelmertz/elly/internal/storage"
 	"github.com/chelmertz/elly/internal/types"
@@ -62,14 +65,14 @@ func (s *testStorage) ClearPAT() error {
 	return nil
 }
 
-func (s *testStorage) Prs() storage.StoredState                      { return storage.StoredState{} }
-func (s *testStorage) StoreRepoPrs([]types.ViewPr) error             { return nil }
-func (s *testStorage) Bury(string) error                             { return nil }
-func (s *testStorage) Unbury(string) error                           { return nil }
-func (s *testStorage) GetPr(string) (storage.Pr, error)              { return storage.Pr{}, nil }
-func (s *testStorage) SetRateLimitUntil(time.Time) error             { return nil }
-func (s *testStorage) IsRateLimitActive(time.Time) bool              { return false }
-func (s *testStorage) GetRateLimitUntil() time.Time                  { return time.Time{} }
+func (s *testStorage) Prs() storage.StoredState          { return storage.StoredState{} }
+func (s *testStorage) StoreRepoPrs([]types.ViewPr) error { return nil }
+func (s *testStorage) Bury(string) error                 { return nil }
+func (s *testStorage) Unbury(string) error               { return nil }
+func (s *testStorage) GetPr(string) (storage.Pr, error)  { return storage.Pr{}, nil }
+func (s *testStorage) SetRateLimitUntil(time.Time) error { return nil }
+func (s *testStorage) IsRateLimitActive(time.Time) bool  { return false }
+func (s *testStorage) GetRateLimitUntil() time.Time      { return time.Time{} }
 
 var _ storage.Storage = (*testStorage)(nil)
 
@@ -153,6 +156,19 @@ func TestInitPAT_StoredPATValidation(t *testing.T) {
 		})
 	}
 
+	viewerThenStatusHandler := func(status int, body string) http.Handler {
+		callCount := 0
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			callCount++
+			if callCount == 1 {
+				w.Write(graphqlViewerResponse("testuser"))
+				return
+			}
+			w.WriteHeader(status)
+			w.Write([]byte(body))
+		})
+	}
+
 	fixedStatusHandler := func(status int, body string) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(status)
@@ -178,6 +194,16 @@ func TestInitPAT_StoredPATValidation(t *testing.T) {
 		{
 			name:          "server error",
 			handler:       fixedStatusHandler(500, `{"errors":[]}`),
+			wantSetupMode: false,
+		},
+		{
+			name:          "client error on the PR query means the token lacks scopes",
+			handler:       viewerThenStatusHandler(404, `{"message":"Not Found"}`),
+			wantSetupMode: true,
+		},
+		{
+			name:          "server error with html body on the PR query is transient",
+			handler:       viewerThenStatusHandler(502, `<html>Bad gateway</html>`),
 			wantSetupMode: false,
 		},
 		{
@@ -232,5 +258,55 @@ func TestErrInvalidToken_WrappedCorrectly(t *testing.T) {
 	wrapped := errors.Join(github.ErrInvalidToken, errors.New("some detail"))
 	if !errors.Is(wrapped, github.ErrInvalidToken) {
 		t.Error("expected errors.Is to find ErrInvalidToken")
+	}
+}
+
+// waitFor polls cond until it holds or the deadline passes.
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
+}
+
+func TestRefreshLoop_ClientErrorBacksOffAndKeepsPolling(t *testing.T) {
+	var calls atomic.Int32
+	githubAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(404)
+		w.Write([]byte(`{"message":"Not Found"}`))
+	}))
+	defer githubAPI.Close()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	tracker := backoff.New(logger, time.Hour)
+	defer tracker.Stop()
+
+	gaveUp := make(chan struct{})
+	go func() {
+		startRefreshLoop(newTestStorage("test-token", "testuser"), tracker, githubAPI.URL, logger)
+		close(gaveUp)
+	}()
+
+	waitFor(t, "first fetch", func() bool { return calls.Load() == 1 })
+	tracker.RequestRefresh()
+	waitFor(t, "second fetch after a client error", func() bool { return calls.Load() == 2 })
+
+	select {
+	case <-gaveUp:
+		t.Fatal("refresh loop stopped after a client error, expected it to keep polling")
+	default:
+	}
+	if !strings.Contains(logs.String(), "backing off") {
+		t.Fatalf("expected a backoff log line after a client error, got:\n%s", logs.String())
+	}
+	if !strings.Contains(logs.String(), "could not fetch prs from github") {
+		t.Fatalf("expected the failed fetch to be logged with its error, got:\n%s", logs.String())
 	}
 }

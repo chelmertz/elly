@@ -1,8 +1,16 @@
 package github
 
 import (
+	"errors"
+	"io"
+	"log/slog"
 	"math/rand"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 )
 
 func Test_WhenReviewThreadIsEmpty_WillNotRequireAction(t *testing.T) {
@@ -148,4 +156,56 @@ func countCommentsByUser(pr prSearchResultGraphQl, username string) map[int]stru
 	}
 
 	return myCommentIndexes
+}
+
+func fixedResponseServer(t *testing.T, status int, body string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func Test_QueryGithub_WrapsSentinelErrorsSoCallersCanMatchThem(t *testing.T) {
+	cases := []struct {
+		name   string
+		status int
+		body   string
+		want   error
+	}{
+		{"504 with json body is a server error", 504, `{"message":"We couldn't respond to your request in time."}`, ErrGithubServer},
+		{"502 with html body is a server error", 502, `<html>Bad gateway</html>`, ErrGithubServer},
+		{"404 is a client error", 404, `{"message":"Not Found"}`, ErrClient},
+		{"200 with unparseable body is a client error", 200, `not json`, ErrClient},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := fixedResponseServer(t, tc.status, tc.body)
+			_, err := QueryGithub(srv.URL, "token", "user", slog.New(slog.NewTextHandler(io.Discard, nil)))
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("errors.Is(%v, %v) = false", err, tc.want)
+			}
+		})
+	}
+}
+
+func Test_QueryGithub_CountsServerErrorsAsServerErrors(t *testing.T) {
+	srv := fixedResponseServer(t, 504, `{"message":"timeout"}`)
+	before := counterValue(t, githubRequestsTotal.WithLabelValues("server_error"))
+	_, _ = QueryGithub(srv.URL, "token", "user", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	after := counterValue(t, githubRequestsTotal.WithLabelValues("server_error"))
+	if after != before+1 {
+		t.Fatalf("server_error counter went from %v to %v, expected +1", before, after)
+	}
+}
+
+func counterValue(t *testing.T, c prometheus.Counter) float64 {
+	t.Helper()
+	var m dto.Metric
+	if err := c.Write(&m); err != nil {
+		t.Fatal(err)
+	}
+	return m.GetCounter().GetValue()
 }

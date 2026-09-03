@@ -200,6 +200,13 @@ func graphqlRequest(baseURL, query, token string, logger *slog.Logger) ([]byte, 
 		return nil, fmt.Errorf("could not read github username response: %w", err)
 	}
 
+	// 5xx bodies are not reliably json (502s come as html), so decide on
+	// the status code before trying to parse anything
+	if response.StatusCode >= 500 {
+		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", string(respBody)))
+		return nil, fmt.Errorf("%w: github response code %d", ErrGithubServer, response.StatusCode)
+	}
+
 	// since graphql returns 200 but still possibly errors, we need to check for
 	// those somewhere, and it seems more proper to do it close to the actual request
 	var errorResponse struct {
@@ -210,7 +217,7 @@ func graphqlRequest(baseURL, query, token string, logger *slog.Logger) ([]byte, 
 	}
 	jsonErr := json.Unmarshal(respBody, &errorResponse)
 	if jsonErr != nil {
-		return nil, fmt.Errorf("%v: json unmarshal error", ErrClient)
+		return nil, fmt.Errorf("%w: json unmarshal error", ErrClient)
 	}
 	if len(errorResponse.Errors) > 0 {
 		for _, e := range errorResponse.Errors {
@@ -249,7 +256,7 @@ func graphqlRequest(baseURL, query, token string, logger *slog.Logger) ([]byte, 
 				}
 				if earliestRetry.IsZero() {
 					logger.Warn("github rate limited, no retry time found", slog.Any("response_body_graphql_errors", errorResponse.Errors), slog.Any("response_headers", response.Header))
-					return nil, fmt.Errorf("%v: github rate limited, no retry time found", ErrClient)
+					return nil, fmt.Errorf("%w: github rate limited, no retry time found", ErrClient)
 				} else {
 					logger.Error("github rate limited", slog.Any("response_body_graphql_errors", errorResponse.Errors), slog.Time("earliest_retry", earliestRetry), slog.String("header_x-ratelimit-reset", xRateLimitReset), slog.String("header_retry-after", retryAfter))
 					return nil, &ErrRateLimited{UnblockedAt: earliestRetry}
@@ -262,10 +269,7 @@ func graphqlRequest(baseURL, query, token string, logger *slog.Logger) ([]byte, 
 
 	if response.StatusCode >= 400 {
 		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", string(respBody)))
-		if response.StatusCode < 500 {
-			return nil, fmt.Errorf("%v: github response code %d", ErrClient, response.StatusCode)
-		}
-		return nil, fmt.Errorf("%v: github response code %d", ErrGithubServer, response.StatusCode)
+		return nil, fmt.Errorf("%w: github response code %d", ErrClient, response.StatusCode)
 	}
 	return respBody, nil
 }
