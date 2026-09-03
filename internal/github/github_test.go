@@ -1,19 +1,14 @@
 package github
 
 import (
+	"encoding/json"
 	"math/rand"
+	"strings"
 	"testing"
 )
 
 func Test_WhenReviewThreadIsEmpty_WillNotRequireAction(t *testing.T) {
-	constructedButEmpty, _ := actionableThreads(prSearchResultGraphQl{ReviewThreads: struct {
-		Edges []struct{ Node prReviewThreadGraphQl }
-	}{
-		Edges: []struct{ Node prReviewThreadGraphQl }{{Node: prReviewThreadGraphQl{Comments: struct {
-			Nodes []prReviewThreadCommentGraphQl
-		}{}}}},
-	},
-	}, "currentUser")
+	constructedButEmpty, _ := actionableThreads(prWithThread("author", threadOf()), "currentUser")
 
 	if constructedButEmpty != 0 {
 		t.Fatalf("expected 0 actionable threads on an empty struct, got %d", constructedButEmpty)
@@ -27,16 +22,9 @@ func Test_WhenReviewThreadIsEmpty_WillNotRequireAction(t *testing.T) {
 }
 
 func Test_WhenHavingUnansweredComments_WillCountTowardsWaiting(t *testing.T) {
-	_, got := actionableThreads(prSearchResultGraphQl{ReviewThreads: struct {
-		Edges []struct{ Node prReviewThreadGraphQl }
-	}{
-		Edges: []struct{ Node prReviewThreadGraphQl }{{Node: prReviewThreadGraphQl{Comments: struct {
-			Nodes []prReviewThreadCommentGraphQl
-		}{
-			[]prReviewThreadCommentGraphQl{{Author: struct{ Login string }{Login: "currentUser"}, Body: "a question"}},
-		}}}},
-	},
-	}, "currentUser")
+	_, got := actionableThreads(prWithThread("author", threadOf(
+		prReviewThreadCommentGraphQl{Author: struct{ Login string }{Login: "currentUser"}},
+	)), "currentUser")
 
 	if wanted := 1; wanted != got {
 		t.Fatalf("expected %d waiting threads, got %d", wanted, got)
@@ -45,6 +33,28 @@ func Test_WhenHavingUnansweredComments_WillCountTowardsWaiting(t *testing.T) {
 
 func commentBy(username string) prReviewThreadCommentGraphQl {
 	return prReviewThreadCommentGraphQl{Author: struct{ Login string }{Login: username}}
+}
+
+// threadOf mimics what the aliased query returns for a thread holding the
+// given comments: only the first and the last one.
+func threadOf(comments ...prReviewThreadCommentGraphQl) prReviewThreadGraphQl {
+	var t prReviewThreadGraphQl
+	if len(comments) > 0 {
+		t.FirstComment.Nodes = comments[:1]
+		t.LastComment.Nodes = comments[len(comments)-1:]
+	}
+	return t
+}
+
+func prWithThread(author string, thread prReviewThreadGraphQl) prSearchResultGraphQl {
+	return prSearchResultGraphQl{
+		Author: struct{ Login string }{Login: author},
+		ReviewThreads: struct {
+			Edges []struct{ Node prReviewThreadGraphQl }
+		}{
+			Edges: []struct{ Node prReviewThreadGraphQl }{{Node: thread}},
+		},
+	}
 }
 
 func HangingFuzz_WhenReviewThreadsExist_WillCountUnresponded(f *testing.F) {
@@ -88,18 +98,7 @@ func HangingFuzz_WhenReviewThreadsExist_WillCountUnresponded(f *testing.F) {
 		} else {
 			prAuthor = othersUsername
 		}
-		threads := prSearchResultGraphQl{
-			Author: struct{ Login string }{Login: prAuthor},
-			ReviewThreads: struct {
-				Edges []struct{ Node prReviewThreadGraphQl }
-			}{
-				Edges: []struct{ Node prReviewThreadGraphQl }{{Node: prReviewThreadGraphQl{Comments: struct {
-					Nodes []prReviewThreadCommentGraphQl
-				}{
-					allComments,
-				}}}},
-			},
-		}
+		threads := prWithThread(prAuthor, threadOf(allComments...))
 
 		actionableThreads, _ := actionableThreads(threads, myUsername)
 
@@ -140,7 +139,7 @@ func countCommentsByUser(pr prSearchResultGraphQl, username string) map[int]stru
 			continue
 		}
 
-		for _, c := range t.Node.Comments.Nodes {
+		for _, c := range append(t.Node.FirstComment.Nodes, t.Node.LastComment.Nodes...) {
 			if c.Author.Login == username {
 				myCommentIndexes[i] = struct{}{}
 			}
@@ -148,4 +147,51 @@ func countCommentsByUser(pr prSearchResultGraphQl, username string) map[int]stru
 	}
 
 	return myCommentIndexes
+}
+
+// The github graphql "cost" is the product of every nested first/last
+// argument, regardless of how much data comes back. Fetching 30 comments
+// with 7 reactions each for 15 threads per PR made a single poll cost 475
+// of the 5000 hourly points and run right at github's 10 s query timeout.
+// Only the first comment's author and the last comment's reactions are used.
+func Test_Query_FetchesOnlyFirstAndLastReviewThreadComment(t *testing.T) {
+	q := querySearchPrsInvolvingUser("me")
+	for _, want := range []string{"firstComment: comments(first: 1)", "lastComment: comments(last: 1)"} {
+		if !strings.Contains(q, want) {
+			t.Errorf("query lacks %q", want)
+		}
+	}
+	if strings.Contains(q, "comments(first: 30)") {
+		t.Error("query still fetches 30 comments per review thread")
+	}
+	// nothing reads these, and comment bodies alone were 70% of the response
+	for _, unused := range []string{"body", "status {"} {
+		if strings.Contains(q, unused) {
+			t.Errorf("query fetches %q, which is never read", unused)
+		}
+	}
+	if got := strings.Count(q, "reactions("); got != 1 {
+		t.Errorf("expected reactions only on the last review thread comment, found %d reactions connections", got)
+	}
+}
+
+// Counterpart of the aliases in querySearchPrsInvolvingUser: the response
+// keys must land in the struct fields actionableThreads reads.
+func Test_AliasedThreadCommentsAreParsed(t *testing.T) {
+	body := `{
+		"author": {"login": "me"},
+		"reviewThreads": {"edges": [{"node": {
+			"isResolved": false,
+			"firstComment": {"nodes": [{"author": {"login": "me"}}]},
+			"lastComment": {"nodes": [{"author": {"login": "other"}, "reactions": {"edges": []}}]}
+		}}]}
+	}`
+	var pr prSearchResultGraphQl
+	if err := json.Unmarshal([]byte(body), &pr); err != nil {
+		t.Fatal(err)
+	}
+	actionable, _ := actionableThreads(pr, "me")
+	if actionable != 1 {
+		t.Fatalf("own PR where someone else has the last word: expected 1 actionable thread, got %d", actionable)
+	}
 }

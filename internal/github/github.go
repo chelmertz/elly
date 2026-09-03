@@ -75,9 +75,7 @@ type prSearchResultGraphQl struct {
 				Author    struct {
 					Login string
 				}
-				Url       string
-				Body      string
-				Reactions prReviewThreadCommentReactionGraphQl
+				Url string
 			}
 		}
 	}
@@ -104,7 +102,6 @@ type prSearchResultGraphQl struct {
 					Login string
 				}
 				Url   string
-				Body  string
 				State string
 			}
 		}
@@ -115,7 +112,12 @@ type prReviewThreadGraphQl struct {
 	IsResolved  bool
 	IsOutdated  bool
 	IsCollapsed bool
-	Comments    struct {
+	// FirstComment and LastComment are the aliases used in
+	// querySearchPrsInvolvingUser, each holding at most one comment
+	FirstComment struct {
+		Nodes []prReviewThreadCommentGraphQl
+	}
+	LastComment struct {
 		Nodes []prReviewThreadCommentGraphQl
 	}
 }
@@ -124,7 +126,6 @@ type prReviewThreadCommentGraphQl struct {
 	Author struct {
 		Login string
 	}
-	Body      string
 	Url       string
 	Reactions prReviewThreadCommentReactionGraphQl
 }
@@ -499,12 +500,12 @@ func actionableThreads(pr prSearchResultGraphQl, myUsername string) (actionable 
 			continue
 		}
 
-		if len(t.Node.Comments.Nodes) == 0 {
+		if len(t.Node.FirstComment.Nodes) == 0 || len(t.Node.LastComment.Nodes) == 0 {
 			// the types say this is possible, I haven't seen it in the wild though
 			continue
 		}
 
-		lastComment := t.Node.Comments.Nodes[len(t.Node.Comments.Nodes)-1]
+		lastComment := t.Node.LastComment.Nodes[0]
 		lastCommenter := lastComment.Author.Login
 		iCommentedLast := lastCommenter == myUsername
 		iReactedToLastComment := userReactedToComment(lastComment.Reactions, myUsername)
@@ -530,7 +531,7 @@ func actionableThreads(pr prSearchResultGraphQl, myUsername string) (actionable 
 			continue
 		}
 
-		threadStarter := t.Node.Comments.Nodes[0].Author.Login
+		threadStarter := t.Node.FirstComment.Nodes[0].Author.Login
 		if threadStarter == myUsername && !iCommentedLast && !iReactedToLastComment {
 			// we started the thread, and it's still open (and someone else has
 			// the last word), and we haven't acknowledged it yet with a
@@ -589,17 +590,6 @@ func querySearchPrsInvolvingUser(username string) string {
                   login
                 }
                 url
-                body
-                reactions(first: 7) {
-                    edges {
-                        node {
-                            content
-                            user {
-                                login
-                            }
-                        }
-                    }
-                }
               }
             }
           }
@@ -611,15 +601,6 @@ func querySearchPrsInvolvingUser(username string) string {
                   email
                   name
                 }
-                status {
-                  contexts {
-                    state
-                    context
-                    description
-                    createdAt
-                    targetUrl
-                  }
-                }
               }
             }
           }
@@ -630,12 +611,22 @@ func querySearchPrsInvolvingUser(username string) string {
                 isResolved
                 isOutdated
                 isCollapsed
-                comments(first: 30) {
+                # only the first comment's author and the last comment's
+                # reactions are inspected, and the query cost is the product
+                # of every nested first/last argument, so fetch just those two
+                # (aliases are matched by field name in prReviewThreadGraphQl)
+                firstComment: comments(first: 1) {
                   nodes {
                     author {
                       login
                     }
-                    body
+                  }
+                }
+                lastComment: comments(last: 1) {
+                  nodes {
+                    author {
+                      login
+                    }
                     url
                     reactions(first: 7) {
                         edges {
@@ -658,7 +649,6 @@ func querySearchPrsInvolvingUser(username string) string {
                     author {
                         login
                     }
-                    body
                     url
                     state
                 }
