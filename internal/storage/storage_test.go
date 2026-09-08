@@ -5,7 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"database/sql"
 	"log/slog"
+	"path/filepath"
+	"strings"
 )
 
 func setupTestStorage(t *testing.T) *DbStorage {
@@ -164,4 +167,38 @@ func TestStorePAT_PreservesExpirationTime(t *testing.T) {
 	if !got.ExpiresAt.Truncate(time.Second).Equal(expiresAt.Truncate(time.Second)) {
 		t.Errorf("expected expiration %v, got %v", expiresAt, got.ExpiresAt)
 	}
+}
+
+// A database created before the rereview_from column existed must get the
+// column on start and round-trip the field; "create table if not exists"
+// alone never adds it.
+func TestNewStorage_AddsRereviewColumnToOldDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "elly.db")
+	old, err := sql.Open("sqlite", "file:"+path+"?mode=rwc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(strings.Replace(ddl, "    rereview_from text not null default '',\n", "", 1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(`insert into prs (url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, buried, raw_json_response)
+		values ('https://github.com/o/r/pull/1', '', 't', 'me', 'r', 'o', 'https://github.com/o/r', 0, '2026-09-08T10:00:00Z', '', 0, 0, 1, 1, '', 0, '{}')`); err != nil {
+		t.Fatal(err)
+	}
+	_ = old.Close()
+
+	store := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
+	prs := store.Prs().Prs
+	if len(prs) != 1 || len(prs[0].RereviewFrom) != 0 {
+		t.Fatalf("old row must read back with no re-review logins: %+v", prs)
+	}
+	prs[0].RereviewFrom = []string{"adam", "eve"}
+	if err := store.StoreRepoPrs(prs); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Prs().Prs[0].RereviewFrom; strings.Join(got, ",") != "adam,eve" {
+		t.Fatalf("round trip: %v", got)
+	}
+	// a second start must treat the existing column as a no-op
+	NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
 }

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"log/slog"
@@ -98,8 +99,9 @@ type prSearchResultGraphQl struct {
 				Author struct {
 					Login string
 				}
-				Url   string
-				State string
+				Url         string
+				State       string
+				SubmittedAt string
 			}
 		}
 	}
@@ -137,6 +139,7 @@ type prReviewThreadCommentGraphQl struct {
 		Login string
 	}
 	Url       string
+	CreatedAt string // only fetched for the last comment
 	Reactions prReviewThreadCommentReactionGraphQl
 }
 
@@ -454,6 +457,7 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 		for _, u := range pr.ReviewRequests.Nodes {
 			reviewUsers = append(reviewUsers, u.RequestedReviewer.Login)
 		}
+		rereview := rereviewFrom(pr, username, threadsActionable)
 
 		for _, a := range pr.Reviews.Edges {
 			// For some reason, the "Reviews" graph can contain a separate
@@ -485,6 +489,7 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 			Additions:                pr.Additions,
 			Deletions:                pr.Deletions,
 			ReviewRequestedFromUsers: reviewUsers,
+			RereviewFrom:             rereview,
 			RawJsonResponse:          prEdge.Node,
 		}
 		logger.Debug("fetched a pr", slog.Any("pr", viewPr))
@@ -492,6 +497,77 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 	}
 
 	return viewPrs, nil
+}
+
+// rereviewFrom names the reviewers of the user's own PR who should be asked
+// to look again: they left a non-approving review, the user has since
+// pushed or replied, every thread is answered, and no re-review has been
+// requested. Github shows such a PR as simply "review required", and the
+// reviewer has no signal that the ball came back to them. Drafts are left
+// out: a draft is not asking for review.
+func rereviewFrom(pr prSearchResultGraphQl, myUsername string, threadsActionable int) []string {
+	if pr.Author.Login != myUsername || pr.IsDraft || threadsActionable > 0 {
+		return []string{}
+	}
+	myLast := time.Time{}
+	bump := func(s string) {
+		if t, err := time.Parse(time.RFC3339, s); err == nil && t.After(myLast) {
+			myLast = t
+		}
+	}
+	for _, c := range pr.Commits.Nodes {
+		bump(c.Commit.Author.Date) // commits on my PR are taken as mine
+	}
+	for _, c := range pr.Comments.Edges {
+		if c.Node.Author.Login == myUsername {
+			bump(c.Node.UpdatedAt)
+		}
+	}
+	for _, t := range pr.ReviewThreads.Edges {
+		for _, c := range t.Node.LastComment.Nodes {
+			if c.Author.Login == myUsername {
+				bump(c.CreatedAt)
+			}
+		}
+	}
+	if myLast.IsZero() {
+		return []string{}
+	}
+	requested := make(map[string]bool)
+	for _, u := range pr.ReviewRequests.Nodes {
+		requested[u.RequestedReviewer.Login] = true
+	}
+	// the latest review per reviewer decides; reviews come oldest first
+	latest := make(map[string]struct {
+		state string
+		at    time.Time
+	})
+	var order []string
+	for _, r := range pr.Reviews.Edges {
+		login := r.Node.Author.Login
+		if login == myUsername || login == "" || strings.HasSuffix(login, "[bot]") || slices.Contains(ignoredLastPrCommenters, login) {
+			continue
+		}
+		at, err := time.Parse(time.RFC3339, r.Node.SubmittedAt)
+		if err != nil {
+			continue
+		}
+		if _, seen := latest[login]; !seen {
+			order = append(order, login)
+		}
+		latest[login] = struct {
+			state string
+			at    time.Time
+		}{r.Node.State, at}
+	}
+	out := make([]string, 0)
+	for _, login := range order {
+		l := latest[login]
+		if (l.state == "COMMENTED" || l.state == "CHANGES_REQUESTED") && l.at.Before(myLast) && !requested[login] {
+			out = append(out, login)
+		}
+	}
+	return out
 }
 
 func userReactedToComment(reactions prReviewThreadCommentReactionGraphQl, username string) bool {
@@ -600,6 +676,7 @@ const reviewThreadFields = `
                       login
                     }
                     url
+                    createdAt
                     reactions(first: 7) {
                         edges {
                             node {
@@ -749,6 +826,7 @@ func querySearchPrsInvolvingUser(username string) string {
                     }
                     url
                     state
+                    submittedAt
                 }
             }
           }

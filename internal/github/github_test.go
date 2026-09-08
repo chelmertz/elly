@@ -314,3 +314,68 @@ func Test_ReviewThreadPageQuery_SharesThreadFields(t *testing.T) {
 		t.Error("search query lacks pageInfo, so no follow-up can ever happen")
 	}
 }
+
+func Test_RereviewFrom(t *testing.T) {
+	type review struct{ login, state, at string }
+	build := func(author string, draft bool, myLastCommit string, requested []string, reviews []review, myThreadReplyAt string) prSearchResultGraphQl {
+		var pr prSearchResultGraphQl
+		pr.Author.Login = author
+		pr.IsDraft = draft
+		if myLastCommit != "" {
+			pr.Commits.Nodes = append(pr.Commits.Nodes, struct {
+				Commit struct {
+					Author struct{ Date, Email, Name string }
+				}
+			}{})
+			pr.Commits.Nodes[0].Commit.Author.Date = myLastCommit
+		}
+		for _, r := range requested {
+			var n struct {
+				RequestedReviewer struct{ Login string }
+			}
+			n.RequestedReviewer.Login = r
+			pr.ReviewRequests.Nodes = append(pr.ReviewRequests.Nodes, n)
+		}
+		for _, r := range reviews {
+			var e struct {
+				Node struct {
+					Author                  struct{ Login string }
+					Url, State, SubmittedAt string
+				}
+			}
+			e.Node.Author.Login, e.Node.State, e.Node.SubmittedAt = r.login, r.state, r.at
+			pr.Reviews.Edges = append(pr.Reviews.Edges, e)
+		}
+		if myThreadReplyAt != "" {
+			c := commentBy("me")
+			c.CreatedAt = myThreadReplyAt
+			pr.ReviewThreads.Edges = append(pr.ReviewThreads.Edges, struct{ Node prReviewThreadGraphQl }{Node: threadOf(commentBy("adam"), c)})
+		}
+		return pr
+	}
+	before, after := "2026-09-01T10:00:00Z", "2026-09-02T10:00:00Z"
+	cases := []struct {
+		name string
+		pr   prSearchResultGraphQl
+		open int
+		want []string
+	}{
+		{"reviewer commented, I pushed after", build("me", false, after, nil, []review{{"adam", "COMMENTED", before}}, ""), 0, []string{"adam"}},
+		{"changes requested, I replied in a thread after", build("me", false, "", nil, []review{{"adam", "CHANGES_REQUESTED", before}}, after), 0, []string{"adam"}},
+		{"reviewer's latest review is newer than my push", build("me", false, before, nil, []review{{"adam", "COMMENTED", after}}, ""), 0, []string{}},
+		{"already re-requested", build("me", false, after, []string{"adam"}, []review{{"adam", "COMMENTED", before}}, ""), 0, []string{}},
+		{"approved, nothing to ask", build("me", false, after, nil, []review{{"adam", "APPROVED", before}}, ""), 0, []string{}},
+		{"approved after commenting: latest review wins", build("me", false, after, nil, []review{{"adam", "COMMENTED", before}, {"adam", "APPROVED", before}}, ""), 0, []string{}},
+		{"I still owe answers", build("me", false, after, nil, []review{{"adam", "COMMENTED", before}}, ""), 2, []string{}},
+		{"not my PR", build("adam", false, after, nil, []review{{"me", "COMMENTED", before}}, ""), 0, []string{}},
+		{"draft", build("me", true, after, nil, []review{{"adam", "COMMENTED", before}}, ""), 0, []string{}},
+		{"bots and my own reviews are ignored", build("me", false, after, nil, []review{{"github-actions", "COMMENTED", before}, {"dep[bot]", "COMMENTED", before}, {"me", "COMMENTED", before}}, ""), 0, []string{}},
+		{"two reviewers, one re-requested", build("me", false, after, []string{"eve"}, []review{{"adam", "COMMENTED", before}, {"eve", "CHANGES_REQUESTED", before}}, ""), 0, []string{"adam"}},
+	}
+	for _, c := range cases {
+		got := rereviewFrom(c.pr, "me", c.open)
+		if strings.Join(got, ",") != strings.Join(c.want, ",") {
+			t.Errorf("%s: got %v want %v", c.name, got, c.want)
+		}
+	}
+}

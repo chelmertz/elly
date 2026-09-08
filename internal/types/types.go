@@ -25,6 +25,7 @@ type ViewPr struct {
 	Additions                int
 	Deletions                int
 	ReviewRequestedFromUsers []string
+	RereviewFrom             []string // reviewers of my PR who reviewed before my latest change and were not re-requested
 	Buried                   bool
 	RawJsonResponse          json.RawMessage
 }
@@ -59,4 +60,3 @@ func (pr ViewPr) String() string {
 	}
 	return string(b)
 }
-

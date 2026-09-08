@@ -78,6 +78,16 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 		// adjust the schema.sql file by adding a column, to check the behavior. I think there's a NPE or such that we hit
 		check(err)
 	}
+	// "create table if not exists" never adds columns to an existing table;
+	// each column added after the first release is applied here, and the
+	// "duplicate column" error on later starts is the expected no-op.
+	for _, alter := range []string{
+		`alter table prs add column rereview_from text not null default ''`,
+	} {
+		if _, err := db.ExecContext(ctx, alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			check(err)
+		}
+	}
 
 	return &DbStorage{
 		db:     New(db),
@@ -109,6 +119,7 @@ func (s *DbStorage) Prs() StoredState {
 			Additions:                int(dbPr.Additions),
 			Deletions:                int(dbPr.Deletions),
 			ReviewRequestedFromUsers: strings.Split(dbPr.ReviewRequestedFromUsers, ","),
+			RereviewFrom:             splitLogins(dbPr.RereviewFrom),
 			Buried:                   dbPr.Buried,
 			RawJsonResponse:          dbPr.RawJsonResponse,
 		})
@@ -182,6 +193,7 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 			Additions:                int64(pr.Additions),
 			Deletions:                int64(pr.Deletions),
 			ReviewRequestedFromUsers: strings.Join(pr.ReviewRequestedFromUsers, ","),
+			RereviewFrom:             strings.Join(pr.RereviewFrom, ","),
 			Buried:                   pr.Buried,
 			RawJsonResponse:          pr.RawJsonResponse,
 		})
@@ -325,4 +337,12 @@ func (s *DbStorage) ClearPAT() error {
 		return fmt.Errorf("could not clear PAT: %w", err)
 	}
 	return nil
+}
+
+// splitLogins is strings.Split without the [""] an empty column would give.
+func splitLogins(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	return strings.Split(s, ",")
 }

@@ -85,11 +85,12 @@ insert into prs (
     additions,
     deletions,
     review_requested_from_users,
+    rereview_from,
     buried,
     raw_json_response
 ) values (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-) returning url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, buried, raw_json_response
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+) returning url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, rereview_from, buried, raw_json_response
 `
 
 type CreatePrParams struct {
@@ -108,6 +109,7 @@ type CreatePrParams struct {
 	Additions                int64
 	Deletions                int64
 	ReviewRequestedFromUsers string
+	RereviewFrom             string
 	Buried                   bool
 	RawJsonResponse          []byte
 }
@@ -129,6 +131,7 @@ func (q *Queries) CreatePr(ctx context.Context, arg CreatePrParams) (Pr, error) 
 		arg.Additions,
 		arg.Deletions,
 		arg.ReviewRequestedFromUsers,
+		arg.RereviewFrom,
 		arg.Buried,
 		arg.RawJsonResponse,
 	)
@@ -149,6 +152,7 @@ func (q *Queries) CreatePr(ctx context.Context, arg CreatePrParams) (Pr, error) 
 		&i.Additions,
 		&i.Deletions,
 		&i.ReviewRequestedFromUsers,
+		&i.RereviewFrom,
 		&i.Buried,
 		&i.RawJsonResponse,
 	)
@@ -208,7 +212,7 @@ func (q *Queries) GetLastFetched(ctx context.Context) (string, error) {
 }
 
 const getPr = `-- name: GetPr :one
-select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, buried, raw_json_response from prs where url = ? limit 1
+select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, rereview_from, buried, raw_json_response from prs where url = ? limit 1
 `
 
 func (q *Queries) GetPr(ctx context.Context, url string) (Pr, error) {
@@ -230,6 +234,7 @@ func (q *Queries) GetPr(ctx context.Context, url string) (Pr, error) {
 		&i.Additions,
 		&i.Deletions,
 		&i.ReviewRequestedFromUsers,
+		&i.RereviewFrom,
 		&i.Buried,
 		&i.RawJsonResponse,
 	)
@@ -263,7 +268,7 @@ func (q *Queries) InsertPAT(ctx context.Context, arg InsertPATParams) error {
 }
 
 const listPrs = `-- name: ListPrs :many
-select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, buried, raw_json_response from prs
+select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, rereview_from, buried, raw_json_response from prs
 `
 
 func (q *Queries) ListPrs(ctx context.Context) ([]Pr, error) {
@@ -291,6 +296,7 @@ func (q *Queries) ListPrs(ctx context.Context) ([]Pr, error) {
 			&i.Additions,
 			&i.Deletions,
 			&i.ReviewRequestedFromUsers,
+			&i.RereviewFrom,
 			&i.Buried,
 			&i.RawJsonResponse,
 		); err != nil {

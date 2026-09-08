@@ -33,6 +33,7 @@ type Pr struct {
 	Additions                int64
 	Deletions                int64
 	ReviewRequestedFromUsers string
+	RereviewFrom             string
 	Buried                   bool
 	RawJsonResponse          []byte
 }

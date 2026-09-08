@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/chelmertz/elly/internal/types"
@@ -62,6 +63,12 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 
 		if pr.IsDraft {
 			points.Remove(10, "PR is my draft")
+		}
+
+		if len(pr.RereviewFrom) > 0 {
+			// the reviewer left comments, we pushed or answered, and github
+			// shows them nothing: the PR sits until someone asks
+			points.Add(20, fmt.Sprintf("Ask %s to re-review, they reviewed before your latest change", strings.Join(pr.RereviewFrom, ", ")))
 		}
 
 		if len(pr.ReviewRequestedFromUsers) == 0 {

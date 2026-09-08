@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/chelmertz/elly/internal/types"
+	"strings"
 )
 
 /* fuzz points:
@@ -77,5 +78,24 @@ func Test_StandardPrPoints(t *testing.T) {
 				t.Errorf("StandardPrPoints(%+v, time.Now()) = %+v, want %+v, got %+v", test.pr, test.now, test.want, got)
 			}
 		})
+	}
+}
+
+func Test_RereviewPending_AddsPointsOnOwnPr(t *testing.T) {
+	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{Author: "me", Url: "https://github.com/o/r/pull/1", LastUpdated: now, ReviewRequestedFromUsers: []string{"adam"}, RereviewFrom: []string{"adam"}}
+	p := StandardPrPoints(pr, "me", now)
+	found := false
+	for _, r := range p.Reasons {
+		if strings.Contains(r, "Ask adam to re-review") {
+			found = true
+		}
+	}
+	if !found || p.Total < 20 {
+		t.Fatalf("expected a re-review reason worth 20 points, got %d %v", p.Total, p.Reasons)
+	}
+	pr.RereviewFrom = []string{}
+	if q := StandardPrPoints(pr, "me", now); q.Total != p.Total-20 {
+		t.Fatalf("without the signal the PR must score 20 less: %d vs %d", q.Total, p.Total)
 	}
 }
