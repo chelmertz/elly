@@ -42,6 +42,7 @@ type querySearchPrsInvolvingMeGraphQl struct {
 }
 
 type prSearchResultGraphQl struct {
+	Id             string // GraphQL node id, for follow-up queries on this PR
 	Url            string
 	Title          string
 	IsDraft        bool
@@ -90,12 +91,8 @@ type prSearchResultGraphQl struct {
 			}
 		}
 	}
-	ReviewThreads struct {
-		Edges []struct {
-			Node prReviewThreadGraphQl
-		}
-	}
-	Reviews struct {
+	ReviewThreads prReviewThreadConnectionGraphQl
+	Reviews       struct {
 		Edges []struct {
 			Node struct {
 				Author struct {
@@ -105,6 +102,19 @@ type prSearchResultGraphQl struct {
 				State string
 			}
 		}
+	}
+}
+
+// prReviewThreadConnectionGraphQl is one page of a PR's review threads; the
+// search query returns the first page, queryReviewThreadsPage the rest.
+type prReviewThreadConnectionGraphQl struct {
+	TotalCount int
+	PageInfo   struct {
+		HasNextPage bool
+		EndCursor   string
+	}
+	Edges []struct {
+		Node prReviewThreadGraphQl
 	}
 }
 
@@ -433,6 +443,11 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 			lastPrCommenter = c.Node.Author.Login
 		}
 
+		if err := fetchRemainingReviewThreads(baseURL, token, &pr, logger); err != nil {
+			// the poll goes on with what the search returned; the count for
+			// this PR is a lower bound until the next poll succeeds
+			logger.Warn("could not fetch all review threads", slog.String("pr_url", pr.Url), slog.Any("err", err))
+		}
 		threadsActionable, threadsWaiting := actionableThreads(pr, username)
 
 		reviewUsers := make([]string, 0)
@@ -551,6 +566,107 @@ func actionableThreads(pr prSearchResultGraphQl, myUsername string) (actionable 
 	return
 }
 
+// firstReviewThreadsPage is how many review threads the search query carries
+// per PR. Github prices a query by the product of nested first/last
+// arguments, so this is multiplied by 100 PRs, 2 comments and 7 reactions;
+// keep it small and let the per-PR follow-up pay for big PRs only.
+const firstReviewThreadsPage = "15"
+
+// reviewThreadPageSize is the page size of the per-PR follow-up query, whose
+// cost is not multiplied by the PR count.
+const reviewThreadPageSize = "100"
+
+// maxReviewThreadPages bounds the follow-up loop: 10 pages of 100 threads is
+// far beyond any PR seen; past it the count is logged as truncated.
+const maxReviewThreadPages = 10
+
+// reviewThreadFields are the review thread fields both queries fetch. Only
+// the first comment's author and the last comment's author and reactions are
+// inspected (aliases are matched by field name in prReviewThreadGraphQl).
+const reviewThreadFields = `
+                isResolved
+                isOutdated
+                isCollapsed
+                firstComment: comments(first: 1) {
+                  nodes {
+                    author {
+                      login
+                    }
+                  }
+                }
+                lastComment: comments(last: 1) {
+                  nodes {
+                    author {
+                      login
+                    }
+                    url
+                    reactions(first: 7) {
+                        edges {
+                            node {
+                                content
+                                user {
+                                    login
+                                }
+                            }
+                        }
+                    }
+                  }
+                }`
+
+// queryReviewThreadsPage fetches one more page of a PR's review threads.
+func queryReviewThreadsPage(prID, after string) string {
+	return fmt.Sprintf(`query {
+  node(id: %s) {
+    ... on PullRequest {
+      reviewThreads(first: `+reviewThreadPageSize+`, after: %s) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {`+reviewThreadFields+`
+          }
+        }
+      }
+    }
+  }
+}`, strconv.Quote(prID), strconv.Quote(after))
+}
+
+// fetchRemainingReviewThreads appends the pages after the first to
+// pr.ReviewThreads.Edges, so actionableThreads sees every thread. Before
+// this, a PR with more than one page of threads (80 on one PR seen
+// 2026-09-08) had its newest threads, which come last, silently ignored,
+// and reported zero actionable threads.
+func fetchRemainingReviewThreads(baseURL, token string, pr *prSearchResultGraphQl, logger *slog.Logger) error {
+	pages := 0
+	for pr.ReviewThreads.PageInfo.HasNextPage {
+		if pages == maxReviewThreadPages {
+			logger.Warn("review threads truncated", slog.String("pr_url", pr.Url), slog.Int("fetched", len(pr.ReviewThreads.Edges)), slog.Int("total", pr.ReviewThreads.TotalCount))
+			return nil
+		}
+		pages++
+		body, err := graphqlRequest(baseURL, queryReviewThreadsPage(pr.Id, pr.ReviewThreads.PageInfo.EndCursor), token, logger)
+		if err != nil {
+			return fmt.Errorf("review threads page %d of %s: %w", pages+1, pr.Url, err)
+		}
+		var page struct {
+			Data struct {
+				Node struct {
+					ReviewThreads prReviewThreadConnectionGraphQl
+				}
+			}
+		}
+		if err := json.Unmarshal(body, &page); err != nil {
+			return fmt.Errorf("review threads page %d of %s: %w", pages+1, pr.Url, err)
+		}
+		pr.ReviewThreads.Edges = append(pr.ReviewThreads.Edges, page.Data.Node.ReviewThreads.Edges...)
+		pr.ReviewThreads.PageInfo = page.Data.Node.ReviewThreads.PageInfo
+	}
+	return nil
+}
+
 func querySearchPrsInvolvingUser(username string) string {
 	// the amount of nodes given in "first: x", etc. needs to be a bit
 	// calibrated - if everything is too high, github will complain with a
@@ -560,6 +676,7 @@ func querySearchPrsInvolvingUser(username string) string {
     edges {
       node {
         ... on PullRequest {
+          id
           title
           url
           isDraft
@@ -608,42 +725,19 @@ func querySearchPrsInvolvingUser(username string) string {
               }
             }
           }
-		  # sigh, here we can't filter on the isResolved status, so we need to overfetch (a lot, potentially)
-          reviewThreads(first: 15) {
+          # threads can't be filtered on isResolved server-side, so every
+          # thread is fetched: this first page here, the rest per PR through
+          # queryReviewThreadsPage (see fetchRemainingReviewThreads). The
+          # page is kept small because its cost multiplies with the 100 PRs
+          # above; a follow-up query only costs what that one PR has.
+          reviewThreads(first: ` + firstReviewThreadsPage + `) {
+            totalCount
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
             edges {
-              node {
-                isResolved
-                isOutdated
-                isCollapsed
-                # only the first comment's author and the last comment's
-                # reactions are inspected, and the query cost is the product
-                # of every nested first/last argument, so fetch just those two
-                # (aliases are matched by field name in prReviewThreadGraphQl)
-                firstComment: comments(first: 1) {
-                  nodes {
-                    author {
-                      login
-                    }
-                  }
-                }
-                lastComment: comments(last: 1) {
-                  nodes {
-                    author {
-                      login
-                    }
-                    url
-                    reactions(first: 7) {
-                        edges {
-                            node {
-                                content
-                                user {
-                                    login
-                                }
-                            }
-                        }
-                    }
-                  }
-                }
+              node {` + reviewThreadFields + `
               }
             }
           }

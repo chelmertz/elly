@@ -57,9 +57,7 @@ func threadOf(comments ...prReviewThreadCommentGraphQl) prReviewThreadGraphQl {
 func prWithThread(author string, thread prReviewThreadGraphQl) prSearchResultGraphQl {
 	return prSearchResultGraphQl{
 		Author: struct{ Login string }{Login: author},
-		ReviewThreads: struct {
-			Edges []struct{ Node prReviewThreadGraphQl }
-		}{
+		ReviewThreads: prReviewThreadConnectionGraphQl{
 			Edges: []struct{ Node prReviewThreadGraphQl }{{Node: thread}},
 		},
 	}
@@ -254,4 +252,65 @@ func counterValue(t *testing.T, c prometheus.Counter) float64 {
 		t.Fatal(err)
 	}
 	return m.GetCounter().GetValue()
+}
+
+// A PR with more review threads than the search query's first page must have
+// the remaining pages fetched per PR before counting, or the newest threads
+// (which come last) are ignored: seen 2026-09-08 on a PR with 80 threads,
+// six of them unresolved with the reviewer's last word, reported as zero.
+func Test_QueryGithub_PaginatesReviewThreadsPerPR(t *testing.T) {
+	var pageRequests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct{ Query string }
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		q := payload.Query
+		switch {
+		case strings.Contains(q, "search(type: ISSUE"):
+			// first page: one resolved thread, more to come
+			_, _ = w.Write([]byte(`{"data":{"search":{"edges":[{"node":{
+				"id":"PR_1","url":"https://github.com/o/r/pull/1","title":"t","author":{"login":"me"},
+				"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
+				"reviewThreads":{"totalCount":2,"pageInfo":{"hasNextPage":true,"endCursor":"c1"},"edges":[
+					{"node":{"isResolved":true,"firstComment":{"nodes":[{"author":{"login":"other"}}]},"lastComment":{"nodes":[{"author":{"login":"me"},"reactions":{"edges":[]}}]}}}
+				]}
+			}}]}}}`))
+		case strings.Contains(q, `node(id: "PR_1")`) && strings.Contains(q, `after: "c1"`):
+			pageRequests++
+			// second page: the unresolved thread where the reviewer has the last word
+			_, _ = w.Write([]byte(`{"data":{"node":{"reviewThreads":{"totalCount":2,"pageInfo":{"hasNextPage":false,"endCursor":"c2"},"edges":[
+				{"node":{"isResolved":false,"firstComment":{"nodes":[{"author":{"login":"other"}}]},"lastComment":{"nodes":[{"author":{"login":"other"},"reactions":{"edges":[]}}]}}}
+			]}}}}`))
+		default:
+			t.Errorf("unexpected query: %s", q)
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	prs, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prs) != 1 || prs[0].ThreadsActionable != 1 {
+		t.Fatalf("expected the second page's unresolved thread to count as actionable, got %+v", prs)
+	}
+	if pageRequests != 1 {
+		t.Fatalf("expected exactly one follow-up page request, got %d", pageRequests)
+	}
+}
+
+// The follow-up query must fetch the same thread fields as the search query,
+// or the two pages are counted by different rules.
+func Test_ReviewThreadPageQuery_SharesThreadFields(t *testing.T) {
+	q := queryReviewThreadsPage("PR_1", "c1")
+	for _, want := range []string{`node(id: "PR_1")`, `after: "c1"`, "firstComment: comments(first: 1)", "lastComment: comments(last: 1)", "isResolved", "pageInfo"} {
+		if !strings.Contains(q, want) {
+			t.Errorf("page query lacks %q", want)
+		}
+	}
+	if !strings.Contains(querySearchPrsInvolvingUser("me"), "hasNextPage") {
+		t.Error("search query lacks pageInfo, so no follow-up can ever happen")
+	}
 }
