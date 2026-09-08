@@ -13,6 +13,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	"time"
 )
 
 func Test_WhenReviewThreadIsEmpty_WillNotRequireAction(t *testing.T) {
@@ -377,5 +378,146 @@ func Test_RereviewFrom(t *testing.T) {
 		if strings.Join(got, ",") != strings.Join(c.want, ",") {
 			t.Errorf("%s: got %v want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// Reactions are the "acknowledged" mechanism: a thumbs-up from us closes an
+// otherwise actionable thread, and someone else's reaction to our last word
+// reopens it. Neither branch was covered.
+func Test_ReactionsDecideAcknowledgement(t *testing.T) {
+	reactBy := func(logins ...string) prReviewThreadCommentReactionGraphQl {
+		var r prReviewThreadCommentReactionGraphQl
+		for _, l := range logins {
+			var e struct {
+				Node struct {
+					Content string
+					User    struct{ Login string }
+				}
+			}
+			e.Node.Content, e.Node.User.Login = "THUMBS_UP", l
+			r.Edges = append(r.Edges, e)
+		}
+		return r
+	}
+	// someone else has the last word on my PR, but I reacted to it
+	theirs := commentBy("adam")
+	theirs.Reactions = reactBy("me")
+	if a, _ := actionableThreads(prWithThread("me", threadOf(commentBy("adam"), theirs)), "me"); a != 0 {
+		t.Errorf("my reaction must acknowledge their last comment, got %d actionable", a)
+	}
+	// I have the last word on my PR and someone else reacted to it
+	mine := commentBy("me")
+	mine.Reactions = reactBy("adam")
+	if a, _ := actionableThreads(prWithThread("me", threadOf(commentBy("me"), mine)), "me"); a != 1 {
+		t.Errorf("their reaction to my last comment must be actionable, got %d", a)
+	}
+	// I started a thread on someone else's PR and they answered last
+	if a, _ := actionableThreads(prWithThread("adam", threadOf(commentBy("me"), commentBy("adam"))), "me"); a != 1 {
+		t.Errorf("my own question answered by the author must be actionable, got %d", a)
+	}
+	// resolved, outdated and collapsed threads never count
+	for _, mark := range []func(*prReviewThreadGraphQl){
+		func(th *prReviewThreadGraphQl) { th.IsResolved = true },
+		func(th *prReviewThreadGraphQl) { th.IsOutdated = true },
+		func(th *prReviewThreadGraphQl) { th.IsCollapsed = true },
+	} {
+		th := threadOf(commentBy("adam"), commentBy("adam"))
+		mark(&th)
+		if a, w := actionableThreads(prWithThread("me", th), "me"); a != 0 || w != 0 {
+			t.Errorf("closed thread counted: %d actionable, %d waiting", a, w)
+		}
+	}
+}
+
+// The last PR commenter drives points and p-launcher's "who spoke last";
+// CI bots must not take that slot from a human.
+func Test_QueryGithub_IgnoresBotsAsLastCommenter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"search":{"edges":[{"node":{
+			"id":"PR_1","url":"https://github.com/o/r/pull/1","title":"t","author":{"login":"me"},
+			"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
+			"comments":{"edges":[
+				{"node":{"author":{"login":"adam"},"updatedAt":"2026-09-08T09:00:00Z"}},
+				{"node":{"author":{"login":"github-actions"},"updatedAt":"2026-09-08T09:30:00Z"}},
+				{"node":{"author":{"login":"vercel"},"updatedAt":"2026-09-08T09:45:00Z"}}
+			]},
+			"reviewThreads":{"totalCount":0,"pageInfo":{"hasNextPage":false},"edges":[]}
+		}}]}}}`))
+	}))
+	t.Cleanup(srv.Close)
+	prs, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prs) != 1 || prs[0].LastPrCommenter != "adam" {
+		t.Fatalf("expected the human as last commenter, got %+v", prs)
+	}
+}
+
+// An approval that github leaves out of reviewDecision is picked up from the
+// reviews list, but only when nothing stronger is set: a PR with changes
+// requested must not be reported as approved.
+func Test_QueryGithub_ApprovalFromReviewsOnlyWhenNoDecision(t *testing.T) {
+	pr := func(decision string) string {
+		return `{"data":{"search":{"edges":[{"node":{
+			"id":"PR_1","url":"https://github.com/o/r/pull/1","title":"t","author":{"login":"me"},
+			"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
+			"reviewDecision":` + decision + `,
+			"reviews":{"edges":[{"node":{"author":{"login":"adam"},"state":"APPROVED","submittedAt":"2026-09-07T10:00:00Z"}}]},
+			"reviewThreads":{"totalCount":0,"pageInfo":{"hasNextPage":false},"edges":[]}
+		}}]}}}`
+	}
+	for _, c := range []struct{ decision, want string }{
+		{`""`, "APPROVED"},
+		{`"CHANGES_REQUESTED"`, "CHANGES_REQUESTED"},
+		{`"REVIEW_REQUIRED"`, "REVIEW_REQUIRED"},
+	} {
+		srv := fixedResponseServer(t, 200, pr(c.decision))
+		prs, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(prs) != 1 || prs[0].ReviewStatus != c.want {
+			t.Errorf("reviewDecision %s: want %s, got %+v", c.decision, c.want, prs)
+		}
+	}
+}
+
+// A failing follow-up page must not fail the whole poll: the PR keeps the
+// threads the search returned, and every other PR is still stored.
+func Test_QueryGithub_ThreadPageFailureKeepsThePoll(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct{ Query string }
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		if strings.Contains(payload.Query, "search(type: ISSUE") {
+			_, _ = w.Write([]byte(`{"data":{"search":{"edges":[{"node":{
+				"id":"PR_1","url":"https://github.com/o/r/pull/1","title":"t","author":{"login":"me"},
+				"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
+				"reviewThreads":{"totalCount":2,"pageInfo":{"hasNextPage":true,"endCursor":"c1"},"edges":[
+					{"node":{"isResolved":false,"firstComment":{"nodes":[{"author":{"login":"adam"}}]},"lastComment":{"nodes":[{"author":{"login":"adam"},"reactions":{"edges":[]}}]}}}
+				]}
+			}}]}}}`))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	prs, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("a failed thread page must not fail the poll: %v", err)
+	}
+	if len(prs) != 1 || prs[0].ThreadsActionable != 1 {
+		t.Fatalf("expected the first page's thread to still count, got %+v", prs)
+	}
+}
+
+func Test_GhExpiration(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	got, ok := ghExpiration("2026-12-24 09:00:00 +0100", logger)
+	if !ok || !got.Equal(time.Date(2026, 12, 24, 8, 0, 0, 0, time.UTC)) {
+		t.Fatalf("got %v %v", got, ok)
+	}
+	if _, ok := ghExpiration("tomorrow", logger); ok {
+		t.Fatal("unparseable expiration must not be reported as parsed")
 	}
 }

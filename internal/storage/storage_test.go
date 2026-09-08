@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"database/sql"
+	"github.com/chelmertz/elly/internal/types"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -201,4 +202,46 @@ func TestNewStorage_AddsRereviewColumnToOldDatabase(t *testing.T) {
 	}
 	// a second start must treat the existing column as a no-op
 	NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
+}
+
+// Burying is per URL and survives a poll, but a PR that was updated since it
+// was buried comes back: that is the whole point of burying temporarily.
+func TestStoreRepoPrs_BuryPersistsUntilThePrMoves(t *testing.T) {
+	store := setupTestStorage(t)
+	buried := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	pr := func(url string, updated time.Time) types.ViewPr {
+		return types.ViewPr{Url: url, Title: "t", Author: "me", RepoName: "r", RepoOwner: "o",
+			LastUpdated: updated, ReviewRequestedFromUsers: []string{}, RereviewFrom: []string{}, RawJsonResponse: []byte("{}")}
+	}
+	quiet, moved := "https://github.com/o/r/pull/1", "https://github.com/o/r/pull/2"
+	if err := store.StoreRepoPrs([]types.ViewPr{pr(quiet, buried), pr(moved, buried)}); err != nil {
+		t.Fatal(err)
+	}
+	for _, url := range []string{quiet, moved} {
+		if err := store.Bury(url); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// next poll: one PR unchanged, one updated after it was buried
+	if err := store.StoreRepoPrs([]types.ViewPr{pr(quiet, buried), pr(moved, buried.Add(time.Hour))}); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, p := range store.Prs().Prs {
+		got[p.Url] = p.Buried
+	}
+	if !got[quiet] {
+		t.Error("an unchanged PR must stay buried across polls")
+	}
+	if got[moved] {
+		t.Error("a PR updated since it was buried must be unburied")
+	}
+	if err := store.Unbury(quiet); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range store.Prs().Prs {
+		if p.Url == quiet && p.Buried {
+			t.Error("unbury did not stick")
+		}
+	}
 }
