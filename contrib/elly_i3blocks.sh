@@ -26,7 +26,9 @@ count=$(jq 'length' <(echo "$prs"))
 if [ "$count" -gt 0 ]; then
 	echo "$text_or_icon $count$backoff_suffix"
 	echo "$text_or_icon $count$backoff_suffix"
-	echo "#00ff00"
+	# fg role of the dotfiles bar palette (i3blocks-color is generated from
+	# nix/home.nix in the dotfiles repo); plain green without that helper
+	command -v i3blocks-color >/dev/null && i3blocks-color fg || echo "#00ff00"
 
 	# right click - open all PRs in browser, one by one
 	if [ "$BLOCK_BUTTON" = "3" ]; then
