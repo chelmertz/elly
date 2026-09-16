@@ -32,31 +32,47 @@ flowchart TB
 
 ## PAT Oauth permissions
 
-A **fine-grained** Github personal access token (`github_pat_…`, created at
+Two token classes work, and they differ in exactly one thing: whether elly can
+name a failing Github Actions job.
+
+### Fine-grained (recommended, read-only)
+
+A **fine-grained** token (`github_pat_…`, created at
 <https://github.com/settings/personal-access-tokens>) with these _repository_
 permissions:
 
-- checks (read only)
 - commit status (read only)
 - contents (read only)
 - metadata (read only)
 - pull requests (read only)
 
-The two CI permissions are not interchangeable, and having one without the
-other fails quietly. A pull request's checks arrive as two different types:
-Github Actions jobs are `CheckRun` and need **checks**, while everything
-reported from outside Github - buildkite, jenkins, sonarcloud - is
-`StatusContext` and needs **commit status**. Missing either one still lets the
-overall red/green verdict through, because that is an aggregate Github
-computes for you; what disappears is the name of what failed, and it
-disappears silently, as nulls rather than as an error. Elly notices and says
-so on its own page rather than showing you an empty list.
-
-Don't forget to also:
+Also:
 
 - allow the token access to "all repositories"
 - adjust the "resource owner" to your personal or your workplace's organisation
 - set a proper expiration date
+
+**A fine-grained token cannot name a failing Github Actions job.** Github
+restricts the _checks_ permission to Github Apps and does not offer it in the
+fine-grained token UI at all, so there is nothing to grant. A pull request's
+checks arrive as two types: Github Actions jobs are `CheckRun` and need
+_checks_, while everything reported from outside Github - buildkite, jenkins,
+sonarcloud - is `StatusContext` and is covered by _commit status_. The overall
+red/green verdict is an aggregate Github computes for you and stays correct
+either way; what disappears is the name of the Actions job that failed, and it
+disappears silently, as nulls rather than as an error. Elly notices and says so
+on its own page rather than showing you an empty list.
+
+### Classic (names the Actions jobs, much broader)
+
+A **classic** token (`ghp_…`, <https://github.com/settings/tokens>) with the
+`repo` scope reads `CheckRun` and so gets the names. The cost is that `repo` is
+read _and write_ on every repository you can reach, where the fine-grained
+token above is read-only on four things. Authorise it for any SSO organisation
+you need, and note that an organisation can forbid classic tokens outright.
+
+Pick the fine-grained one unless the names of failing Actions jobs are worth
+that blast radius.
 
 ## Installation
 

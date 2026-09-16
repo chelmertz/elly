@@ -732,7 +732,17 @@ func Test_fetchFailingChecks_ReportsTheMissingPermission(t *testing.T) {
 	if degraded.Kind != "checks_unreadable" {
 		t.Errorf("kind = %q", degraded.Kind)
 	}
-	if !strings.Contains(degraded.Remedy, "Checks") {
-		t.Errorf("the remedy must name the permission to grant, got %q", degraded.Remedy)
+	// The remedy used to say "grant this token the Checks permission", which no
+	// fine-grained token can be given: github offers Checks to Github Apps only,
+	// and the permission does not appear in the token UI at all. Advice that
+	// cannot be followed is worse than none, so assert against the literal
+	// wording rather than against a constant this file could rename with it.
+	if strings.Contains(degraded.Remedy, "Grant this token") {
+		t.Errorf("the remedy must not ask for a permission github will not issue, got %q", degraded.Remedy)
+	}
+	for _, want := range []string{"Github Apps", "classic", "repo"} {
+		if !strings.Contains(degraded.Remedy, want) {
+			t.Errorf("the remedy must mention %q, got %q", want, degraded.Remedy)
+		}
 	}
 }

@@ -865,7 +865,8 @@ func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Log
 		}
 		// GraphQL reports per-field failures in a top-level "errors" array while
 		// still answering 200 with nulls in place of the nodes it refused. A
-		// fine-grained PAT without "Checks: read" does exactly that: the rollup
+		// fine-grained PAT does exactly that, and cannot be fixed by granting
+		// anything, since github offers "Checks" to Github Apps only: the rollup
 		// state resolves, every context comes back null, and the response is
 		// otherwise indistinguishable from a PR with nothing failing. Reporting
 		// that as a complete, empty list is a lie about a red PR, so it is
@@ -881,16 +882,18 @@ func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Log
 				slog.String("pr_url", prUrl),
 				slog.String("type", envelope.Errors[0].Type),
 				slog.String("message", envelope.Errors[0].Message),
-				slog.String("hint", "a fine-grained PAT needs the Checks and Commit statuses read permissions"))
+				slog.String("hint", "github restricts the Checks permission to Github Apps; only a classic token with the repo scope names an Actions job"))
 			degraded := &types.Degradation{
 				Kind:    "checks_unreadable",
 				Message: "Github refuses to name the failing checks: " + envelope.Errors[0].Message,
 				Seen:    time.Now(),
 			}
 			if envelope.Errors[0].Type == "FORBIDDEN" {
-				degraded.Remedy = "Grant this token read access to \"Checks\" (Github Actions jobs) " +
-					"and \"Commit statuses\" (buildkite and other external reporters). " +
-					"Red or green stays correct without them; only the names of the failing checks are missing."
+				degraded.Remedy = "Github restricts the \"Checks\" permission to Github Apps, so a fine-grained " +
+					"token cannot be granted it and cannot name a failing Actions job. Swap in a classic " +
+					"token with the \"repo\" scope to see the names, at the cost of a far broader token. " +
+					"Red or green is correct either way. External reporters such as buildkite are named " +
+					"already, through \"Commit statuses\"."
 			}
 			return failing, false, degraded
 		}

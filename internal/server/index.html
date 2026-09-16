@@ -287,11 +287,12 @@
                     <p style="margin: 0.5em 0; font-size: 0.9em; color: var(--muted);">
                         Create a <strong>fine-grained</strong> PAT at
                         <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">github.com/settings/personal-access-tokens</a>,
-                        with read-only repository access to <em>checks</em>, <em>commit
-                        status</em>, <em>contents</em>, <em>metadata</em> and <em>pull
-                        requests</em>. Without <em>checks</em> a failing Github Actions
-                        job cannot be named; without <em>commit status</em> neither can
-                        buildkite or any other external reporter.
+                        with read-only repository access to <em>commit status</em>,
+                        <em>contents</em>, <em>metadata</em> and <em>pull requests</em>.
+                        Such a token cannot name a failing Github Actions job: github
+                        offers <em>checks</em> to Github Apps only. A classic token with
+                        the <em>repo</em> scope names them, and is far broader. Red or
+                        green is right either way.
                     </p>
                     <input type="password" id="pat-input" name="token" placeholder="github_pat_..." style="width: 100%; padding: 0.5em; margin: 0.5em 0; box-sizing: border-box;">
                     <p class="form-error" hidden style="color: #c00;"></p>
