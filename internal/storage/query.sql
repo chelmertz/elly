@@ -69,3 +69,9 @@ insert or replace into pat (pat, expires_at, username, active) values (?, ?, ?, 
 
 -- name: ClearActivePAT :exec
 update pat set active = 0 where active = 1;
+
+-- name: StoreDegradations :exec
+replace into meta (key, value) values ('degradations', ?);
+
+-- name: GetDegradations :one
+select value from meta where key = 'degradations' limit 1;

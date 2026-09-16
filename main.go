@@ -154,7 +154,7 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 			continue
 		}
 
-		prs, err := github.QueryGithub(baseURL, storedPat.Token, storedPat.Username, logger)
+		prs, degradations, err := github.QueryGithub(baseURL, storedPat.Token, storedPat.Username, logger)
 		if err != nil {
 			var rl *github.ErrRateLimited
 			if errors.As(err, &rl) {
@@ -169,6 +169,15 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 			continue
 		}
 		tracker.Succeeded()
+		// Written on every successful poll, including when the slice is empty,
+		// so a deficiency that has been fixed stops being reported.
+		if err := store.StoreDegradations(degradations); err != nil {
+			logger.Warn("could not store degradations", slog.Any("error", err))
+		}
+		for _, d := range degradations {
+			logger.Warn("degraded", slog.String("kind", d.Kind),
+				slog.String("message", d.Message), slog.String("remedy", d.Remedy))
+		}
 		if err := store.StoreRepoPrs(prs); err != nil {
 			logger.Error("could not store prs", slog.Any("error", err))
 		}

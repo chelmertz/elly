@@ -31,9 +31,10 @@ func testLogger(t *testing.T) *slog.Logger {
 
 // testStorage is a minimal in-memory storage for testing initPAT.
 type testStorage struct {
-	pat     storage.StoredPAT
-	hasPAT  bool
-	cleared bool
+	degradations []types.Degradation
+	pat          storage.StoredPAT
+	hasPAT       bool
+	cleared      bool
 }
 
 func newTestStorage(token, username string) *testStorage {
@@ -310,3 +311,10 @@ func TestRefreshLoop_ClientErrorBacksOffAndKeepsPolling(t *testing.T) {
 		t.Fatalf("expected the failed fetch to be logged with its error, got:\n%s", logs.String())
 	}
 }
+
+func (s *testStorage) StoreDegradations(ds []types.Degradation) error {
+	s.degradations = ds
+	return nil
+}
+
+func (s *testStorage) Degradations() []types.Degradation { return s.degradations }

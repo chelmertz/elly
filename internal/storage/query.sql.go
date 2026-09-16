@@ -212,6 +212,17 @@ func (q *Queries) GetActivePAT(ctx context.Context) (GetActivePATRow, error) {
 	return i, err
 }
 
+const getDegradations = `-- name: GetDegradations :one
+select value from meta where key = 'degradations' limit 1
+`
+
+func (q *Queries) GetDegradations(ctx context.Context) (string, error) {
+	row := q.db.QueryRowContext(ctx, getDegradations)
+	var value string
+	err := row.Scan(&value)
+	return value, err
+}
+
 const getLastFetched = `-- name: GetLastFetched :one
 select value from meta where key = 'last_fetched' limit 1
 `
@@ -329,6 +340,15 @@ func (q *Queries) ListPrs(ctx context.Context) ([]Pr, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const storeDegradations = `-- name: StoreDegradations :exec
+replace into meta (key, value) values ('degradations', ?)
+`
+
+func (q *Queries) StoreDegradations(ctx context.Context, value string) error {
+	_, err := q.db.ExecContext(ctx, storeDegradations, value)
+	return err
 }
 
 const storeLastFetched = `-- name: StoreLastFetched :exec
