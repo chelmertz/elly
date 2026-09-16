@@ -557,3 +557,50 @@ func TestCheckContextLabel(t *testing.T) {
 		t.Error("a nameless check must still have a label")
 	}
 }
+
+// The names of the failing checks come from a follow-up query. When this was
+// first deployed the rollup state stored correctly while every name came back
+// empty, so the parse gets a canned response of the shape github actually
+// returns, including both context shapes and a second page.
+func Test_fetchFailingChecks(t *testing.T) {
+	page1 := `{"data":{"node":{"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{
+		"totalCount": 4,
+		"pageInfo": {"hasNextPage": true, "endCursor": "CURSOR1"},
+		"nodes": [
+			{"__typename":"CheckRun","name":"scan (infra/apidocs)","conclusion":"FAILURE","status":"COMPLETED"},
+			{"__typename":"CheckRun","name":"build","conclusion":"SUCCESS","status":"COMPLETED"}
+		]}}}}]}}}}`
+	page2 := `{"data":{"node":{"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{
+		"totalCount": 4,
+		"pageInfo": {"hasNextPage": false, "endCursor": ""},
+		"nodes": [
+			{"__typename":"StatusContext","context":"buildkite/webapp","state":"FAILURE"},
+			{"__typename":"StatusContext","context":"buildkite/webapp/pipeline","state":"SUCCESS"}
+		]}}}}]}}}}`
+
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			_, _ = w.Write([]byte(page1))
+			return
+		}
+		_, _ = w.Write([]byte(page2))
+	}))
+	defer srv.Close()
+
+	failing, complete := fetchFailingChecks(srv.URL, "token", "PR_node", "https://github.com/o/r/pull/1",
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if !complete {
+		t.Error("both pages were served, so the list must be complete")
+	}
+	want := []string{"scan (infra/apidocs)", "buildkite/webapp"}
+	if len(failing) != len(want) {
+		t.Fatalf("failing = %v, want %v", failing, want)
+	}
+	for i := range want {
+		if failing[i] != want[i] {
+			t.Errorf("failing[%d] = %q, want %q", i, failing[i], want[i])
+		}
+	}
+}
