@@ -3,7 +3,9 @@ package github
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"slices"
 	"log/slog"
 	"math/rand"
 	"net/http"
@@ -162,7 +164,7 @@ func countCommentsByUser(pr prSearchResultGraphQl, username string) map[int]stru
 // of the 5000 hourly points and run right at github's 10 s query timeout.
 // Only the first comment's author and the last comment's reactions are used.
 func Test_Query_FetchesOnlyFirstAndLastReviewThreadComment(t *testing.T) {
-	q := querySearchPrsInvolvingUser("me")
+	q := querySearchPrs(qualifierInvolves, "me")
 	for _, want := range []string{"firstComment: comments(first: 1)", "lastComment: comments(last: 1)"} {
 		if !strings.Contains(q, want) {
 			t.Errorf("query lacks %q", want)
@@ -313,7 +315,7 @@ func Test_ReviewThreadPageQuery_SharesThreadFields(t *testing.T) {
 			t.Errorf("page query lacks %q", want)
 		}
 	}
-	if !strings.Contains(querySearchPrsInvolvingUser("me"), "hasNextPage") {
+	if !strings.Contains(querySearchPrs(qualifierInvolves, "me"), "hasNextPage") {
 		t.Error("search query lacks pageInfo, so no follow-up can ever happen")
 	}
 }
@@ -788,10 +790,116 @@ func Test_QueryGithub_TeamReviewersAreNamed(t *testing.T) {
 // The search query has to ask for the team's name, or no amount of parsing can
 // recover it.
 func Test_SearchQuery_AsksForTeamReviewers(t *testing.T) {
-	q := querySearchPrsInvolvingUser("me")
+	q := querySearchPrs(qualifierInvolves, "me")
 	for _, want := range []string{"... on Team", "name"} {
 		if !strings.Contains(q, want) {
 			t.Errorf("query is missing %q", want)
 		}
+	}
+}
+
+// github's "involves:" is author OR assignee OR mentions OR commenter, and
+// review requests are none of those. A PR someone asked me to review and that
+// I have not spoken on was invisible until a second search was added.
+func Test_QueryGithub_IncludesReviewRequestedPrs(t *testing.T) {
+	pr := func(n, author string) string {
+		return fmt.Sprintf(`{"node":{
+			"id":"PR_%s","url":"https://github.com/o/r/pull/%s","title":"t%s","author":{"login":%q},
+			"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
+			"comments":{"edges":[]},
+			"reviewThreads":{"totalCount":0,"pageInfo":{"hasNextPage":false},"edges":[]}
+		}}`, n, n, n, author)
+	}
+	var qualifiers []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), "review-requested:") {
+			qualifiers = append(qualifiers, "review-requested")
+			// pull/1 is in both searches and must survive as one row.
+			_, _ = fmt.Fprintf(w, `{"data":{"search":{"edges":[%s,%s]}}}`, pr("1", "me"), pr("2", "adam"))
+			return
+		}
+		qualifiers = append(qualifiers, "involves")
+		_, _ = fmt.Fprintf(w, `{"data":{"search":{"edges":[%s]}}}`, pr("1", "me"))
+	}))
+	t.Cleanup(srv.Close)
+
+	prs, degradations, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(qualifiers) != 2 {
+		t.Fatalf("expected both searches, got %v", qualifiers)
+	}
+	if len(degradations) != 0 {
+		t.Errorf("both searches answered, so nothing is degraded: %+v", degradations)
+	}
+	var urls []string
+	for _, p := range prs {
+		urls = append(urls, p.Url)
+	}
+	if len(urls) != 2 {
+		t.Fatalf("the PR in both searches must appear once, got %q", urls)
+	}
+	if !slices.Contains(urls, "https://github.com/o/r/pull/2") {
+		t.Errorf("the review-requested PR is missing, got %q", urls)
+	}
+}
+
+// A failed second search must not take the whole poll with it, and must not
+// pass silently either: the list is then missing review requests and says so.
+func Test_QueryGithub_ReviewRequestedFailureIsDegradedNotFatal(t *testing.T) {
+	noRetryPause(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), "review-requested:") {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"search":{"edges":[{"node":{
+			"id":"PR_1","url":"https://github.com/o/r/pull/1","title":"t","author":{"login":"me"},
+			"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
+			"comments":{"edges":[]},
+			"reviewThreads":{"totalCount":0,"pageInfo":{"hasNextPage":false},"edges":[]}
+		}}]}}}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	prs, degradations, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("the first search answered, so the poll stands: %v", err)
+	}
+	if len(prs) != 1 {
+		t.Errorf("expected the involves: result to survive, got %d", len(prs))
+	}
+	var kinds []string
+	for _, d := range degradations {
+		kinds = append(kinds, d.Kind)
+	}
+	if !slices.Contains(kinds, "review_requests_unreadable") {
+		t.Errorf("a missing second search must be reported, got %q", kinds)
+	}
+}
+
+// Backoff lives in the caller and keys off the error, so a rate limit hit by
+// the second search has to propagate. Degrading instead would leave the poll
+// running at full cadence against a github that is already refusing it.
+func Test_QueryGithub_RateLimitOnReviewRequestedStillBacksOff(t *testing.T) {
+	noRetryPause(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), "review-requested:") {
+			w.Header().Set("Retry-After", "60")
+			_, _ = w.Write([]byte(`{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"search":{"edges":[]}}}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	_, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	var rl *ErrRateLimited
+	if !errors.As(err, &rl) {
+		t.Fatalf("a rate limit must reach the caller, got %v", err)
 	}
 }

@@ -33,12 +33,14 @@ func (e *ErrRateLimited) Error() string {
 	return fmt.Sprintf("%v: rate limited, next allowed after %s", ErrClient, e.UnblockedAt)
 }
 
+type prEdgeGraphQl struct {
+	Node json.RawMessage
+}
+
 type querySearchPrsInvolvingMeGraphQl struct {
 	Data struct {
 		Search struct {
-			Edges []struct {
-				Node json.RawMessage
-			}
+			Edges []prEdgeGraphQl
 		}
 	}
 }
@@ -158,7 +160,7 @@ type prReviewThreadGraphQl struct {
 	IsOutdated  bool
 	IsCollapsed bool
 	// FirstComment and LastComment are the aliases used in
-	// querySearchPrsInvolvingUser, each holding at most one comment
+	// querySearchPrs, each holding at most one comment
 	FirstComment struct {
 		Nodes []prReviewThreadCommentGraphQl
 	}
@@ -480,28 +482,63 @@ func QueryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([]types.ViewPr, []types.Degradation, error) {
 	// Keyed by Kind so one refusal repeated across every red PR is reported once.
 	degradations := map[string]types.Degradation{}
-	respBody, err := graphqlRequest(baseURL, querySearchPrsInvolvingUser(username), token, logger)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not query github for PRs: %w", err)
-	}
 
 	// Using json.RawMessage for the response, so that we can store the raw
 	// JSON (not the parsed response) of each PR, for debugging reasons.
 	// Debugging > efficiency, in this case.
-	var rawResponse querySearchPrsInvolvingMeGraphQl
-	err = json.Unmarshal(respBody, &rawResponse)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not unmarshal github response: %w", err)
+	search := func(qualifier string) ([]prEdgeGraphQl, error) {
+		respBody, err := graphqlRequest(baseURL, querySearchPrs(qualifier, username), token, logger)
+		if err != nil {
+			return nil, err
+		}
+		var rawResponse querySearchPrsInvolvingMeGraphQl
+		if err := json.Unmarshal(respBody, &rawResponse); err != nil {
+			return nil, fmt.Errorf("could not unmarshal github response: %w", err)
+		}
+		return rawResponse.Data.Search.Edges, nil
 	}
 
-	viewPrs := make([]types.ViewPr, 0)
+	edges, err := search(qualifierInvolves)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not query github for PRs: %w", err)
+	}
 
-	for _, prEdge := range rawResponse.Data.Search.Edges {
+	// A PR can match both searches; the loop below keeps the first sighting.
+	// Losing this search costs only the PRs we have never spoken on, so it is
+	// reported rather than allowed to sink the whole poll.
+	requested, err := search(qualifierReviewRequested)
+	if err != nil {
+		// Rate limiting is the one failure that must not be absorbed: the
+		// caller backs off on it, and a degradation would keep the poll
+		// hammering github at full cadence.
+		var rl *ErrRateLimited
+		if errors.As(err, &rl) {
+			return nil, nil, fmt.Errorf("could not query github for review requests: %w", err)
+		}
+		logger.Warn("could not query github for review requests", slog.Any("err", err))
+		degradations["review_requests_unreadable"] = types.Degradation{
+			Kind:    "review_requests_unreadable",
+			Message: "Could not search for review requests: " + err.Error(),
+			Remedy: "The list is missing any PR you were asked to review but have never commented on. " +
+				"Every other PR is unaffected. This usually clears on the next poll.",
+			Seen: time.Now(),
+		}
+	}
+	edges = append(edges, requested...)
+
+	viewPrs := make([]types.ViewPr, 0)
+	seen := make(map[string]bool, len(edges))
+
+	for _, prEdge := range edges {
 		var pr prSearchResultGraphQl
 		err = json.Unmarshal(prEdge.Node, &pr)
 		if err != nil {
 			return nil, nil, fmt.Errorf("could not re-marshal github PR, to store raw json for debugging (url=%s): %w", pr.Url, err)
 		}
+		if seen[pr.Url] {
+			continue
+		}
+		seen[pr.Url] = true
 		reviewStatus := pr.ReviewDecision
 
 		updatedAt, err := time.Parse(time.RFC3339, pr.UpdatedAt)
@@ -1026,12 +1063,23 @@ func fetchRemainingReviewThreads(baseURL, token string, pr *prSearchResultGraphQ
 	return nil
 }
 
-func querySearchPrsInvolvingUser(username string) string {
+// The two qualifiers elly searches on. "involves:" is a logical OR between
+// author, assignee, mentions and commenter - review requests are none of those,
+// so a PR someone asked us to review and that we have never spoken on does not
+// match it. They are two requests rather than two aliased searches in one, to
+// stay well clear of MAX_NODE_LIMIT_EXCEEDED and so a failure of the second
+// costs only the review requests.
+const (
+	qualifierInvolves        = "involves"
+	qualifierReviewRequested = "review-requested"
+)
+
+func querySearchPrs(qualifier, username string) string {
 	// the amount of nodes given in "first: x", etc. needs to be a bit
 	// calibrated - if everything is too high, github will complain with a
 	// MAX_NODE_LIMIT_EXCEEDED error
 	query := `query {
-  search(type: ISSUE, query: "state:open involves:%s type:pr archived:false", first: 100) {
+  search(type: ISSUE, query: "state:open ` + qualifier + `:%s type:pr archived:false", first: 100) {
     edges {
       node {
         ... on PullRequest {
