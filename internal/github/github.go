@@ -497,6 +497,12 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 		checksComplete := true
 		if checksState == "FAILURE" || checksState == "ERROR" {
 			checksFailing, checksComplete = fetchFailingChecks(baseURL, token, pr.Id, pr.Url, logger)
+			// The rollup says red, so at least one check failed. Coming back
+			// with no names means they could not be read, not that there are
+			// none - never let that render as "red, 0 failing checks".
+			if len(checksFailing) == 0 {
+				checksComplete = false
+			}
 		}
 
 		viewPr := types.ViewPr{
@@ -805,6 +811,27 @@ func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Log
 		}
 		if err := json.Unmarshal(body, &page); err != nil {
 			logger.Warn("could not parse failing checks", slog.String("pr_url", prUrl), slog.Any("err", err))
+			return failing, false
+		}
+		// GraphQL reports per-field failures in a top-level "errors" array while
+		// still answering 200 with nulls in place of the nodes it refused. A
+		// fine-grained PAT without "Checks: read" does exactly that: the rollup
+		// state resolves, every context comes back null, and the response is
+		// otherwise indistinguishable from a PR with nothing failing. Reporting
+		// that as a complete, empty list is a lie about a red PR, so it is
+		// reported as incomplete instead.
+		var envelope struct {
+			Errors []struct {
+				Type    string
+				Message string
+			}
+		}
+		if err := json.Unmarshal(body, &envelope); err == nil && len(envelope.Errors) > 0 {
+			logger.Warn("github refused some check contexts",
+				slog.String("pr_url", prUrl),
+				slog.String("type", envelope.Errors[0].Type),
+				slog.String("message", envelope.Errors[0].Message),
+				slog.String("hint", "a fine-grained PAT needs the Checks and Commit statuses read permissions"))
 			return failing, false
 		}
 		if len(page.Data.Node.Commits.Nodes) == 0 || page.Data.Node.Commits.Nodes[0].Commit.StatusCheckRollup == nil {

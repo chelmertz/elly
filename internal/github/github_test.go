@@ -604,3 +604,27 @@ func Test_fetchFailingChecks(t *testing.T) {
 		}
 	}
 }
+
+// A fine-grained PAT without "Checks: read" answers 200 with the rollup state
+// intact, every context null, and the refusal only in the top-level errors
+// array. That must never render as "red, 0 failing checks".
+func Test_fetchFailingChecks_RefusedContextsAreNotAnEmptyList(t *testing.T) {
+	body := `{"data":{"node":{"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{
+		"totalCount": 138,
+		"pageInfo": {"hasNextPage": false, "endCursor": ""},
+		"nodes": [null, null]}}}}]}}},
+		"errors":[{"type":"FORBIDDEN","message":"Resource not accessible by personal access token"}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	failing, complete := fetchFailingChecks(srv.URL, "token", "PR_node", "https://github.com/o/r/pull/1",
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if len(failing) != 0 {
+		t.Errorf("no names are readable, got %v", failing)
+	}
+	if complete {
+		t.Error("a refused response must report as incomplete, or a red PR reads as having no failing checks")
+	}
+}
