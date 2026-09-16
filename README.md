@@ -32,12 +32,25 @@ flowchart TB
 
 ## PAT Oauth permissions
 
-A Github personal access token these _repository_ permissions:
+A **fine-grained** Github personal access token (`github_pat_…`, created at
+<https://github.com/settings/personal-access-tokens>) with these _repository_
+permissions:
 
+- checks (read only)
 - commit status (read only)
 - contents (read only)
 - metadata (read only)
 - pull requests (read only)
+
+The two CI permissions are not interchangeable, and having one without the
+other fails quietly. A pull request's checks arrive as two different types:
+Github Actions jobs are `CheckRun` and need **checks**, while everything
+reported from outside Github - buildkite, jenkins, sonarcloud - is
+`StatusContext` and needs **commit status**. Missing either one still lets the
+overall red/green verdict through, because that is an aggregate Github
+computes for you; what disappears is the name of what failed, and it
+disappears silently, as nulls rather than as an error. Elly notices and says
+so on its own page rather than showing you an empty list.
 
 Don't forget to also:
 

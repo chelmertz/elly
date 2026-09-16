@@ -285,9 +285,15 @@
                 <form class="pat-form">
                     <label for="pat-input"><strong>GitHub Personal Access Token:</strong></label>
                     <p style="margin: 0.5em 0; font-size: 0.9em; color: var(--muted);">
-                        Create a PAT at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a>
+                        Create a <strong>fine-grained</strong> PAT at
+                        <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">github.com/settings/personal-access-tokens</a>,
+                        with read-only repository access to <em>checks</em>, <em>commit
+                        status</em>, <em>contents</em>, <em>metadata</em> and <em>pull
+                        requests</em>. Without <em>checks</em> a failing Github Actions
+                        job cannot be named; without <em>commit status</em> neither can
+                        buildkite or any other external reporter.
                     </p>
-                    <input type="password" id="pat-input" name="token" placeholder="ghp_..." style="width: 100%; padding: 0.5em; margin: 0.5em 0; box-sizing: border-box;">
+                    <input type="password" id="pat-input" name="token" placeholder="github_pat_..." style="width: 100%; padding: 0.5em; margin: 0.5em 0; box-sizing: border-box;">
                     <p class="form-error" hidden style="color: #c00;"></p>
                     <div style="display: flex; gap: 1em; margin-top: 1em;">
                         <button type="submit" class="save-pat">Save PAT</button>

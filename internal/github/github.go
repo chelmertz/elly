@@ -888,8 +888,9 @@ func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Log
 				Seen:    time.Now(),
 			}
 			if envelope.Errors[0].Type == "FORBIDDEN" {
-				degraded.Remedy = "Grant this token the \"Checks\" and \"Commit statuses\" read permissions. " +
-					"Whether a PR is red is still correct without them; only the check names are missing."
+				degraded.Remedy = "Grant this token read access to \"Checks\" (Github Actions jobs) " +
+					"and \"Commit statuses\" (buildkite and other external reporters). " +
+					"Red or green stays correct without them; only the names of the failing checks are missing."
 			}
 			return failing, false, degraded
 		}
