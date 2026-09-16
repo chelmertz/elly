@@ -214,6 +214,7 @@ func fixedResponseServer(t *testing.T, status int, body string) *httptest.Server
 }
 
 func Test_QueryGithub_WrapsSentinelErrorsSoCallersCanMatchThem(t *testing.T) {
+	noRetryPause(t)
 	cases := []struct {
 		name   string
 		status int
@@ -228,7 +229,7 @@ func Test_QueryGithub_WrapsSentinelErrorsSoCallersCanMatchThem(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := fixedResponseServer(t, tc.status, tc.body)
-			_, err := QueryGithub(srv.URL, "token", "user", slog.New(slog.NewTextHandler(io.Discard, nil)))
+			_, _, err := QueryGithub(srv.URL, "token", "user", slog.New(slog.NewTextHandler(io.Discard, nil)))
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("errors.Is(%v, %v) = false", err, tc.want)
 			}
@@ -237,9 +238,10 @@ func Test_QueryGithub_WrapsSentinelErrorsSoCallersCanMatchThem(t *testing.T) {
 }
 
 func Test_QueryGithub_CountsServerErrorsAsServerErrors(t *testing.T) {
+	noRetryPause(t)
 	srv := fixedResponseServer(t, 504, `{"message":"timeout"}`)
 	before := counterValue(t, githubRequestsTotal.WithLabelValues("server_error"))
-	_, _ = QueryGithub(srv.URL, "token", "user", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	_, _, _ = QueryGithub(srv.URL, "token", "user", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	after := counterValue(t, githubRequestsTotal.WithLabelValues("server_error"))
 	if after != before+1 {
 		t.Fatalf("server_error counter went from %v to %v, expected +1", before, after)
@@ -290,7 +292,7 @@ func Test_QueryGithub_PaginatesReviewThreadsPerPR(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	prs, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -441,7 +443,7 @@ func Test_QueryGithub_IgnoresBotsAsLastCommenter(t *testing.T) {
 		}}]}}}`))
 	}))
 	t.Cleanup(srv.Close)
-	prs, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +471,7 @@ func Test_QueryGithub_ApprovalFromReviewsOnlyWhenNoDecision(t *testing.T) {
 		{`"REVIEW_REQUIRED"`, "REVIEW_REQUIRED"},
 	} {
 		srv := fixedResponseServer(t, 200, pr(c.decision))
-		prs, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -482,6 +484,7 @@ func Test_QueryGithub_ApprovalFromReviewsOnlyWhenNoDecision(t *testing.T) {
 // A failing follow-up page must not fail the whole poll: the PR keeps the
 // threads the search returned, and every other PR is still stored.
 func Test_QueryGithub_ThreadPageFailureKeepsThePoll(t *testing.T) {
+	noRetryPause(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload struct{ Query string }
 		_ = json.NewDecoder(r.Body).Decode(&payload)
@@ -498,7 +501,7 @@ func Test_QueryGithub_ThreadPageFailureKeepsThePoll(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	t.Cleanup(srv.Close)
-	prs, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatalf("a failed thread page must not fail the poll: %v", err)
 	}
@@ -589,7 +592,7 @@ func Test_fetchFailingChecks(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	failing, complete := fetchFailingChecks(srv.URL, "token", "PR_node", "https://github.com/o/r/pull/1",
+	failing, complete, _ := fetchFailingChecks(srv.URL, "token", "PR_node", "https://github.com/o/r/pull/1",
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if !complete {
 		t.Error("both pages were served, so the list must be complete")
@@ -619,12 +622,117 @@ func Test_fetchFailingChecks_RefusedContextsAreNotAnEmptyList(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	failing, complete := fetchFailingChecks(srv.URL, "token", "PR_node", "https://github.com/o/r/pull/1",
+	failing, complete, _ := fetchFailingChecks(srv.URL, "token", "PR_node", "https://github.com/o/r/pull/1",
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if len(failing) != 0 {
 		t.Errorf("no names are readable, got %v", failing)
 	}
 	if complete {
 		t.Error("a refused response must report as incomplete, or a red PR reads as having no failing checks")
+	}
+}
+
+// noRetryPause makes the 5xx retry immediate for tests. Without it the suite
+// pays the real 1s+3s pause on every server-error case, which took the package
+// from 0.02s to 16s.
+func noRetryPause(t *testing.T) {
+	t.Helper()
+	original := serverErrorBackoff
+	serverErrorBackoff = []time.Duration{0}
+	t.Cleanup(func() { serverErrorBackoff = original })
+}
+
+// A 502 is github giving up on a query it answers fine seconds later, so it is
+// retried before the caller ever hears about it.
+func Test_graphqlRequest_RetriesServerErrors(t *testing.T) {
+	noRetryPause(t)
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls < 3 {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte("<html>Bad gateway</html>"))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"ok":true}}`))
+	}))
+	defer srv.Close()
+
+	body, err := graphqlRequest(srv.URL, "{}", "token", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("two 502s then a 200 must succeed, got %v", err)
+	}
+	if calls != 3 {
+		t.Errorf("expected 3 attempts, got %d", calls)
+	}
+	if !strings.Contains(string(body), "ok") {
+		t.Errorf("body = %s", body)
+	}
+}
+
+// Retries are bounded: a server that is really down must still surface as an
+// error rather than looping.
+func Test_graphqlRequest_GivesUpAfterRetries(t *testing.T) {
+	noRetryPause(t)
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+
+	_, err := graphqlRequest(srv.URL, "{}", "token", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if !errors.Is(err, ErrGithubServer) {
+		t.Fatalf("err = %v, want ErrGithubServer", err)
+	}
+	if calls != serverErrorRetries+1 {
+		t.Errorf("expected %d attempts, got %d", serverErrorRetries+1, calls)
+	}
+}
+
+// A rate limit is an answer, not a hiccup: repeating it helps nobody and
+// spends the little quota that is left.
+func Test_graphqlRequest_DoesNotRetryNonServerErrors(t *testing.T) {
+	noRetryPause(t)
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"errors":[{"type":"FORBIDDEN","message":"nope"}]}`))
+	}))
+	defer srv.Close()
+
+	_, _ = graphqlRequest(srv.URL, "{}", "token", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if calls != 1 {
+		t.Errorf("a 4xx must be asked once, got %d attempts", calls)
+	}
+}
+
+// The refusal has to come back as a named degradation, because the whole point
+// is that elly says what it cannot do instead of leaving it to be derived.
+func Test_fetchFailingChecks_ReportsTheMissingPermission(t *testing.T) {
+	noRetryPause(t)
+	body := `{"data":{"node":{"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{
+		"totalCount": 138, "pageInfo": {"hasNextPage": false, "endCursor": ""},
+		"nodes": [null]}}}}]}}},
+		"errors":[{"type":"FORBIDDEN","message":"Resource not accessible by personal access token"}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	_, complete, degraded := fetchFailingChecks(srv.URL, "token", "PR_node", "https://github.com/o/r/pull/1",
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if complete {
+		t.Error("a refused list is not a complete one")
+	}
+	if degraded == nil {
+		t.Fatal("the refusal must be reported, not only logged")
+	}
+	if degraded.Kind != "checks_unreadable" {
+		t.Errorf("kind = %q", degraded.Kind)
+	}
+	if !strings.Contains(degraded.Remedy, "Checks") {
+		t.Errorf("the remedy must name the permission to grant, got %q", degraded.Remedy)
 	}
 }

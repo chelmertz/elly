@@ -9,6 +9,22 @@ import (
 
 // ViewPr must contain everything needed to order/compare them against other PRs,
 // since ViewPr is also what we store.
+// Degradation is something elly knows it cannot do, named so a consumer does
+// not have to infer it from missing data. The motivating case: a fine-grained
+// PAT without "Checks: read" makes github answer 200 with the rollup state
+// intact and every check context null, which is indistinguishable from a PR
+// with nothing failing unless elly says so.
+type Degradation struct {
+	// Kind is a stable identifier, e.g. "checks_unreadable".
+	Kind string
+	// What is wrong, in one sentence, for a human.
+	Message string
+	// Remedy is the action that fixes it, or "" when there is nothing to do.
+	Remedy string
+	// Seen is when elly last hit it.
+	Seen time.Time
+}
+
 type ViewPr struct {
 	ReviewStatus             string
 	Url                      string

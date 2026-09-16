@@ -150,3 +150,8 @@ func (s *StorageDemo) GetPAT() (StoredPAT, bool, error) {
 func (s *StorageDemo) ClearPAT() error {
 	return nil
 }
+
+// The demo database is for screenshots, so it is deliberately never degraded.
+func (s *StorageDemo) StoreDegradations(ds []types.Degradation) error { return nil }
+
+func (s *StorageDemo) Degradations() []types.Degradation { return nil }

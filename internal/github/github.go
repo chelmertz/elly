@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -189,7 +190,45 @@ func ghExpiration(expiration string, logger *slog.Logger) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// serverErrorRetries is how many extra attempts a 5xx gets before the caller
+// is told. Github answers this query in ~7s and intermittently gives up on it
+// with a 502 (nginx) or a 504 whose body literally says "Please try
+// resubmitting your request"; 6 such failures were logged in one day. Without
+// a retry each one costs a full backoff interval - 7m30s against a 5m poll,
+// so one blip more than doubles how stale the data gets.
+//
+// Shrinking the query does not help and was measured rather than assumed:
+// search(first:100) takes 6.9s and first:50 takes 6.7s, so the cost is
+// github's search backend and not the node expansion.
+const serverErrorRetries = 2
+
+// serverErrorBackoff is the pause before each retry. Short on purpose: this
+// sits inside a poll that is already late, and the failure it absorbs is one
+// github recovers from in seconds.
+var serverErrorBackoff = []time.Duration{1 * time.Second, 3 * time.Second}
+
+// graphqlRequest posts one query, retrying a 5xx a couple of times before
+// giving up. Only 5xx is retried: a 4xx, a rate limit and a parse failure are
+// all answers rather than hiccups, and repeating them helps nobody.
 func graphqlRequest(baseURL, query, token string, logger *slog.Logger) ([]byte, error) {
+	var body []byte
+	var err error
+	for attempt := 0; ; attempt++ {
+		body, err = graphqlRequestOnce(baseURL, query, token, logger)
+		if err == nil || !errors.Is(err, ErrGithubServer) || attempt >= serverErrorRetries {
+			return body, err
+		}
+		pause := serverErrorBackoff[min(attempt, len(serverErrorBackoff)-1)]
+		logger.Warn("github server error, retrying",
+			slog.Int("attempt", attempt+1),
+			slog.Duration("in", pause),
+			slog.Any("err", err))
+		githubRequestsTotal.WithLabelValues("server_error_retried").Inc()
+		time.Sleep(pause)
+	}
+}
+
+func graphqlRequestOnce(baseURL, query, token string, logger *slog.Logger) ([]byte, error) {
 	payload := struct {
 		Query string `json:"query"`
 	}{
@@ -310,7 +349,7 @@ func ValidatePAT(baseURL, token string, logger *slog.Logger) (username string, e
 	}
 
 	// Validate scopes by attempting a PR query
-	_, err = QueryGithub(baseURL, token, username, logger)
+	_, _, err = QueryGithub(baseURL, token, username, logger)
 	if err != nil {
 		// Client errors (except rate limiting) indicate the token lacks
 		// required permissions — treat as invalid token.
@@ -401,8 +440,8 @@ func UsernameFromPat(baseURL, token string, logger *slog.Logger) (username strin
 
 var ignoredLastPrCommenters = []string{"github-actions", "vercel"}
 
-func QueryGithub(baseURL, token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
-	prs, err := queryGithub(baseURL, token, username, logger)
+func QueryGithub(baseURL, token string, username string, logger *slog.Logger) ([]types.ViewPr, []types.Degradation, error) {
+	prs, degradations, err := queryGithub(baseURL, token, username, logger)
 	if err != nil {
 		var rl *ErrRateLimited
 		if errors.As(err, &rl) {
@@ -413,16 +452,18 @@ func QueryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 		} else {
 			githubRequestsTotal.WithLabelValues("client_error").Inc()
 		}
-		return nil, err
+		return nil, nil, err
 	}
 	githubRequestsTotal.WithLabelValues("success").Inc()
-	return prs, nil
+	return prs, degradations, nil
 }
 
-func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([]types.ViewPr, error) {
+func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([]types.ViewPr, []types.Degradation, error) {
+	// Keyed by Kind so one refusal repeated across every red PR is reported once.
+	degradations := map[string]types.Degradation{}
 	respBody, err := graphqlRequest(baseURL, querySearchPrsInvolvingUser(username), token, logger)
 	if err != nil {
-		return nil, fmt.Errorf("could not query github for PRs: %w", err)
+		return nil, nil, fmt.Errorf("could not query github for PRs: %w", err)
 	}
 
 	// Using json.RawMessage for the response, so that we can store the raw
@@ -431,7 +472,7 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 	var rawResponse querySearchPrsInvolvingMeGraphQl
 	err = json.Unmarshal(respBody, &rawResponse)
 	if err != nil {
-		return nil, fmt.Errorf("could not unmarshal github response: %w", err)
+		return nil, nil, fmt.Errorf("could not unmarshal github response: %w", err)
 	}
 
 	viewPrs := make([]types.ViewPr, 0)
@@ -440,7 +481,7 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 		var pr prSearchResultGraphQl
 		err = json.Unmarshal(prEdge.Node, &pr)
 		if err != nil {
-			return nil, fmt.Errorf("could not re-marshal github PR, to store raw json for debugging (url=%s): %w", pr.Url, err)
+			return nil, nil, fmt.Errorf("could not re-marshal github PR, to store raw json for debugging (url=%s): %w", pr.Url, err)
 		}
 		reviewStatus := pr.ReviewDecision
 
@@ -496,7 +537,11 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 		var checksFailing []string
 		checksComplete := true
 		if checksState == "FAILURE" || checksState == "ERROR" {
-			checksFailing, checksComplete = fetchFailingChecks(baseURL, token, pr.Id, pr.Url, logger)
+			var degraded *types.Degradation
+			checksFailing, checksComplete, degraded = fetchFailingChecks(baseURL, token, pr.Id, pr.Url, logger)
+			if degraded != nil {
+				degradations[degraded.Kind] = *degraded
+			}
 			// The rollup says red, so at least one check failed. Coming back
 			// with no names means they could not be read, not that there are
 			// none - never let that render as "red, 0 failing checks".
@@ -531,7 +576,12 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 		viewPrs = append(viewPrs, viewPr)
 	}
 
-	return viewPrs, nil
+	out := make([]types.Degradation, 0, len(degradations))
+	for _, d := range degradations {
+		out = append(out, d)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Kind < out[j].Kind })
+	return viewPrs, out, nil
 }
 
 // rereviewFrom names the reviewers of the user's own PR who should be asked
@@ -778,14 +828,14 @@ func (c checkContext) failed() bool {
 // covers returns what it read plus false, so a caller can say "at least N"
 // rather than silently under-reporting - the exact failure this whole column
 // exists to prevent.
-func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Logger) ([]string, bool) {
+func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Logger) ([]string, bool, *types.Degradation) {
 	var failing []string
 	cursor := ""
 	for pages := 0; pages < maxCheckContextPages; pages++ {
 		body, err := graphqlRequest(baseURL, queryFailingChecks(prNodeId, cursor), token, logger)
 		if err != nil {
 			logger.Warn("could not fetch failing checks", slog.String("pr_url", prUrl), slog.Any("err", err))
-			return failing, false
+			return failing, false, nil
 		}
 		var page struct {
 			Data struct {
@@ -811,7 +861,7 @@ func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Log
 		}
 		if err := json.Unmarshal(body, &page); err != nil {
 			logger.Warn("could not parse failing checks", slog.String("pr_url", prUrl), slog.Any("err", err))
-			return failing, false
+			return failing, false, nil
 		}
 		// GraphQL reports per-field failures in a top-level "errors" array while
 		// still answering 200 with nulls in place of the nodes it refused. A
@@ -832,10 +882,19 @@ func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Log
 				slog.String("type", envelope.Errors[0].Type),
 				slog.String("message", envelope.Errors[0].Message),
 				slog.String("hint", "a fine-grained PAT needs the Checks and Commit statuses read permissions"))
-			return failing, false
+			degraded := &types.Degradation{
+				Kind:    "checks_unreadable",
+				Message: "Github refuses to name the failing checks: " + envelope.Errors[0].Message,
+				Seen:    time.Now(),
+			}
+			if envelope.Errors[0].Type == "FORBIDDEN" {
+				degraded.Remedy = "Grant this token the \"Checks\" and \"Commit statuses\" read permissions. " +
+					"Whether a PR is red is still correct without them; only the check names are missing."
+			}
+			return failing, false, degraded
 		}
 		if len(page.Data.Node.Commits.Nodes) == 0 || page.Data.Node.Commits.Nodes[0].Commit.StatusCheckRollup == nil {
-			return failing, true
+			return failing, true, nil
 		}
 		contexts := page.Data.Node.Commits.Nodes[0].Commit.StatusCheckRollup.Contexts
 		for _, c := range contexts.Nodes {
@@ -844,12 +903,12 @@ func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Log
 			}
 		}
 		if !contexts.PageInfo.HasNextPage {
-			return failing, true
+			return failing, true, nil
 		}
 		cursor = contexts.PageInfo.EndCursor
 	}
 	logger.Warn("failing checks truncated", slog.String("pr_url", prUrl), slog.Int("found", len(failing)))
-	return failing, false
+	return failing, false, nil
 }
 
 // reviewThreadFields are the review thread fields both queries fetch. Only

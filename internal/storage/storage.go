@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -48,6 +49,11 @@ type Storage interface {
 	GetPAT() (StoredPAT, bool, error)
 	// ClearPAT deactivates the active PAT.
 	ClearPAT() error
+	// StoreDegradations records what the last poll could not do. An empty
+	// slice clears the record.
+	StoreDegradations(ds []types.Degradation) error
+	// Degradations returns what the last poll could not do, empty when all is well.
+	Degradations() []types.Degradation
 }
 
 type DbStorage struct {
@@ -354,4 +360,32 @@ func splitLogins(s string) []string {
 		return []string{}
 	}
 	return strings.Split(s, ",")
+}
+
+// StoreDegradations records what elly currently cannot do, so a consumer is
+// told rather than left to infer it from data that looks merely empty. An
+// empty slice clears the record: a deficiency that stopped happening must stop
+// being reported, or it becomes noise nobody reads.
+func (s *DbStorage) StoreDegradations(ds []types.Degradation) error {
+	blob, err := json.Marshal(ds)
+	if err != nil {
+		return fmt.Errorf("could not marshal degradations: %w", err)
+	}
+	return s.db.StoreDegradations(context.Background(), string(blob))
+}
+
+// Degradations returns what the last poll could not do. No record and a stored
+// empty list both mean "nothing wrong", which is why the error is swallowed:
+// a missing row is the normal state on a fresh database.
+func (s *DbStorage) Degradations() []types.Degradation {
+	blob, err := s.db.GetDegradations(context.Background())
+	if err != nil || blob == "" {
+		return nil
+	}
+	var ds []types.Degradation
+	if err := json.Unmarshal([]byte(blob), &ds); err != nil {
+		s.logger.Warn("could not parse stored degradations", slog.Any("error", err))
+		return nil
+	}
+	return ds
 }

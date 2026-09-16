@@ -299,10 +299,25 @@ func ServeWeb(webConfig HttpServerConfig) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+		// Degradations are reported here rather than left to be inferred from
+		// data that merely looks empty. "checks_unreadable" is the case that
+		// prompted it: without the Checks read permission a red PR comes back
+		// with no failing-check names, which is indistinguishable from a PR
+		// with nothing failing unless elly says which it is.
+		degradations := make([]map[string]string, 0)
+		for _, d := range webConfig.Store.Degradations() {
+			degradations = append(degradations, map[string]string{
+				"kind":    d.Kind,
+				"message": d.Message,
+				"remedy":  d.Remedy,
+				"seen":    d.Seen.Format(time.RFC3339),
+			})
+		}
 		response := map[string]any{
-			"configured": true,
-			"username":   storedPat.Username,
-			"stored_at":  storedPat.SetAt.Format(time.RFC3339),
+			"configured":   true,
+			"username":     storedPat.Username,
+			"stored_at":    storedPat.SetAt.Format(time.RFC3339),
+			"degradations": degradations,
 		}
 		if !storedPat.ExpiresAt.IsZero() {
 			response["expires_at"] = storedPat.ExpiresAt.Format(time.RFC3339)
