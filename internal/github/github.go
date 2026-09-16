@@ -42,6 +42,27 @@ type querySearchPrsInvolvingMeGraphQl struct {
 	}
 }
 
+// prCommitNodeGraphQl is the head commit of a PR. Named rather than anonymous
+// so a test can build one without restating the whole shape - adding
+// StatusCheckRollup to an inline literal broke every caller at once.
+type prCommitNodeGraphQl struct {
+	Commit struct {
+		Author struct {
+			Date  string
+			Email string
+			Name  string
+		}
+		// StatusCheckRollup is github's own aggregate over every check on the
+		// head commit. Only the scalar state is taken here: the per-check
+		// contexts are a connection, and its node cost would multiply by the
+		// 100 PRs the search returns. The failing names come from
+		// fetchFailingChecks, which runs only for a PR this field says is red.
+		StatusCheckRollup *struct {
+			State string
+		}
+	}
+}
+
 type prSearchResultGraphQl struct {
 	Id             string // GraphQL node id, for follow-up queries on this PR
 	Url            string
@@ -82,15 +103,7 @@ type prSearchResultGraphQl struct {
 		}
 	}
 	Commits struct {
-		Nodes []struct {
-			Commit struct {
-				Author struct {
-					Date  string
-					Email string
-					Name  string
-				}
-			}
-		}
+		Nodes []prCommitNodeGraphQl
 	}
 	ReviewThreads prReviewThreadConnectionGraphQl
 	Reviews       struct {
@@ -473,6 +486,19 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 			}
 		}
 
+		// CI state on the head commit. The rollup scalar rides along with the
+		// search query; the failing names cost a follow-up, so that is only
+		// paid when the rollup already says the PR is red.
+		checksState := ""
+		if len(pr.Commits.Nodes) > 0 && pr.Commits.Nodes[0].Commit.StatusCheckRollup != nil {
+			checksState = strings.ToUpper(pr.Commits.Nodes[0].Commit.StatusCheckRollup.State)
+		}
+		var checksFailing []string
+		checksComplete := true
+		if checksState == "FAILURE" || checksState == "ERROR" {
+			checksFailing, checksComplete = fetchFailingChecks(baseURL, token, pr.Id, pr.Url, logger)
+		}
+
 		viewPr := types.ViewPr{
 			ReviewStatus:             reviewStatus,
 			Url:                      pr.Url,
@@ -490,6 +516,9 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 			Deletions:                pr.Deletions,
 			ReviewRequestedFromUsers: reviewUsers,
 			RereviewFrom:             rereview,
+			ChecksState:              checksState,
+			ChecksFailing:            checksFailing,
+			ChecksComplete:           checksComplete,
 			RawJsonResponse:          prEdge.Node,
 		}
 		logger.Debug("fetched a pr", slog.Any("pr", viewPr))
@@ -656,6 +685,146 @@ const reviewThreadPageSize = "100"
 // far beyond any PR seen; past it the count is logged as truncated.
 const maxReviewThreadPages = 10
 
+// checkContextPageSize is the page size of the per-PR failing-checks query.
+// Like the review-thread follow-up its cost is not multiplied by the PR count,
+// because it runs only for a PR whose rollup state is already FAILURE.
+const checkContextPageSize = "100"
+
+// maxCheckContextPages bounds that loop. One matchi-backend PR carries 138
+// contexts; ten pages is far beyond anything seen, and past it the names are
+// reported as a lower bound while the state stays authoritative.
+const maxCheckContextPages = 10
+
+// failedConclusions are the check conclusions that mean "this is red". CANCELLED
+// is included deliberately: a cancelled required check blocks a merge exactly
+// like a failing one, and reading it as "not failing" is how a red PR gets
+// reported as ready for review.
+var failedConclusions = map[string]bool{
+	"FAILURE": true, "ERROR": true, "TIMED_OUT": true,
+	"CANCELLED": true, "ACTION_REQUIRED": true, "STARTUP_FAILURE": true,
+}
+
+// queryFailingChecks names the failing checks on one PR's head commit, by node
+// id the way queryReviewThreadsPage does. It is only ever called for a PR whose
+// statusCheckRollup state is already FAILURE.
+func queryFailingChecks(prNodeId, after string) string {
+	cursor := "null"
+	if after != "" {
+		cursor = `"` + after + `"`
+	}
+	return fmt.Sprintf(`query {
+  node(id: %q) {
+    ... on PullRequest {
+      commits(last: 1) {
+        nodes {
+          commit {
+            statusCheckRollup {
+              contexts(first: `+checkContextPageSize+`, after: %s) {
+                totalCount
+                pageInfo { hasNextPage endCursor }
+                nodes {
+                  __typename
+                  ... on CheckRun { name conclusion status }
+                  ... on StatusContext { context state }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`, prNodeId, cursor)
+}
+
+// checkContext is one entry of a statusCheckRollup, flattened across the two
+// shapes github uses: CheckRun (actions) carries name/conclusion, StatusContext
+// (external reporters like buildkite) carries context/state.
+type checkContext struct {
+	TypeName   string `json:"__typename"`
+	Name       string
+	Conclusion string
+	Status     string
+	Context    string
+	State      string
+}
+
+func (c checkContext) label() string {
+	if c.Name != "" {
+		return c.Name
+	}
+	if c.Context != "" {
+		return c.Context
+	}
+	return "(unnamed check)"
+}
+
+func (c checkContext) failed() bool {
+	verdict := c.Conclusion
+	if verdict == "" {
+		verdict = c.State
+	}
+	return failedConclusions[strings.ToUpper(verdict)]
+}
+
+// fetchFailingChecks returns the names of the failing checks on a PR, and
+// whether the list is complete. A PR with more contexts than maxCheckContextPages
+// covers returns what it read plus false, so a caller can say "at least N"
+// rather than silently under-reporting - the exact failure this whole column
+// exists to prevent.
+func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Logger) ([]string, bool) {
+	var failing []string
+	cursor := ""
+	for pages := 0; pages < maxCheckContextPages; pages++ {
+		body, err := graphqlRequest(baseURL, queryFailingChecks(prNodeId, cursor), token, logger)
+		if err != nil {
+			logger.Warn("could not fetch failing checks", slog.String("pr_url", prUrl), slog.Any("err", err))
+			return failing, false
+		}
+		var page struct {
+			Data struct {
+				Node struct {
+					Commits struct {
+						Nodes []struct {
+							Commit struct {
+								StatusCheckRollup *struct {
+									Contexts struct {
+										TotalCount int
+										PageInfo   struct {
+											HasNextPage bool
+											EndCursor   string
+										}
+										Nodes []checkContext
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		if err := json.Unmarshal(body, &page); err != nil {
+			logger.Warn("could not parse failing checks", slog.String("pr_url", prUrl), slog.Any("err", err))
+			return failing, false
+		}
+		if len(page.Data.Node.Commits.Nodes) == 0 || page.Data.Node.Commits.Nodes[0].Commit.StatusCheckRollup == nil {
+			return failing, true
+		}
+		contexts := page.Data.Node.Commits.Nodes[0].Commit.StatusCheckRollup.Contexts
+		for _, c := range contexts.Nodes {
+			if c.failed() {
+				failing = append(failing, c.label())
+			}
+		}
+		if !contexts.PageInfo.HasNextPage {
+			return failing, true
+		}
+		cursor = contexts.PageInfo.EndCursor
+	}
+	logger.Warn("failing checks truncated", slog.String("pr_url", prUrl), slog.Int("found", len(failing)))
+	return failing, false
+}
+
 // reviewThreadFields are the review thread fields both queries fetch. Only
 // the first comment's author and the last comment's author and reactions are
 // inspected (aliases are matched by field name in prReviewThreadGraphQl).
@@ -798,6 +967,10 @@ func querySearchPrsInvolvingUser(username string) string {
                   date
                   email
                   name
+                }
+                # scalar only - see StatusCheckRollup in the struct above
+                statusCheckRollup {
+                  state
                 }
               }
             }

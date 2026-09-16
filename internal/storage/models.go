@@ -35,5 +35,8 @@ type Pr struct {
 	ReviewRequestedFromUsers string
 	RereviewFrom             string
 	Buried                   bool
+	ChecksState              string
+	ChecksFailing            string
+	ChecksComplete           bool
 	RawJsonResponse          []byte
 }

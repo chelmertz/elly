@@ -16,6 +16,9 @@ create table if not exists prs (
     review_requested_from_users text not null,
     rereview_from text not null default '',
     buried boolean not null,
+    checks_state text not null default '',
+    checks_failing text not null default '',
+    checks_complete boolean not null default 1,
     raw_json_response blob not null
 );
 

@@ -323,11 +323,7 @@ func Test_RereviewFrom(t *testing.T) {
 		pr.Author.Login = author
 		pr.IsDraft = draft
 		if myLastCommit != "" {
-			pr.Commits.Nodes = append(pr.Commits.Nodes, struct {
-				Commit struct {
-					Author struct{ Date, Email, Name string }
-				}
-			}{})
+			pr.Commits.Nodes = append(pr.Commits.Nodes, prCommitNodeGraphQl{})
 			pr.Commits.Nodes[0].Commit.Author.Date = myLastCommit
 		}
 		for _, r := range requested {
@@ -519,5 +515,45 @@ func Test_GhExpiration(t *testing.T) {
 	}
 	if _, ok := ghExpiration("tomorrow", logger); ok {
 		t.Fatal("unparseable expiration must not be reported as parsed")
+	}
+}
+
+// A cancelled check blocks a merge exactly like a failing one. Reading it as
+// "not failing" is how a red PR gets reported as ready for review, which is
+// the mistake the checks columns exist to prevent.
+func TestCheckContextFailed(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ctx  checkContext
+		want bool
+	}{
+		{"action failed", checkContext{Name: "test", Conclusion: "FAILURE"}, true},
+		{"action cancelled", checkContext{Name: "test", Conclusion: "CANCELLED"}, true},
+		{"action timed out", checkContext{Name: "test", Conclusion: "TIMED_OUT"}, true},
+		{"action passed", checkContext{Name: "test", Conclusion: "SUCCESS"}, false},
+		{"action still running", checkContext{Name: "test", Status: "IN_PROGRESS"}, false},
+		{"external reporter failed", checkContext{Context: "buildkite/webapp", State: "FAILURE"}, true},
+		{"external reporter passed", checkContext{Context: "buildkite/webapp", State: "SUCCESS"}, false},
+		{"lowercase from a status context", checkContext{Context: "ci", State: "failure"}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.ctx.failed(); got != tc.want {
+				t.Errorf("failed() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// The two shapes name themselves differently; a check with neither must still
+// be reportable rather than appearing as an empty string in a list of failures.
+func TestCheckContextLabel(t *testing.T) {
+	if got := (checkContext{Name: "build (infra/keycloak)"}).label(); got != "build (infra/keycloak)" {
+		t.Errorf("CheckRun label = %q", got)
+	}
+	if got := (checkContext{Context: "buildkite/webapp"}).label(); got != "buildkite/webapp" {
+		t.Errorf("StatusContext label = %q", got)
+	}
+	if got := (checkContext{}).label(); got == "" {
+		t.Error("a nameless check must still have a label")
 	}
 }

@@ -27,7 +27,26 @@ type ViewPr struct {
 	ReviewRequestedFromUsers []string
 	RereviewFrom             []string // reviewers of my PR who reviewed before my latest change and were not re-requested
 	Buried                   bool
-	RawJsonResponse          json.RawMessage
+	// ChecksState is github's own statusCheckRollup verdict for the head
+	// commit: SUCCESS, FAILURE, PENDING, EXPECTED, or "" when the PR has no
+	// checks at all. It is deliberately stored separately from ReviewStatus,
+	// which says only whether an approving review exists and nothing about CI:
+	// a PR can be REVIEW_REQUIRED and bright red at the same time, and reading
+	// the review field alone is how a red PR gets sent to a reviewer.
+	ChecksState string
+	// ChecksFailing are the names of the failing checks, and ChecksComplete is
+	// false when more exist than were read - so a consumer can say "at least
+	// N" instead of under-reporting.
+	ChecksFailing   []string
+	ChecksComplete  bool
+	RawJsonResponse json.RawMessage
+}
+
+// ChecksRed reports whether CI is failing on the head commit. Callers should
+// prefer this over inspecting ChecksFailing, which is a display detail and can
+// be a lower bound; the rollup state is authoritative.
+func (pr ViewPr) ChecksRed() bool {
+	return pr.ChecksState == "FAILURE" || pr.ChecksState == "ERROR"
 }
 
 // URL- and filesystem friendly ID of a PR.

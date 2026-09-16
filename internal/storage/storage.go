@@ -83,6 +83,9 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 	// "duplicate column" error on later starts is the expected no-op.
 	for _, alter := range []string{
 		`alter table prs add column rereview_from text not null default ''`,
+		`alter table prs add column checks_state text not null default ''`,
+		`alter table prs add column checks_failing text not null default ''`,
+		`alter table prs add column checks_complete boolean not null default 1`,
 	} {
 		if _, err := db.ExecContext(ctx, alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			check(err)
@@ -121,6 +124,9 @@ func (s *DbStorage) Prs() StoredState {
 			ReviewRequestedFromUsers: strings.Split(dbPr.ReviewRequestedFromUsers, ","),
 			RereviewFrom:             splitLogins(dbPr.RereviewFrom),
 			Buried:                   dbPr.Buried,
+			ChecksState:              dbPr.ChecksState,
+			ChecksFailing:            splitLogins(dbPr.ChecksFailing),
+			ChecksComplete:           dbPr.ChecksComplete,
 			RawJsonResponse:          dbPr.RawJsonResponse,
 		})
 	}
@@ -195,6 +201,9 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 			ReviewRequestedFromUsers: strings.Join(pr.ReviewRequestedFromUsers, ","),
 			RereviewFrom:             strings.Join(pr.RereviewFrom, ","),
 			Buried:                   pr.Buried,
+			ChecksState:              pr.ChecksState,
+			ChecksFailing:            strings.Join(pr.ChecksFailing, ","),
+			ChecksComplete:           pr.ChecksComplete,
 			RawJsonResponse:          pr.RawJsonResponse,
 		})
 		check(err)

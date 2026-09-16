@@ -21,6 +21,13 @@
       devShells.x86_64-linux.default = pkgs.mkShell {
         buildInputs = [
           pkgs.go
+          # sqlc regenerates internal/storage/{models,query.sql}.go from
+          # schema.sql and query.sql. It was missing here until 2026-09-16,
+          # so a column added by hand meant editing three generated Scan
+          # blocks by hand too - and one of them was missed, which only
+          # surfaced as "expected 21 destination arguments in Scan, not 18"
+          # at runtime. Run `sqlc generate` instead.
+          pkgs.sqlc
           pkgs.pinact
           pkgs.zizmor
           pkgs.golangci-lint
