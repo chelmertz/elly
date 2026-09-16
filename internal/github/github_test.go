@@ -330,7 +330,7 @@ func Test_RereviewFrom(t *testing.T) {
 		}
 		for _, r := range requested {
 			var n struct {
-				RequestedReviewer struct{ Login string }
+				RequestedReviewer requestedReviewerGraphQl
 			}
 			n.RequestedReviewer.Login = r
 			pr.ReviewRequests.Nodes = append(pr.ReviewRequests.Nodes, n)
@@ -743,6 +743,55 @@ func Test_fetchFailingChecks_ReportsTheMissingPermission(t *testing.T) {
 	for _, want := range []string{"Github Apps", "classic", "repo"} {
 		if !strings.Contains(degraded.Remedy, want) {
 			t.Errorf("the remedy must mention %q, got %q", want, degraded.Remedy)
+		}
+	}
+}
+
+// A review requested from a team used to land as an empty string: the query
+// unwrapped "... on User" only, so a Team node parsed into a zero-valued
+// struct and every PR in a team-reviewing organisation reported [""] . The
+// empty name then read as "waiting on review from " with nobody named.
+func Test_QueryGithub_TeamReviewersAreNamed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"search":{"edges":[{"node":{
+			"id":"PR_1","url":"https://github.com/o/r/pull/1","title":"t","author":{"login":"me"},
+			"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
+			"reviewRequests":{"nodes":[
+				{"requestedReviewer":{"login":"adam"}},
+				{"requestedReviewer":{"name":"backend"}},
+				{"requestedReviewer":{}}
+			]},
+			"comments":{"edges":[]},
+			"reviewThreads":{"totalCount":0,"pageInfo":{"hasNextPage":false},"edges":[]}
+		}}]}}}`))
+	}))
+	t.Cleanup(srv.Close)
+	prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prs) != 1 {
+		t.Fatalf("expected one pr, got %d", len(prs))
+	}
+	got := prs[0].ReviewRequestedFromUsers
+	want := []string{"adam", "@backend"}
+	if len(got) != len(want) {
+		t.Fatalf("reviewers = %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("reviewer %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// The search query has to ask for the team's name, or no amount of parsing can
+// recover it.
+func Test_SearchQuery_AsksForTeamReviewers(t *testing.T) {
+	q := querySearchPrsInvolvingUser("me")
+	for _, want := range []string{"... on Team", "name"} {
+		if !strings.Contains(q, want) {
+			t.Errorf("query is missing %q", want)
 		}
 	}
 }

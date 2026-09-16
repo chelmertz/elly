@@ -71,9 +71,7 @@ type prSearchResultGraphQl struct {
 	IsDraft        bool
 	ReviewRequests struct {
 		Nodes []struct {
-			RequestedReviewer struct {
-				Login string
-			}
+			RequestedReviewer requestedReviewerGraphQl
 		}
 	}
 	ReviewDecision string
@@ -132,6 +130,27 @@ type prReviewThreadConnectionGraphQl struct {
 	Edges []struct {
 		Node prReviewThreadGraphQl
 	}
+}
+
+// requestedReviewer is a union: a User carries login, a Team carries name, and
+// a reviewer github will not disclose carries neither. Teams were unhandled
+// until 2026-09-17, so in an organisation that reviews by team every PR stored
+// one empty reviewer and named nobody.
+type requestedReviewerGraphQl struct {
+	Login string
+	Name  string
+}
+
+// label returns the reviewer's name, "@"-prefixed for a team so it cannot be
+// confused with a user, and "" for a node github left empty.
+func (r requestedReviewerGraphQl) label() string {
+	if r.Login != "" {
+		return r.Login
+	}
+	if r.Name != "" {
+		return "@" + r.Name
+	}
+	return ""
 }
 
 type prReviewThreadGraphQl struct {
@@ -509,7 +528,9 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 
 		reviewUsers := make([]string, 0)
 		for _, u := range pr.ReviewRequests.Nodes {
-			reviewUsers = append(reviewUsers, u.RequestedReviewer.Login)
+			if label := u.RequestedReviewer.label(); label != "" {
+				reviewUsers = append(reviewUsers, label)
+			}
 		}
 		rereview := rereviewFrom(pr, username, threadsActionable)
 
@@ -620,7 +641,9 @@ func rereviewFrom(pr prSearchResultGraphQl, myUsername string, threadsActionable
 	}
 	requested := make(map[string]bool)
 	for _, u := range pr.ReviewRequests.Nodes {
-		requested[u.RequestedReviewer.Login] = true
+		if label := u.RequestedReviewer.label(); label != "" {
+			requested[label] = true
+		}
 	}
 	// the latest review per reviewer decides; reviews come oldest first
 	latest := make(map[string]struct {
@@ -1020,6 +1043,12 @@ func querySearchPrsInvolvingUser(username string) string {
             nodes {
               requestedReviewer {
                 ... on User {
+                  login
+                }
+                ... on Team {
+                  name
+                }
+                ... on Mannequin {
                   login
                 }
               }
