@@ -160,9 +160,15 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 			if errors.As(err, &rl) {
 				tracker.RateLimited()
 				store.SetRateLimitUntil(rl.UnblockedAt) //nolint:errcheck // best-effort persistence
+			} else if errors.Is(err, github.ErrGithubServer) {
+				// A 5xx that survived the in-request retries. Github is
+				// struggling with a query it usually answers, so wait a little
+				// longer and try the same thing again.
+				logger.Warn("could not fetch prs from github", slog.Any("error", err))
+				tracker.TransientErrored()
 			} else {
-				// 4xx, 5xx, network and parse errors are all treated as
-				// transient: back off and try again on the next tick
+				// A 4xx, a network failure or a parse error: repeating it
+				// sooner cannot help, so this backs off harder.
 				logger.Warn("could not fetch prs from github", slog.Any("error", err))
 				tracker.Errored()
 			}

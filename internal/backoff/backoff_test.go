@@ -199,3 +199,26 @@ func TestTimerResetsOnBackoff(t *testing.T) {
 		bt.Stop()
 	})
 }
+
+// A 5xx github recovers from on its own must not be punished like a query that
+// cannot succeed. Six transient failures in one day, each costing a full
+// interval, is what made the dashboard stale.
+func Test_TransientErrored_BacksOffGentlerThanErrored(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	transient := New(logger, 5*time.Minute)
+	defer transient.Stop()
+	transient.TransientErrored()
+
+	permanent := New(logger, 5*time.Minute)
+	defer permanent.Stop()
+	permanent.Errored()
+
+	if transient.currentInterval() >= permanent.currentInterval() {
+		t.Fatalf("a transient 5xx must back off less than a 4xx: %v vs %v",
+			transient.currentInterval(), permanent.currentInterval())
+	}
+	if transient.currentInterval() <= 5*time.Minute {
+		t.Errorf("it must still back off somewhat, got %v", transient.currentInterval())
+	}
+}

@@ -100,6 +100,27 @@ func (t *Tracker) RateLimited() {
 }
 
 // Errored handles a failed fetch (anything but a rate limit): 1.5x backoff, log.
+// TransientErrored handles a failure github is expected to recover from on its
+// own: a 5xx that survived the in-request retries. It backs off far more gently
+// than Errored, because the query itself is fine and hammering is not the
+// problem - six such failures in one day, each costing a full interval, is what
+// makes the dashboard stale.
+func (t *Tracker) TransientErrored() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.consecutiveOK = 0
+	t.multiplier *= 1.15
+	if t.multiplier > t.maxMultiplier {
+		t.multiplier = t.maxMultiplier
+	}
+	t.syncGauges()
+	t.logger.Warn("github server error after retries, backing off gently",
+		slog.Duration("interval", t.currentIntervalLocked()))
+}
+
+// Errored handles a failure that will not fix itself: a 4xx, a malformed
+// query, a parse error. Repeating it sooner cannot help, so it backs off
+// harder than a transient server error does.
 func (t *Tracker) Errored() {
 	t.mu.Lock()
 	defer t.mu.Unlock()

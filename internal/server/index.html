@@ -234,6 +234,7 @@
                     <li>👤 {{if .CurrentUser}}{{.CurrentUser}}{{else}}<em>Not configured</em>{{end}}</li>
                     <li><a class="refresh" href="/api/v0/prs/refresh">🗘 <time datetime="{{.LastRefreshed}}">{{.LastRefreshed}}</time></a></li>
                     <li class="rate-limit" data-until="{{.RateLimitedUntil}}" hidden>⚠️ Rate limited, retry <time datetime="{{.RateLimitedUntil}}">{{.RateLimitedUntil}}</time></li>
+                    {{range .Degradations}}<li class="degradation" title="{{.Remedy}}">⚠️ {{.Message}}{{if .Remedy}} <em>{{.Remedy}}</em>{{end}}</li>{{end}}
                     <li><a class="settings" href="/settings">⚙ Settings</a></li>
                     <li><a class="about" href="/about">About elly{{if .Version}} {{.Version}}{{end}}</a></li>
                 </ul>

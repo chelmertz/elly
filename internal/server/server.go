@@ -36,7 +36,11 @@ type IndexHtmlData struct {
 	Version                string
 	GoldenTestingEnabled   bool
 	RateLimitedUntil       string
-	SetupMode              bool
+	// Degradations is what elly currently cannot do. Rendered in the meta bar
+	// beside the rate-limit notice, so a deficiency is visible on the page
+	// rather than only in the log or to whoever thinks to ask the API.
+	Degradations []types.Degradation
+	SetupMode    bool
 }
 
 //go:embed index.html
@@ -230,6 +234,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 			Version:                webConfig.Version,
 			GoldenTestingEnabled:   webConfig.GoldenTestingEnabled,
 			RateLimitedUntil:       rateLimitUntilStr,
+			Degradations:           webConfig.Store.Degradations(),
 			SetupMode:              setupMode,
 		}
 		err := temp.Execute(w, data)
