@@ -127,7 +127,7 @@ func (s *DbStorage) Prs() StoredState {
 			ThreadsWaiting:           int(dbPr.ThreadsWaiting),
 			Additions:                int(dbPr.Additions),
 			Deletions:                int(dbPr.Deletions),
-			ReviewRequestedFromUsers: strings.Split(dbPr.ReviewRequestedFromUsers, ","),
+			ReviewRequestedFromUsers: splitLogins(dbPr.ReviewRequestedFromUsers),
 			RereviewFrom:             splitLogins(dbPr.RereviewFrom),
 			Buried:                   dbPr.Buried,
 			ChecksState:              dbPr.ChecksState,

@@ -245,3 +245,30 @@ func TestStoreRepoPrs_BuryPersistsUntilThePrMoves(t *testing.T) {
 		}
 	}
 }
+
+// strings.Split("", ",") is [""], not []. Every list column goes through
+// splitLogins for that reason; review_requested_from_users was the one that
+// did not, so a PR with nobody requested came back naming one empty reviewer
+// and any list built from it said "waiting on review from ".
+func TestStoreRepoPrs_EmptyListColumnsComeBackEmpty(t *testing.T) {
+	store := setupTestStorage(t)
+	pr := types.ViewPr{
+		Url: "https://github.com/o/r/pull/1", Title: "t", Author: "me",
+		RepoName: "r", RepoOwner: "o", LastUpdated: time.Now(),
+		ReviewRequestedFromUsers: []string{}, RereviewFrom: []string{},
+		ChecksFailing: []string{}, RawJsonResponse: []byte("{}"),
+	}
+	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+		t.Fatal(err)
+	}
+	got := store.Prs().Prs[0]
+	for name, list := range map[string][]string{
+		"ReviewRequestedFromUsers": got.ReviewRequestedFromUsers,
+		"RereviewFrom":             got.RereviewFrom,
+		"ChecksFailing":            got.ChecksFailing,
+	} {
+		if len(list) != 0 {
+			t.Errorf("%s = %q, want an empty list", name, list)
+		}
+	}
+}
