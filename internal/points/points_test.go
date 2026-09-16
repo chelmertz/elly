@@ -99,3 +99,66 @@ func Test_RereviewPending_AddsPointsOnOwnPr(t *testing.T) {
 		t.Fatalf("without the signal the PR must score 20 less: %d vs %d", q.Total, p.Total)
 	}
 }
+
+// A red PR of ours is work only we can do, and it is the state in which asking
+// anyone for a review wastes their time. It has to outrank the small nudges.
+func Test_RedChecks_AddPointsOnOwnPr(t *testing.T) {
+	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{
+		Author: "me", Url: "https://github.com/o/r/pull/1", LastUpdated: now,
+		ReviewRequestedFromUsers: []string{"adam"},
+		ChecksState:              "FAILURE",
+		ChecksFailing:            []string{"scan (infra/apidocs)", "Infra PR Check"},
+		ChecksComplete:           true,
+	}
+	red := StandardPrPoints(pr, "me", now)
+	found := false
+	for _, r := range red.Reasons {
+		if strings.Contains(r, "CI is failing") && strings.Contains(r, "Infra PR Check") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a failing-CI reason naming the checks, got %v", red.Reasons)
+	}
+
+	green := pr
+	green.ChecksState, green.ChecksFailing = "SUCCESS", nil
+	if q := StandardPrPoints(green, "me", now); q.Total != red.Total-50 {
+		t.Fatalf("a green PR must score 50 less than the same PR red: %d vs %d", q.Total, red.Total)
+	}
+
+	// Still running is not failing: nothing is owed until it lands.
+	pending := pr
+	pending.ChecksState, pending.ChecksFailing = "PENDING", nil
+	if q := StandardPrPoints(pending, "me", now); q.Total != red.Total-50 {
+		t.Fatalf("pending checks must not score as red: %d vs %d", q.Total, red.Total)
+	}
+
+	// Someone else's red PR is not our action, so this rule must not fire.
+	theirs := pr
+	theirs.Author = "adam"
+	for _, r := range StandardPrPoints(theirs, "me", now).Reasons {
+		if strings.Contains(r, "CI is failing") {
+			t.Fatalf("the rule must not fire on someone else's PR: %v", r)
+		}
+	}
+}
+
+// A truncated list must read as a lower bound rather than an exact count.
+func Test_RedChecks_TruncatedListSaysAtLeast(t *testing.T) {
+	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{
+		Author: "me", Url: "https://github.com/o/r/pull/1", LastUpdated: now,
+		ChecksState: "FAILURE", ChecksFailing: []string{"a", "b"}, ChecksComplete: false,
+	}
+	found := false
+	for _, r := range StandardPrPoints(pr, "me", now).Reasons {
+		if strings.Contains(r, "at least 2") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("an incomplete list must be reported as a lower bound: %v", StandardPrPoints(pr, "me", now).Reasons)
+	}
+}

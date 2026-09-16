@@ -56,6 +56,21 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 			points.Add(50, "Someone wants you to change something")
 		}
 
+		// Same weight as CHANGES_REQUESTED on purpose: both mean "this needs
+		// work before anyone should look at it", and the action is yours
+		// either way. Deliberately not scaled by the number of failing checks
+		// - one red check blocks the merge exactly as well as eleven do.
+		if pr.ChecksRed() {
+			what := "CI is failing"
+			if len(pr.ChecksFailing) > 0 {
+				what = fmt.Sprintf("CI is failing (%s)", strings.Join(pr.ChecksFailing, ", "))
+				if !pr.ChecksComplete {
+					what = fmt.Sprintf("CI is failing (at least %d: %s)", len(pr.ChecksFailing), strings.Join(pr.ChecksFailing, ", "))
+				}
+			}
+			points.Add(50, what+" - fix it before asking anyone to review")
+		}
+
 		if pr.LastPrCommenter != "" && pr.LastPrCommenter != username {
 			// someone might have asked us something
 			points.Add(10, fmt.Sprintf("Someone else commented last (%s)", pr.LastPrCommenter))
