@@ -53,9 +53,33 @@ type ViewPr struct {
 	// ChecksFailing are the names of the failing checks, and ChecksComplete is
 	// false when more exist than were read - so a consumer can say "at least
 	// N" instead of under-reporting.
-	ChecksFailing   []string
-	ChecksComplete  bool
-	RawJsonResponse json.RawMessage
+	ChecksFailing  []string
+	ChecksComplete bool
+	// Mergeable is github's verdict on whether the branch still merges into
+	// its base: MERGEABLE, CONFLICTING, or UNKNOWN. UNKNOWN is not a rare
+	// error case - github computes the merge lazily, so the first poll after a
+	// push routinely returns it, and it resolves on a later one. Treat it as
+	// "not known yet", never as "no conflict": a PR whose base moved under it
+	// is the author's to fix and every check on it can still be green, which
+	// is exactly how a conflicting PR gets reported as ready.
+	Mergeable string
+	// MergeStateStatus is the richer state behind the merge button: CLEAN,
+	// DIRTY (conflict), BEHIND (base moved, needs an update), BLOCKED (a
+	// required review or check is missing), UNSTABLE, DRAFT, HAS_HOOKS or
+	// UNKNOWN. Kept for context and for BEHIND, which nothing else here
+	// reports; the conflict decision itself belongs to Mergeable, which is the
+	// field github defines for it.
+	MergeStateStatus string
+	RawJsonResponse  json.RawMessage
+}
+
+// HasConflict reports whether the PR no longer merges into its base. It is
+// deliberately false for UNKNOWN: github answers UNKNOWN while it is still
+// computing the merge, and reporting that as a conflict would cry wolf on
+// every PR for the seconds after a push. Callers that need to distinguish
+// "known to be fine" from "not computed yet" should read Mergeable directly.
+func (pr ViewPr) HasConflict() bool {
+	return pr.Mergeable == "CONFLICTING"
 }
 
 // ChecksRed reports whether CI is failing on the head commit. Callers should

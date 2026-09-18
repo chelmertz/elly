@@ -92,6 +92,8 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 		`alter table prs add column checks_state text not null default ''`,
 		`alter table prs add column checks_failing text not null default ''`,
 		`alter table prs add column checks_complete boolean not null default 1`,
+		`alter table prs add column mergeable text not null default ''`,
+		`alter table prs add column merge_state_status text not null default ''`,
 	} {
 		if _, err := db.ExecContext(ctx, alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			check(err)
@@ -133,6 +135,8 @@ func (s *DbStorage) Prs() StoredState {
 			ChecksState:              dbPr.ChecksState,
 			ChecksFailing:            splitLogins(dbPr.ChecksFailing),
 			ChecksComplete:           dbPr.ChecksComplete,
+			Mergeable:                dbPr.Mergeable,
+			MergeStateStatus:         dbPr.MergeStateStatus,
 			RawJsonResponse:          dbPr.RawJsonResponse,
 		})
 	}
@@ -210,6 +214,8 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 			ChecksState:              pr.ChecksState,
 			ChecksFailing:            strings.Join(pr.ChecksFailing, ","),
 			ChecksComplete:           pr.ChecksComplete,
+			Mergeable:                pr.Mergeable,
+			MergeStateStatus:         pr.MergeStateStatus,
 			RawJsonResponse:          pr.RawJsonResponse,
 		})
 		check(err)

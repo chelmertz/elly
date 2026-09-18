@@ -38,5 +38,7 @@ type Pr struct {
 	ChecksState              string
 	ChecksFailing            string
 	ChecksComplete           bool
+	Mergeable                string
+	MergeStateStatus         string
 	RawJsonResponse          []byte
 }

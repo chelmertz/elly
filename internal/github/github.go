@@ -77,8 +77,15 @@ type prSearchResultGraphQl struct {
 		}
 	}
 	ReviewDecision string
-	UpdatedAt      string
-	Author         struct {
+	// Mergeable is MERGEABLE, CONFLICTING or UNKNOWN; github computes the
+	// merge lazily, so UNKNOWN is a normal answer shortly after a push rather
+	// than an error. Neither field needs the merge-info preview Accept header
+	// any more - verified against api.github.com on 2026-09-18 with only an
+	// Authorization header, which is all this client sends.
+	Mergeable        string
+	MergeStateStatus string
+	UpdatedAt        string
+	Author           struct {
 		Login string
 	}
 
@@ -626,6 +633,8 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 			ReviewRequestedFromUsers: reviewUsers,
 			RereviewFrom:             rereview,
 			ChecksState:              checksState,
+			Mergeable:                pr.Mergeable,
+			MergeStateStatus:         pr.MergeStateStatus,
 			ChecksFailing:            checksFailing,
 			ChecksComplete:           checksComplete,
 			RawJsonResponse:          prEdge.Node,
@@ -1110,6 +1119,8 @@ func querySearchPrs(qualifier, username string) string {
             }
           }
           reviewDecision
+          mergeable
+          mergeStateStatus
           updatedAt
           author {
             login

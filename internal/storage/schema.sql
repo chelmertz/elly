@@ -19,6 +19,8 @@ create table if not exists prs (
     checks_state text not null default '',
     checks_failing text not null default '',
     checks_complete boolean not null default 1,
+    mergeable text not null default '',
+    merge_state_status text not null default '',
     raw_json_response blob not null
 );
 

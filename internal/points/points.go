@@ -71,6 +71,16 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 			points.Add(50, what+" - fix it before asking anyone to review")
 		}
 
+		// Same weight as a red build, and for the same reason: nobody else can
+		// act until it is resolved, and every check can be green while it is
+		// true - which is exactly how a conflicting PR gets sent to a reviewer
+		// as ready. Only CONFLICTING scores; Mergeable is UNKNOWN while github
+		// computes the merge after a push, and scoring that would flag every
+		// PR for the seconds it takes to resolve.
+		if pr.HasConflict() {
+			points.Add(50, "Merge conflict with the base branch - rebase before asking anyone to review")
+		}
+
 		if pr.LastPrCommenter != "" && pr.LastPrCommenter != username {
 			// someone might have asked us something
 			points.Add(10, fmt.Sprintf("Someone else commented last (%s)", pr.LastPrCommenter))

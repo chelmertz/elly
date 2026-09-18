@@ -162,3 +162,51 @@ func Test_RedChecks_TruncatedListSaysAtLeast(t *testing.T) {
 		t.Fatalf("an incomplete list must be reported as a lower bound: %v", StandardPrPoints(pr, "me", now).Reasons)
 	}
 }
+
+// A conflicting PR is the case every other signal misses: checks are green,
+// no thread is open, review is requested, and it still cannot merge. It was
+// reported as ready on 2026-09-18 for exactly that reason.
+func Test_MergeConflict_AddPointsOnOwnPr(t *testing.T) {
+	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{
+		Author: "me", Url: "https://github.com/o/r/pull/1", LastUpdated: now,
+		ReviewRequestedFromUsers: []string{"adam"},
+		ChecksState:              "SUCCESS",
+		ChecksComplete:           true,
+		Mergeable:                "CONFLICTING",
+		MergeStateStatus:         "DIRTY",
+	}
+	conflicting := StandardPrPoints(pr, "me", now)
+	found := false
+	for _, r := range conflicting.Reasons {
+		if strings.Contains(r, "Merge conflict") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a merge-conflict reason, got %v", conflicting.Reasons)
+	}
+
+	clean := pr
+	clean.Mergeable, clean.MergeStateStatus = "MERGEABLE", "CLEAN"
+	if q := StandardPrPoints(clean, "me", now); q.Total != conflicting.Total-50 {
+		t.Fatalf("a mergeable PR must score 50 less than the same PR conflicting: %d vs %d", q.Total, conflicting.Total)
+	}
+
+	// UNKNOWN is github still computing the merge, which happens on every poll
+	// straight after a push. Scoring it would flag healthy PRs.
+	unknown := pr
+	unknown.Mergeable, unknown.MergeStateStatus = "UNKNOWN", "UNKNOWN"
+	if q := StandardPrPoints(unknown, "me", now); q.Total != conflicting.Total-50 {
+		t.Fatalf("an unknown mergeability must not score as a conflict: %d vs %d", q.Total, conflicting.Total)
+	}
+
+	// Someone else's conflict is theirs to rebase.
+	theirs := pr
+	theirs.Author = "adam"
+	for _, r := range StandardPrPoints(theirs, "me", now).Reasons {
+		if strings.Contains(r, "Merge conflict") {
+			t.Fatalf("the rule must not fire on someone else's PR: %v", r)
+		}
+	}
+}

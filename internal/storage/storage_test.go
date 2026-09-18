@@ -272,3 +272,43 @@ func TestStoreRepoPrs_EmptyListColumnsComeBackEmpty(t *testing.T) {
 		}
 	}
 }
+
+// The mergeability columns arrived after the first release, so an existing
+// database has to gain them on startup rather than on a fresh create — the
+// same path rereview_from took.
+func TestNewStorage_AddsMergeabilityColumnsToOldDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "elly.db")
+	oldDdl := strings.Replace(ddl, "    mergeable text not null default '',\n", "", 1)
+	oldDdl = strings.Replace(oldDdl, "    merge_state_status text not null default '',\n", "", 1)
+	old, err := sql.Open("sqlite", "file:"+path+"?mode=rwc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(oldDdl); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(`insert into prs (url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, buried, raw_json_response)
+		values ('https://github.com/o/r/pull/1', '', 't', 'me', 'r', 'o', 'https://github.com/o/r', 0, '2026-09-18T10:00:00Z', '', 0, 0, 1, 1, '', 0, '{}')`); err != nil {
+		t.Fatal(err)
+	}
+	_ = old.Close()
+
+	store := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
+	prs := store.Prs().Prs
+	// An old row knows nothing about its mergeability, and "" must not read as
+	// a conflict — that would flag every PR once, immediately after upgrading.
+	if len(prs) != 1 || prs[0].Mergeable != "" || prs[0].HasConflict() {
+		t.Fatalf("old row must read back with unknown mergeability: %+v", prs)
+	}
+
+	prs[0].Mergeable, prs[0].MergeStateStatus = "CONFLICTING", "DIRTY"
+	if err := store.StoreRepoPrs(prs); err != nil {
+		t.Fatal(err)
+	}
+	got := store.Prs().Prs[0]
+	if got.Mergeable != "CONFLICTING" || got.MergeStateStatus != "DIRTY" || !got.HasConflict() {
+		t.Fatalf("round trip: mergeable=%q mergeStateStatus=%q hasConflict=%v", got.Mergeable, got.MergeStateStatus, got.HasConflict())
+	}
+	// a second start must treat the existing columns as a no-op
+	NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
+}
