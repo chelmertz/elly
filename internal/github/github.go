@@ -535,6 +535,7 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 
 	viewPrs := make([]types.ViewPr, 0)
 	seen := make(map[string]bool, len(edges))
+	ownNodeIds := make(map[string]string, len(edges))
 
 	for _, prEdge := range edges {
 		var pr prSearchResultGraphQl
@@ -633,14 +634,37 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 			ReviewRequestedFromUsers: reviewUsers,
 			RereviewFrom:             rereview,
 			ChecksState:              checksState,
-			Mergeable:                pr.Mergeable,
-			MergeStateStatus:         pr.MergeStateStatus,
 			ChecksFailing:            checksFailing,
 			ChecksComplete:           checksComplete,
 			RawJsonResponse:          prEdge.Node,
 		}
 		logger.Debug("fetched a pr", slog.Any("pr", viewPr))
 		viewPrs = append(viewPrs, viewPr)
+		if pr.Author.Login == username {
+			ownNodeIds[pr.Url] = pr.Id
+		}
+	}
+
+	// Mergeability is a follow-up rather than a field on the search above, and
+	// the reason is response time rather than node cost. Asking for mergeable
+	// makes github compute a merge commit for every PR the search returns
+	// inline, which took the 100-PR query from ~6.3s to ~10.5s - over the
+	// budget it is killed at. Measured 2026-09-18: three of six runs came back
+	// 502 or 504 with the field, six of six succeeded without it, and this
+	// batched follow-up over 26 PRs answered in ~3s every time. The cliff is
+	// per request, so two requests well under it beat one over it.
+	//
+	// Only our own PRs are asked about. A conflict is the author's to rebase,
+	// so on someone else's PR the answer would score nothing and change no
+	// advice.
+	if len(ownNodeIds) > 0 {
+		merge := fetchMergeability(baseURL, token, ownNodeIds, logger)
+		for i := range viewPrs {
+			if m, ok := merge[viewPrs[i].Url]; ok {
+				viewPrs[i].Mergeable = m.Mergeable
+				viewPrs[i].MergeStateStatus = m.MergeStateStatus
+			}
+		}
 	}
 
 	out := make([]types.Degradation, 0, len(degradations))
@@ -820,6 +844,13 @@ const checkContextPageSize = "100"
 // reported as a lower bound while the state stays authoritative.
 const maxCheckContextPages = 10
 
+// mergeabilityBatchSize caps how many PRs one mergeability request asks about.
+// The field is expensive per PR - github computes a merge commit for each -
+// and it was exactly that cost inline in the 100-PR search that pushed the
+// query past its response-time budget. 40 answered in ~3s against 26 real PRs
+// with headroom to spare; raising it walks back toward the same cliff.
+const mergeabilityBatchSize = 40
+
 // failedConclusions are the check conclusions that mean "this is red". CANCELLED
 // is included deliberately: a cancelled required check blocks a merge exactly
 // like a failing one, and reading it as "not failing" is how a red PR gets
@@ -897,6 +928,77 @@ func (c checkContext) failed() bool {
 // covers returns what it read plus false, so a caller can say "at least N"
 // rather than silently under-reporting - the exact failure this whole column
 // exists to prevent.
+// mergeInfo is github's answer for one PR: whether the branch still merges
+// into its base, and the richer state behind the merge button.
+type mergeInfo struct {
+	Mergeable        string
+	MergeStateStatus string
+}
+
+// fetchMergeability asks for mergeability in batches, keyed by PR url. An
+// unanswered PR is simply absent from the result, which leaves its fields
+// empty - "not known", the same thing github's own UNKNOWN means - rather than
+// asserting that it merges cleanly.
+func fetchMergeability(baseURL, token string, urlsToNodeIds map[string]string, logger *slog.Logger) map[string]mergeInfo {
+	out := make(map[string]mergeInfo, len(urlsToNodeIds))
+	nodeIdToUrl := make(map[string]string, len(urlsToNodeIds))
+	ids := make([]string, 0, len(urlsToNodeIds))
+	for url, id := range urlsToNodeIds {
+		nodeIdToUrl[id] = url
+		ids = append(ids, id)
+	}
+	// Stable order so a failing batch is the same batch on the next poll, and
+	// so the tests can predict what goes in which request.
+	sort.Strings(ids)
+
+	for start := 0; start < len(ids); start += mergeabilityBatchSize {
+		end := min(start+mergeabilityBatchSize, len(ids))
+		body, err := graphqlRequest(baseURL, queryMergeability(ids[start:end]), token, logger)
+		if err != nil {
+			// Deliberately not a Degradation: unlike the Checks permission this
+			// is transient, and a banner that appears and clears on alternating
+			// polls teaches people to ignore banners.
+			logger.Warn("could not fetch mergeability", slog.Int("batch_size", end-start), slog.Any("err", err))
+			continue
+		}
+		var page struct {
+			Data struct {
+				Nodes []struct {
+					Id               string
+					Mergeable        string
+					MergeStateStatus string
+				}
+			}
+		}
+		if err := json.Unmarshal(body, &page); err != nil {
+			logger.Warn("could not parse mergeability", slog.Any("err", err))
+			continue
+		}
+		for _, n := range page.Data.Nodes {
+			if url, ok := nodeIdToUrl[n.Id]; ok {
+				out[url] = mergeInfo{Mergeable: n.Mergeable, MergeStateStatus: n.MergeStateStatus}
+			}
+		}
+	}
+	return out
+}
+
+func queryMergeability(nodeIds []string) string {
+	quoted := make([]string, 0, len(nodeIds))
+	for _, id := range nodeIds {
+		quoted = append(quoted, `"`+id+`"`)
+	}
+	return `query {
+  nodes(ids: [` + strings.Join(quoted, ", ") + `]) {
+    ... on PullRequest {
+      id
+      mergeable
+      mergeStateStatus
+    }
+  }
+}`
+}
+
 func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Logger) ([]string, bool, *types.Degradation) {
 	var failing []string
 	cursor := ""
@@ -1119,8 +1221,6 @@ func querySearchPrs(qualifier, username string) string {
             }
           }
           reviewDecision
-          mergeable
-          mergeStateStatus
           updatedAt
           author {
             login

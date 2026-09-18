@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chelmertz/elly/internal/types"
 	"io"
-	"slices"
 	"log/slog"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -287,6 +288,11 @@ func Test_QueryGithub_PaginatesReviewThreadsPerPR(t *testing.T) {
 			_, _ = w.Write([]byte(`{"data":{"node":{"reviewThreads":{"totalCount":2,"pageInfo":{"hasNextPage":false,"endCursor":"c2"},"edges":[
 				{"node":{"isResolved":false,"firstComment":{"nodes":[{"author":{"login":"other"}}]},"lastComment":{"nodes":[{"author":{"login":"other"},"reactions":{"edges":[]}}]}}}
 			]}}}}`))
+		case strings.Contains(q, "nodes(ids:"):
+			// mergeability is a batched follow-up for our own PRs
+			_, _ = w.Write([]byte(`{"data":{"nodes":[
+				{"id":"PR_1","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY"}
+			]}}`))
 		default:
 			t.Errorf("unexpected query: %s", q)
 			w.WriteHeader(http.StatusBadRequest)
@@ -813,6 +819,11 @@ func Test_QueryGithub_IncludesReviewRequestedPrs(t *testing.T) {
 	var qualifiers []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), "nodes(ids:") {
+			// the mergeability follow-up, not one of the two searches
+			_, _ = fmt.Fprint(w, `{"data":{"nodes":[{"id":"PR_1","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN"}]}}`)
+			return
+		}
 		if strings.Contains(string(body), "review-requested:") {
 			qualifiers = append(qualifiers, "review-requested")
 			// pull/1 is in both searches and must survive as one row.
@@ -901,5 +912,72 @@ func Test_QueryGithub_RateLimitOnReviewRequestedStillBacksOff(t *testing.T) {
 	var rl *ErrRateLimited
 	if !errors.As(err, &rl) {
 		t.Fatalf("a rate limit must reach the caller, got %v", err)
+	}
+}
+
+// Mergeability is a follow-up rather than a field on the search, because
+// asking for it inline made github compute a merge commit per PR and pushed
+// the 100-PR query past its response-time budget: three of six runs came back
+// 502 or 504 on 2026-09-18. It is also asked only about our own PRs, since a
+// conflict is the author's to rebase.
+func Test_QueryGithub_FetchesMergeabilityForOwnPrsOnly(t *testing.T) {
+	pr := func(n, author string) string {
+		return fmt.Sprintf(`{"node":{
+			"id":"PR_%s","url":"https://github.com/o/r/pull/%s","title":"t%s","author":{"login":%q},
+			"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
+			"comments":{"edges":[]},
+			"reviewThreads":{"totalCount":0,"pageInfo":{"hasNextPage":false},"edges":[]}
+		}}`, n, n, n, author)
+	}
+	var mergeabilityQueries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		q := string(body)
+		if strings.Contains(q, "nodes(ids:") {
+			mergeabilityQueries = append(mergeabilityQueries, q)
+			_, _ = fmt.Fprint(w, `{"data":{"nodes":[{"id":"PR_1","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY"}]}}`)
+			return
+		}
+		if strings.Contains(q, "review-requested:") {
+			_, _ = fmt.Fprint(w, `{"data":{"search":{"edges":[]}}}`)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"data":{"search":{"edges":[%s,%s]}}}`, pr("1", "me"), pr("2", "adam"))
+	}))
+	t.Cleanup(srv.Close)
+
+	prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mergeabilityQueries) != 1 {
+		t.Fatalf("expected exactly one batched follow-up, got %d", len(mergeabilityQueries))
+	}
+	// The whole point of the batch: one request, not one per PR, and it must
+	// not carry the PR we did not author.
+	if !strings.Contains(mergeabilityQueries[0], "PR_1") {
+		t.Errorf("our own PR must be asked about: %s", mergeabilityQueries[0])
+	}
+	if strings.Contains(mergeabilityQueries[0], "PR_2") {
+		t.Errorf("someone else's PR must not be asked about: %s", mergeabilityQueries[0])
+	}
+
+	find := func(url string) types.ViewPr {
+		for _, p := range prs {
+			if p.Url == url {
+				return p
+			}
+		}
+		t.Fatalf("no such pr: %s", url)
+		return types.ViewPr{}
+	}
+	mine := find("https://github.com/o/r/pull/1")
+	if mine.Mergeable != "CONFLICTING" || mine.MergeStateStatus != "DIRTY" || !mine.HasConflict() {
+		t.Errorf("own PR must carry the answer: %+v", mine)
+	}
+	// Never asked about, so never claimed to be clean.
+	theirs := find("https://github.com/o/r/pull/2")
+	if theirs.Mergeable != "" || theirs.HasConflict() {
+		t.Errorf("an unasked PR must stay unknown, not clean: %+v", theirs)
 	}
 }
