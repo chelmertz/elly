@@ -81,11 +81,6 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 			points.Add(50, "Merge conflict with the base branch - rebase before asking anyone to review")
 		}
 
-		if pr.LastPrCommenter != "" && pr.LastPrCommenter != username {
-			// someone might have asked us something
-			points.Add(10, fmt.Sprintf("Someone else commented last (%s)", pr.LastPrCommenter))
-		}
-
 		if pr.IsDraft {
 			points.Remove(10, "PR is my draft")
 		}
@@ -147,6 +142,23 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 				points.Add(10, fmt.Sprintf("PR is bigish, %d loc changed is >300", diff))
 			}
 		}
+	}
+
+	// Someone might have asked us something. On our own PR that is always worth
+	// knowing; on someone else's it is worth knowing only where we already have
+	// a thread open, which is what separates a review we are part of from the
+	// drive-by PRs the involves: search is full of - commented on once, never
+	// asked for anything, and not ours to chase.
+	//
+	// Fenced inside the own-PR branch until 2026-09-18, when an author answered
+	// a five-thread review with a direct question and the PR scored -10: the
+	// ThreadsWaiting penalty below, with nothing to offset it. Deliberately not
+	// ThreadsActionable, which means we owe a reply and must keep meaning that
+	// alone; this is the softer "they moved, go look" signal.
+	weReviewedIt := pr.ThreadsWaiting > 0 || pr.ThreadsActionable > 0
+	if pr.LastPrCommenter != "" && pr.LastPrCommenter != username &&
+		(pr.Author == username || weReviewedIt) {
+		points.Add(10, fmt.Sprintf("Someone else commented last (%s)", pr.LastPrCommenter))
 	}
 
 	sort.Slice(points.Reasons, func(i, j int) bool {
