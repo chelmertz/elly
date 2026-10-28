@@ -460,6 +460,36 @@ func Test_QueryGithub_IgnoresBotsAsLastCommenter(t *testing.T) {
 	}
 }
 
+// The head commit is what tells "new commits since the last look" apart from
+// "same commits, new chatter"; a consumer keys on it, so it must survive the
+// search response.
+func Test_QueryGithub_CarriesHeadCommit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"search":{"edges":[{"node":{
+			"id":"PR_1","url":"https://github.com/o/r/pull/1","title":"t","author":{"login":"me"},
+			"headRefOid":"0123456789abcdef0123456789abcdef01234567",
+			"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
+			"reviewThreads":{"totalCount":0,"pageInfo":{"hasNextPage":false},"edges":[]}
+		}}]}}}`))
+	}))
+	t.Cleanup(srv.Close)
+	prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prs) != 1 || prs[0].HeadRefOid != "0123456789abcdef0123456789abcdef01234567" {
+		t.Fatalf("expected the head commit, got %+v", prs)
+	}
+}
+
+func Test_SearchQuery_AsksForHeadCommit(t *testing.T) {
+	for _, qualifier := range []string{qualifierInvolves, qualifierReviewRequested} {
+		if q := querySearchPrs(qualifier, "me"); !strings.Contains(q, "headRefOid") {
+			t.Errorf("%s query is missing headRefOid", qualifier)
+		}
+	}
+}
+
 // An approval that github leaves out of reviewDecision is picked up from the
 // reviews list, but only when nothing stronger is set: a PR with changes
 // requested must not be reported as approved.

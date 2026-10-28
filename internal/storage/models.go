@@ -40,5 +40,6 @@ type Pr struct {
 	ChecksComplete           bool
 	Mergeable                string
 	MergeStateStatus         string
+	HeadRefOid               string
 	RawJsonResponse          []byte
 }

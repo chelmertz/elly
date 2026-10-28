@@ -97,9 +97,10 @@ type prSearchResultGraphQl struct {
 		}
 	}
 
-	Additions int
-	Deletions int
-	Comments  struct {
+	Additions  int
+	Deletions  int
+	HeadRefOid string
+	Comments   struct {
 		Edges []struct {
 			Node struct {
 				UpdatedAt string
@@ -636,6 +637,7 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 			ChecksState:              checksState,
 			ChecksFailing:            checksFailing,
 			ChecksComplete:           checksComplete,
+			HeadRefOid:               pr.HeadRefOid,
 			RawJsonResponse:          prEdge.Node,
 		}
 		logger.Debug("fetched a pr", slog.Any("pr", viewPr))
@@ -1227,6 +1229,7 @@ func querySearchPrs(qualifier, username string) string {
           }
           additions
           deletions
+          headRefOid
           comments(last: 5) {
             edges {
               node {

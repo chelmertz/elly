@@ -21,6 +21,7 @@ create table if not exists prs (
     checks_complete boolean not null default 1,
     mergeable text not null default '',
     merge_state_status text not null default '',
+    head_ref_oid text not null default '',
     raw_json_response blob not null
 );
 

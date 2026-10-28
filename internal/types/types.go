@@ -70,7 +70,11 @@ type ViewPr struct {
 	// reports; the conflict decision itself belongs to Mergeable, which is the
 	// field github defines for it.
 	MergeStateStatus string
-	RawJsonResponse  json.RawMessage
+	// HeadRefOid is the SHA of the PR's head commit. A change in it is how a
+	// consumer tells "new commits pushed" apart from "new comments on the
+	// same commits"; elly itself does not read it.
+	HeadRefOid      string
+	RawJsonResponse json.RawMessage
 }
 
 // HasConflict reports whether the PR no longer merges into its base. It is

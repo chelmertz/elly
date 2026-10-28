@@ -273,13 +273,14 @@ func TestStoreRepoPrs_EmptyListColumnsComeBackEmpty(t *testing.T) {
 	}
 }
 
-// The mergeability columns arrived after the first release, so an existing
+// The mergeability and head commit columns arrived after the first release, so an existing
 // database has to gain them on startup rather than on a fresh create — the
 // same path rereview_from took.
 func TestNewStorage_AddsMergeabilityColumnsToOldDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "elly.db")
 	oldDdl := strings.Replace(ddl, "    mergeable text not null default '',\n", "", 1)
 	oldDdl = strings.Replace(oldDdl, "    merge_state_status text not null default '',\n", "", 1)
+	oldDdl = strings.Replace(oldDdl, "    head_ref_oid text not null default '',\n", "", 1)
 	old, err := sql.Open("sqlite", "file:"+path+"?mode=rwc")
 	if err != nil {
 		t.Fatal(err)
@@ -302,12 +303,16 @@ func TestNewStorage_AddsMergeabilityColumnsToOldDatabase(t *testing.T) {
 	}
 
 	prs[0].Mergeable, prs[0].MergeStateStatus = "CONFLICTING", "DIRTY"
+	prs[0].HeadRefOid = "0123456789abcdef0123456789abcdef01234567"
 	if err := store.StoreRepoPrs(prs); err != nil {
 		t.Fatal(err)
 	}
 	got := store.Prs().Prs[0]
 	if got.Mergeable != "CONFLICTING" || got.MergeStateStatus != "DIRTY" || !got.HasConflict() {
 		t.Fatalf("round trip: mergeable=%q mergeStateStatus=%q hasConflict=%v", got.Mergeable, got.MergeStateStatus, got.HasConflict())
+	}
+	if got.HeadRefOid != "0123456789abcdef0123456789abcdef01234567" {
+		t.Fatalf("round trip: headRefOid=%q", got.HeadRefOid)
 	}
 	// a second start must treat the existing columns as a no-op
 	NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
