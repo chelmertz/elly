@@ -5,11 +5,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
-	"text/template"
 	"time"
 
 	"github.com/chelmertz/elly/internal/backoff"
@@ -66,8 +66,15 @@ func getCurrentUsername(store storage.Storage) string {
 	return storedPat.Username
 }
 
+// parseIndex parses the page template. PR titles, authors and repo names are
+// written by whoever opens a PR that involves the user, so the template must
+// escape them.
+func parseIndex() (*template.Template, error) {
+	return template.ParseFS(index, "index.html")
+}
+
 func ServeWeb(webConfig HttpServerConfig) {
-	temp, err := template.ParseFS(index, "index.html")
+	temp, err := parseIndex()
 	check(err)
 
 	http.HandleFunc("POST /api/v0/prs/{prUrl}/golden", func(w http.ResponseWriter, r *http.Request) {
