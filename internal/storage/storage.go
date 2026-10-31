@@ -54,6 +54,12 @@ type Storage interface {
 	StoreDegradations(ds []types.Degradation) error
 	// Degradations returns what the last poll could not do, empty when all is well.
 	Degradations() []types.Degradation
+	// StoreNotifySeen records the notification reasons each PR had at the
+	// last fetch, so a restart does not send them again.
+	StoreNotifySeen(seen map[string][]string) error
+	// NotifySeen returns what StoreNotifySeen last stored, or nil when
+	// nothing ever was, which makes the next fetch a silent baseline.
+	NotifySeen() map[string][]string
 }
 
 type DbStorage struct {
@@ -397,4 +403,30 @@ func (s *DbStorage) Degradations() []types.Degradation {
 		return nil
 	}
 	return ds
+}
+
+func (s *DbStorage) StoreNotifySeen(seen map[string][]string) error {
+	blob, err := json.Marshal(seen)
+	if err != nil {
+		return fmt.Errorf("could not marshal notify state: %w", err)
+	}
+	return s.db.StoreNotifySeen(context.Background(), string(blob))
+}
+
+// NotifySeen swallows a missing or unreadable record as nil: the cost is one
+// silent fetch, where an error would stop notifications altogether.
+func (s *DbStorage) NotifySeen() map[string][]string {
+	blob, err := s.db.GetNotifySeen(context.Background())
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			s.logger.Warn("could not read notify state", slog.Any("error", err))
+		}
+		return nil
+	}
+	var seen map[string][]string
+	if err := json.Unmarshal([]byte(blob), &seen); err != nil {
+		s.logger.Warn("could not parse notify state", slog.Any("error", err))
+		return nil
+	}
+	return seen
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/chelmertz/elly/internal/backoff"
 	"github.com/chelmertz/elly/internal/github"
+	"github.com/chelmertz/elly/internal/notify"
 	"github.com/chelmertz/elly/internal/storage"
 	"github.com/chelmertz/elly/internal/types"
 )
@@ -66,14 +67,16 @@ func (s *testStorage) ClearPAT() error {
 	return nil
 }
 
-func (s *testStorage) Prs() storage.StoredState          { return storage.StoredState{} }
-func (s *testStorage) StoreRepoPrs([]types.ViewPr) error { return nil }
-func (s *testStorage) Bury(string) error                 { return nil }
-func (s *testStorage) Unbury(string) error               { return nil }
-func (s *testStorage) GetPr(string) (storage.Pr, error)  { return storage.Pr{}, nil }
-func (s *testStorage) SetRateLimitUntil(time.Time) error { return nil }
-func (s *testStorage) IsRateLimitActive(time.Time) bool  { return false }
-func (s *testStorage) GetRateLimitUntil() time.Time      { return time.Time{} }
+func (s *testStorage) Prs() storage.StoredState                  { return storage.StoredState{} }
+func (s *testStorage) StoreRepoPrs([]types.ViewPr) error         { return nil }
+func (s *testStorage) Bury(string) error                         { return nil }
+func (s *testStorage) Unbury(string) error                       { return nil }
+func (s *testStorage) GetPr(string) (storage.Pr, error)          { return storage.Pr{}, nil }
+func (s *testStorage) SetRateLimitUntil(time.Time) error         { return nil }
+func (s *testStorage) IsRateLimitActive(time.Time) bool          { return false }
+func (s *testStorage) GetRateLimitUntil() time.Time              { return time.Time{} }
+func (s *testStorage) StoreNotifySeen(map[string][]string) error { return nil }
+func (s *testStorage) NotifySeen() map[string][]string           { return nil }
 
 var _ storage.Storage = (*testStorage)(nil)
 
@@ -291,7 +294,7 @@ func TestRefreshLoop_ClientErrorBacksOffAndKeepsPolling(t *testing.T) {
 
 	gaveUp := make(chan struct{})
 	go func() {
-		startRefreshLoop(newTestStorage("test-token", "testuser"), tracker, githubAPI.URL, logger)
+		startRefreshLoop(newTestStorage("test-token", "testuser"), tracker, githubAPI.URL, nil, logger)
 		close(gaveUp)
 	}()
 
@@ -318,3 +321,38 @@ func (s *testStorage) StoreDegradations(ds []types.Degradation) error {
 }
 
 func (s *testStorage) Degradations() []types.Degradation { return s.degradations }
+
+func TestNotifyChanges_BaselineThenOnePerGainedReason(t *testing.T) {
+	logger := testLogger(t)
+	store := storage.NewStorage(logger, ":memory:")
+	var sent []string
+	send := func(n notify.Notification) { sent = append(sent, n.PrUrl) }
+	pr := types.ViewPr{Url: "https://github.com/work/r/pull/1", RepoOwner: "work", Author: "me", RawJsonResponse: []byte("{}"),
+		LastUpdated: time.Now().UTC().Truncate(time.Second)}
+
+	pr.ReviewStatus = "APPROVED"
+	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+		t.Fatal(err)
+	}
+	notifyChanges(store, "me", []string{"work"}, send, logger)
+	if len(sent) != 0 {
+		t.Fatalf("first fetch sent %v, want a silent baseline", sent)
+	}
+
+	pr.ReviewStatus = "CHANGES_REQUESTED"
+	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+		t.Fatal(err)
+	}
+	notifyChanges(store, "me", []string{"work"}, send, logger)
+	notifyChanges(store, "me", []string{"work"}, send, logger)
+	if len(sent) != 1 {
+		t.Errorf("sent %v, want exactly one notification for the change request", sent)
+	}
+}
+
+func TestSplitOwners(t *testing.T) {
+	got := strings.Join(splitOwners(" acme, ,globex,"), "|")
+	if got != "acme|globex" {
+		t.Errorf("got %q", got)
+	}
+}

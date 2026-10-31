@@ -155,3 +155,7 @@ func (s *StorageDemo) ClearPAT() error {
 func (s *StorageDemo) StoreDegradations(ds []types.Degradation) error { return nil }
 
 func (s *StorageDemo) Degradations() []types.Degradation { return nil }
+
+func (s *StorageDemo) StoreNotifySeen(seen map[string][]string) error { return nil }
+
+func (s *StorageDemo) NotifySeen() map[string][]string { return nil }

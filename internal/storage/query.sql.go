@@ -246,6 +246,17 @@ func (q *Queries) GetLastFetched(ctx context.Context) (string, error) {
 	return value, err
 }
 
+const getNotifySeen = `-- name: GetNotifySeen :one
+select value from meta where key = 'notify_seen' limit 1
+`
+
+func (q *Queries) GetNotifySeen(ctx context.Context) (string, error) {
+	row := q.db.QueryRowContext(ctx, getNotifySeen)
+	var value string
+	err := row.Scan(&value)
+	return value, err
+}
+
 const getPr = `-- name: GetPr :one
 select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, rereview_from, buried, checks_state, checks_failing, checks_complete, mergeable, merge_state_status, head_ref_oid, raw_json_response from prs where url = ? limit 1
 `
@@ -375,6 +386,15 @@ replace into meta (key, value) values ('last_fetched', ?)
 
 func (q *Queries) StoreLastFetched(ctx context.Context, value string) error {
 	_, err := q.db.ExecContext(ctx, storeLastFetched, value)
+	return err
+}
+
+const storeNotifySeen = `-- name: StoreNotifySeen :exec
+replace into meta (key, value) values ('notify_seen', ?)
+`
+
+func (q *Queries) StoreNotifySeen(ctx context.Context, value string) error {
+	_, err := q.db.ExecContext(ctx, storeNotifySeen, value)
 	return err
 }
 

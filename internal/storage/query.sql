@@ -78,3 +78,9 @@ replace into meta (key, value) values ('degradations', ?);
 
 -- name: GetDegradations :one
 select value from meta where key = 'degradations' limit 1;
+
+-- name: StoreNotifySeen :exec
+replace into meta (key, value) values ('notify_seen', ?);
+
+-- name: GetNotifySeen :one
+select value from meta where key = 'notify_seen' limit 1;

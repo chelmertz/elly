@@ -5,14 +5,17 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"log/slog"
 
 	"github.com/chelmertz/elly/internal/backoff"
 	"github.com/chelmertz/elly/internal/github"
+	"github.com/chelmertz/elly/internal/notify"
 	"github.com/chelmertz/elly/internal/server"
 	"github.com/chelmertz/elly/internal/storage"
 )
@@ -24,6 +27,8 @@ var golden = flag.Bool("golden", false, "provide a button for turning a PR into 
 var demo = flag.Bool("demo", false, "mock the PRs so you can take a proper screenshot of the GUI")
 var versionFlag = flag.Bool("version", false, "show version")
 var verboseFlag = flag.Bool("verbose", false, "verbose logging")
+var notifyFlag = flag.Bool("notify", false, "send a desktop notification (notify-send) when a PR gains a reason to act")
+var workOwners = flag.String("work-owners", "", "comma-separated repo owners that notify only on reasons to act; any other owner notifies on every change by someone else")
 
 func main() {
 	flag.Parse()
@@ -80,7 +85,17 @@ func main() {
 
 	tracker := backoff.New(logger, time.Duration(*timeoutMinutes)*time.Minute)
 
-	go startRefreshLoop(store, tracker, github.DefaultAPIURL, logger)
+	var send func(notify.Notification)
+	if *notifyFlag {
+		bin, err := exec.LookPath("notify-send")
+		if err != nil {
+			logger.Error("-notify needs notify-send on PATH", slog.Any("error", err))
+			os.Exit(1)
+		}
+		send = notify.Sender{Bin: bin, PageUrl: "http://" + *url, Logger: logger}.Send
+	}
+
+	go startRefreshLoop(store, tracker, github.DefaultAPIURL, send, logger)
 
 	server.ServeWeb(server.HttpServerConfig{
 		Url:                  *url,
@@ -138,7 +153,7 @@ func initPAT(store storage.Storage, githubBaseURL string, logger *slog.Logger) (
 	return false, nil
 }
 
-func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL string, logger *slog.Logger) {
+func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL string, send func(notify.Notification), logger *slog.Logger) {
 	for tracker.Tick() {
 		storedPat, found, _ := store.GetPAT()
 		if !found {
@@ -186,6 +201,34 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 		}
 		if err := store.StoreRepoPrs(prs); err != nil {
 			logger.Error("could not store prs", slog.Any("error", err))
+			continue
+		}
+		if send != nil {
+			notifyChanges(store, storedPat.Username, splitOwners(*workOwners), send, logger)
 		}
 	}
+}
+
+// notifyChanges sends one notification per PR that gained a reason since the
+// previous fetch. The new state is stored before anything is sent: if it
+// cannot be stored, sending would repeat the same notifications every fetch.
+func notifyChanges(store storage.Storage, username string, workOwners []string, send func(notify.Notification), logger *slog.Logger) {
+	ns, seen := notify.Diff(store.NotifySeen(), store.Prs().Prs, username, workOwners)
+	if err := store.StoreNotifySeen(seen); err != nil {
+		logger.Warn("could not store notify state, sending nothing", slog.Any("error", err))
+		return
+	}
+	for _, n := range notify.Coalesce(ns) {
+		send(n)
+	}
+}
+
+func splitOwners(s string) []string {
+	var owners []string
+	for _, o := range strings.Split(s, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			owners = append(owners, o)
+		}
+	}
+	return owners
 }

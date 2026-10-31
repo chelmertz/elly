@@ -317,3 +317,25 @@ func TestNewStorage_AddsMergeabilityColumnsToOldDatabase(t *testing.T) {
 	// a second start must treat the existing columns as a no-op
 	NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
 }
+
+func TestNotifySeen(t *testing.T) {
+	store := setupTestStorage(t)
+
+	if got := store.NotifySeen(); got != nil {
+		t.Fatalf("fresh database: got %v, want nil so the first fetch is a baseline", got)
+	}
+
+	if err := store.StoreNotifySeen(map[string][]string{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.NotifySeen(); got == nil {
+		t.Error("a stored empty state reads back as nil, so every fetch would be a silent baseline")
+	}
+
+	if err := store.StoreNotifySeen(map[string][]string{"u": {"approved"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.NotifySeen(); len(got["u"]) != 1 || got["u"][0] != "approved" {
+		t.Errorf("got %v", got)
+	}
+}

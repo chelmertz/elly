@@ -30,6 +30,20 @@ flowchart TB
     I(i3blocks) -.-> E
 ```
 
+## Desktop notifications
+
+`elly -notify` sends a desktop notification through `notify-send` when a PR
+gains a reason to act: your PR approved or with changes requested, someone
+else commenting on your PR, a reply to your thread, or a review requested from
+you. Each reason notifies once, until it goes away and comes back. The first
+start records what is already there without notifying, and more than three in
+one fetch arrive as one summary. Clicking a notification opens elly.
+
+`-work-owners=org1,org2` limits those owners to the reasons above. A PR whose
+repo owner is not listed, such as an open-source contribution, notifies on
+every change by someone else: a push, a comment, a review. With no
+`-work-owners`, every owner gets that.
+
 ## PAT Oauth permissions
 
 Two token classes work, and they differ in exactly one thing: whether elly can
