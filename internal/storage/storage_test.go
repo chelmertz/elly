@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -337,5 +338,38 @@ func TestNotifySeen(t *testing.T) {
 	}
 	if got := store.NotifySeen(); len(got["u"]) != 1 || got["u"][0] != "approved" {
 		t.Errorf("got %v", got)
+	}
+}
+
+func TestStoreRepoPrsIsAllOrNothing(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	store := NewStorage(logger, filepath.Join(t.TempDir(), "elly.db"))
+	pr := func(url string) types.ViewPr {
+		return types.ViewPr{Url: url, LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}
+	}
+	if err := store.StoreRepoPrs([]types.ViewPr{pr("old1"), pr("old2")}); err != nil {
+		t.Fatal(err)
+	}
+
+	broken := pr("new2")
+	broken.RawJsonResponse = nil // violates NOT NULL, so the second insert fails
+	err := func() (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("panicked: %v", r)
+			}
+		}()
+		return store.StoreRepoPrs([]types.ViewPr{pr("new1"), broken})
+	}()
+	if err == nil {
+		t.Fatal("a failing insert reported success")
+	}
+
+	var urls []string
+	for _, p := range store.Prs().Prs {
+		urls = append(urls, p.Url)
+	}
+	if strings.Join(urls, ",") != "old1,old2" && strings.Join(urls, ",") != "old2,old1" {
+		t.Errorf("after a failed refresh the stored PRs are %v, want the previous list intact", urls)
 	}
 }

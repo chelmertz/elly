@@ -196,12 +196,22 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 		}
 	}
 
-	if err := s.db.DeletePrs(context.Background()); err != nil {
+	// One transaction, so a reader never sees the table emptied and half
+	// refilled, and a failed insert leaves the previous list in place.
+	ctx := context.Background()
+	tx, err := s.rawDb.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("could not begin storing prs: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
+	q := s.db.WithTx(tx)
+
+	if err := q.DeletePrs(ctx); err != nil {
 		return fmt.Errorf("could not delete old prs, in preparation of storing new ones: %w", err)
 	}
 
 	for _, pr := range orderedPrs {
-		_, err := s.db.CreatePr(context.Background(), CreatePrParams{
+		_, err := q.CreatePr(ctx, CreatePrParams{
 			Url:                      pr.Url,
 			ReviewStatus:             pr.ReviewStatus,
 			Title:                    pr.Title,
@@ -227,13 +237,16 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 			HeadRefOid:               pr.HeadRefOid,
 			RawJsonResponse:          pr.RawJsonResponse,
 		})
-		check(err)
+		if err != nil {
+			return fmt.Errorf("could not store pr %s: %w", pr.Url, err)
+		}
 	}
 
-	now := time.Now()
-	nowFormatted := now.Format(time.RFC3339)
-	if err := s.db.StoreLastFetched(context.Background(), nowFormatted); err != nil {
+	if err := q.StoreLastFetched(ctx, time.Now().Format(time.RFC3339)); err != nil {
 		return fmt.Errorf("could not store last fetched time: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("could not commit stored prs: %w", err)
 	}
 
 	trackPRs(orderedPrs)
