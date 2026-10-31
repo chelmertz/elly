@@ -159,6 +159,11 @@ Or, install permanently:
 
 ## Developing
 
+`make test` runs the unit and property tests (rapid). `make props-long` runs
+the property tests with 10000 cases each and `make mutate` runs gremlins;
+both are slow, so `.github/workflows/slow-tests.yml` runs them daily instead
+of on every push.
+
 See [dev.md](dev.md) for some useful commands during development.
 
 ## Design decisions

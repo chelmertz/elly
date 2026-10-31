@@ -33,4 +33,18 @@ models:
 	go mod tidy
 	go tool sqlc generate
 
-.PHONY: test release lint models
+# Slow checks, run daily by .github/workflows/slow-tests.yml instead of on
+# every push. One worker keeps a mutation run's memory bounded. Thresholds
+# are the measured baseline (2026-10-31: 322 killed, 0 lived, 75.6% of
+# mutants covered), so a surviving mutant or a coverage drop fails the run.
+MUTATION_EFFICACY ?= 100
+MUTATION_COVERAGE ?= 75
+mutate:
+	CGO_ENABLED=0 go tool gremlins unleash --workers 1 --threshold-efficacy $(MUTATION_EFFICACY) --threshold-mcover $(MUTATION_COVERAGE) .
+
+# The property tests with 10000 cases each instead of rapid's default 100.
+PROP_PACKAGES = ./internal/notify ./internal/points ./internal/server
+props-long:
+	CGO_ENABLED=0 go test -run Prop $(PROP_PACKAGES) -args -rapid.checks=10000
+
+.PHONY: test release lint models mutate props-long

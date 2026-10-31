@@ -7,3 +7,6 @@ internal/points/golden_test*json
 
 # flake, result of `nix build`
 result
+
+# rapid writes a failing case here to replay it; not for the repo
+testdata/rapid/
