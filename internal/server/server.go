@@ -58,6 +58,32 @@ type HttpServerConfig struct {
 }
 
 // getCurrentUsername returns the username from the stored PAT, or empty string if not configured.
+// prsAtOrAbove returns the PRs scoring at least minimumPoints, highest first,
+// most recently updated first on a tie.
+func prsAtOrAbove(prs []types.ViewPr, currentUser string, minimumPoints int, now time.Time) []types.ViewPr {
+	pointsPerPrUrl := make(map[string]*points.Points)
+	for _, pr := range prs {
+		pointsPerPrUrl[pr.Url] = points.StandardPrPoints(pr, currentUser, now)
+	}
+
+	prsToReturn := make([]types.ViewPr, 0)
+	for _, pr := range prs {
+		if pointsPerPrUrl[pr.Url].Total >= minimumPoints {
+			prsToReturn = append(prsToReturn, pr)
+		}
+	}
+
+	sort.Slice(prsToReturn, func(i, j int) bool {
+		pri := pointsPerPrUrl[prsToReturn[i].Url].Total
+		prj := pointsPerPrUrl[prsToReturn[j].Url].Total
+		if pri == prj {
+			return prsToReturn[j].LastUpdated.Before(prsToReturn[i].LastUpdated)
+		}
+		return pri > prj
+	})
+	return prsToReturn
+}
+
 func getCurrentUsername(store storage.Storage) string {
 	storedPat, found, _ := store.GetPAT()
 	if !found {
@@ -160,9 +186,6 @@ func ServeWeb(webConfig HttpServerConfig) {
 	// Let's say that v0 represents "may change at any time", read the code.
 	// Should be bumped before tagging this repo as v1
 	http.HandleFunc("GET /api/v0/prs", func(w http.ResponseWriter, r *http.Request) {
-		storedPrs := webConfig.Store.Prs().Prs
-		prsToReturn := make([]types.ViewPr, 0)
-
 		minimumPoints := -999
 		if minPoints := r.URL.Query().Get("minPoints"); minPoints != "" {
 			if min, err := strconv.Atoi(minPoints); err == nil && min >= -999 && min <= 999 {
@@ -170,30 +193,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 			}
 		}
 
-		currentUser := getCurrentUsername(webConfig.Store)
-		pointsPerPrUrl := make(map[string]*points.Points)
-		for _, pr := range storedPrs {
-			points := points.StandardPrPoints(pr, currentUser, time.Now())
-			pointsPerPrUrl[pr.Url] = points
-		}
-
-		// TODO turn into slices.DeleteFunc()
-		for _, pr := range storedPrs {
-			points := pointsPerPrUrl[pr.Url]
-			if points.Total >= minimumPoints {
-				prsToReturn = append(prsToReturn, pr)
-			}
-		}
-
-		sort.Slice(prsToReturn, func(i, j int) bool {
-			pri := pointsPerPrUrl[storedPrs[i].Url].Total
-			prj := pointsPerPrUrl[storedPrs[j].Url].Total
-			if pri == prj {
-				lastUpdated := storedPrs[j].LastUpdated.Before(storedPrs[i].LastUpdated)
-				return lastUpdated
-			}
-			return pri > prj
-		})
+		prsToReturn := prsAtOrAbove(webConfig.Store.Prs().Prs, getCurrentUsername(webConfig.Store), minimumPoints, time.Now())
 
 		w.Header().Set("Content-Type", "application/json")
 		err := json.NewEncoder(w).Encode(prsToReturn)
