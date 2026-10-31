@@ -60,6 +60,15 @@ type HttpServerConfig struct {
 	AnnotationToken string
 	// AnnotationSchemes are the link schemes allowed besides https.
 	AnnotationSchemes []string
+	// GithubURL is where a pasted PAT is checked; empty means GitHub's API.
+	GithubURL string
+}
+
+func (c HttpServerConfig) githubURL() string {
+	if c.GithubURL == "" {
+		return github.DefaultAPIURL
+	}
+	return c.GithubURL
 }
 
 func (c HttpServerConfig) logger() *slog.Logger {
@@ -115,12 +124,21 @@ func parseIndex(annotationSchemes []string) (*template.Template, error) {
 }
 
 func ServeWeb(webConfig HttpServerConfig) {
+	mux := routes(webConfig)
+	webConfig.Logger.Info("starting web server at", slog.String("url", "http://"+webConfig.Url))
+	serverErr := http.ListenAndServe(webConfig.Url, guard(webConfig.Url, mux))
+	check(serverErr)
+}
+
+// routes registers every handler on a mux of its own, so tests can build it.
+func routes(webConfig HttpServerConfig) *http.ServeMux {
+	mux := http.NewServeMux()
 	temp, err := parseIndex(webConfig.AnnotationSchemes)
 	check(err)
 
-	registerAnnotationRoutes(http.DefaultServeMux, webConfig)
+	registerAnnotationRoutes(mux, webConfig)
 
-	http.HandleFunc("POST /api/v0/prs/{prUrl}/golden", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/v0/prs/{prUrl}/golden", func(w http.ResponseWriter, r *http.Request) {
 		if !webConfig.GoldenTestingEnabled {
 			// Nothing to see here, the feature is turned off - restart with -golden to turn it on
 			w.WriteHeader(http.StatusNotFound)
@@ -168,7 +186,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	http.HandleFunc("POST /api/v0/prs/{prUrl}/{action}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/v0/prs/{prUrl}/{action}", func(w http.ResponseWriter, r *http.Request) {
 		prUrlBytes, err := base64.StdEncoding.DecodeString(r.PathValue("prUrl"))
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -202,7 +220,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 
 	// Let's say that v0 represents "may change at any time", read the code.
 	// Should be bumped before tagging this repo as v1
-	http.HandleFunc("GET /api/v0/prs", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/v0/prs", func(w http.ResponseWriter, r *http.Request) {
 		minimumPoints := -999
 		if minPoints := r.URL.Query().Get("minPoints"); minPoints != "" {
 			if min, err := strconv.Atoi(minPoints); err == nil && min >= -999 && min <= 999 {
@@ -217,11 +235,11 @@ func ServeWeb(webConfig HttpServerConfig) {
 		check(err)
 	})
 
-	http.HandleFunc("POST /api/v0/prs/refresh", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/v0/prs/refresh", func(w http.ResponseWriter, r *http.Request) {
 		webConfig.Tracker.RequestRefresh()
 	})
 
-	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		storedPrs := webConfig.Store.Prs()
 		prs_ := storedPrs.Prs
 
@@ -265,14 +283,14 @@ func ServeWeb(webConfig HttpServerConfig) {
 		check(err)
 	})
 
-	http.Handle("GET /metrics", promhttp.Handler())
+	mux.Handle("GET /metrics", promhttp.Handler())
 
-	http.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok") //nolint:errcheck // best-effort response body
 	})
 
-	http.HandleFunc("PUT /api/v0/config/pat", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /api/v0/config/pat", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Token string `json:"token"`
 		}
@@ -289,7 +307,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 		}
 
 		// Validate the token with GitHub (checks both authentication and required scopes)
-		username, expiresAt, err := github.ValidatePAT(github.DefaultAPIURL, req.Token, webConfig.Logger)
+		username, expiresAt, err := github.ValidatePAT(webConfig.githubURL(), req.Token, webConfig.Logger)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid token: " + err.Error()})
@@ -317,7 +335,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 		_ = json.NewEncoder(w).Encode(response)
 	})
 
-	http.HandleFunc("GET /api/v0/config/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/v0/config/status", func(w http.ResponseWriter, r *http.Request) {
 		storedPat, found, _ := webConfig.Store.GetPAT()
 		if !found {
 			w.Header().Set("Content-Type", "application/json")
@@ -354,7 +372,7 @@ func ServeWeb(webConfig HttpServerConfig) {
 		_ = json.NewEncoder(w).Encode(response)
 	})
 
-	http.HandleFunc("DELETE /api/v0/config/pat", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /api/v0/config/pat", func(w http.ResponseWriter, r *http.Request) {
 		if err := webConfig.Store.ClearPAT(); err != nil {
 			webConfig.Logger.Error("could not clear PAT", slog.Any("error", err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -367,7 +385,5 @@ func ServeWeb(webConfig HttpServerConfig) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	webConfig.Logger.Info("starting web server at", slog.String("url", "http://"+webConfig.Url))
-	serverErr := http.ListenAndServe(webConfig.Url, guard(webConfig.Url, http.DefaultServeMux))
-	check(serverErr)
+	return mux
 }

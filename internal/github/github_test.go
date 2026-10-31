@@ -1011,3 +1011,54 @@ func Test_QueryGithub_FetchesMergeabilityForOwnPrsOnly(t *testing.T) {
 		t.Errorf("an unasked PR must stay unknown, not clean: %+v", theirs)
 	}
 }
+
+// UsernameFromPat is what a pasted PAT is checked with: its status code
+// decides whether elly drops the token, backs off or reports a fault.
+func Test_UsernameFromPat_ClassifiesResponses(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cases := []struct {
+		name   string
+		status int
+		body   string
+		want   error
+	}{
+		{"unauthorized drops the token", 401, "", ErrInvalidToken},
+		{"forbidden drops the token", 403, "", ErrInvalidToken},
+		{"other client error", 404, "", ErrClient},
+		{"server error", 502, "", ErrGithubServer},
+		{"500 is a server error", 500, "", ErrGithubServer},
+		{"499 is a client error", 499, "", ErrClient},
+		{"graphql errors", 200, `{"errors":[{"type":"X","message":"nope"}]}`, ErrClient},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := fixedResponseServer(t, c.status, c.body)
+			if _, _, err := UsernameFromPat(srv.URL, "tok", logger); !errors.Is(err, c.want) {
+				t.Errorf("got %v, want %v", err, c.want)
+			}
+		})
+	}
+	t.Run("unparseable body", func(t *testing.T) {
+		srv := fixedResponseServer(t, 200, "not json")
+		if _, _, err := UsernameFromPat(srv.URL, "tok", logger); err == nil {
+			t.Error("a garbled response read as a valid token")
+		}
+	})
+}
+
+func Test_UsernameFromPat_ReadsLoginAndExpiry(t *testing.T) {
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("Authorization")
+		w.Header().Set("Github-Authentication-Token-Expiration", "2026-12-24 09:00:00 +0100")
+		_, _ = w.Write([]byte(`{"data":{"viewer":{"login":"octocat"}}}`))
+	}))
+	t.Cleanup(srv.Close)
+	login, expires, err := UsernameFromPat(srv.URL, "tok", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil || login != "octocat" || !expires.Equal(time.Date(2026, 12, 24, 8, 0, 0, 0, time.UTC)) {
+		t.Errorf("got %q %v %v", login, expires, err)
+	}
+	if auth != "bearer tok" {
+		t.Errorf("Authorization %q", auth)
+	}
+}
