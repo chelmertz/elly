@@ -373,3 +373,54 @@ func TestStoreRepoPrsIsAllOrNothing(t *testing.T) {
 		t.Errorf("after a failed refresh the stored PRs are %v, want the previous list intact", urls)
 	}
 }
+
+func TestAnnotations(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	store := NewStorage(logger, filepath.Join(t.TempDir(), "elly.db"))
+	pr := types.ViewPr{Url: "u", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}
+	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	live := types.Annotation{Source: "tool", State: types.AnnotationNeedsYou, Note: "look",
+		Links: []types.AnnotationLink{{Label: "Open", Url: "https://example.com"}}, ExpiresAt: "2099-01-01T01:00:00+01:00"}
+
+	if err := store.PutAnnotation("u", live, now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	got := store.Prs().Prs[0].Annotations
+	if len(got) != 1 || got[0].Note != "look" || got[0].Links[0].Url != "https://example.com" || got[0].ExpiresAt != live.ExpiresAt {
+		t.Fatalf("got %+v, want the annotation as written", got)
+	}
+
+	live.State = types.AnnotationHandled
+	if err := store.PutAnnotation("u", live, now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Prs().Prs[0].Annotations; len(got) != 1 || got[0].State != types.AnnotationHandled {
+		t.Errorf("a second write from the same source: got %+v, want it replaced", got)
+	}
+
+	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Prs().Prs[0].Annotations; len(got) != 1 {
+		t.Errorf("a refresh wiped the annotation: %+v", got)
+	}
+
+	other := live
+	other.Source = "other"
+	if err := store.PutAnnotation("u", other, now.Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Prs().Prs[0].Annotations; len(got) != 1 || got[0].Source != "tool" {
+		t.Errorf("an expired annotation is shown: %+v", got)
+	}
+
+	if err := store.DeleteAnnotation("u", "tool"); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Prs().Prs[0].Annotations; len(got) != 0 {
+		t.Errorf("deleted annotation still shown: %+v", got)
+	}
+}

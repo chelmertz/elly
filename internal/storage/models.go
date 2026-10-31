@@ -4,6 +4,16 @@
 
 package storage
 
+type Annotation struct {
+	PrUrl       string
+	Source      string
+	State       string
+	Note        string
+	Links       string
+	ExpiresAt   string
+	ExpiresUnix int64
+}
+
 type Meta struct {
 	Key   string
 	Value string

@@ -224,6 +224,12 @@
                                 {{end}}
                                 <p class="total-points" data-points="{{$points.Total}}">∑ {{$points.Total}}</p>
                             </div>
+                            {{range $a := $pr.Annotations}}
+                            <div class="annotation {{$a.State}}">
+                                <p><strong>{{$a.Source}}</strong> {{if eq $a.State "needs_you"}}needs you{{else}}handled{{end}}{{if $a.Note}}: {{$a.Note}}{{end}}</p>
+                                {{range $l := $a.Links}}<a class="inline rounded annotation-link" href="{{annotationHref $l.Url}}">{{$l.Label}}</a>{{with annotationVerb $l.Url}} <span class="boring">{{.}}</span>{{end}} {{end}}
+                            </div>
+                            {{end}}
                         </article>
                         {{end}}
                     {{end}}

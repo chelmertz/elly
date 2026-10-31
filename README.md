@@ -44,6 +44,27 @@ repo owner is not listed, such as an open-source contribution, notifies on
 every change by someone else: a push, a comment, a review. With no
 `-work-owners`, every owner gets that.
 
+## Annotations
+
+Another local tool can mark a PR as `handled` or `needs_you`, with a short
+note and up to four links. `handled` drops the PR's review-owed reasons from
+its score; `needs_you` counts it whatever it scored, and wins over `handled`.
+Annotations expire (1 minute to 24 hours after writing), so a tool that stops
+running stops hiding PRs.
+
+```
+PUT    /api/v0/prs/{base64 PR url}/annotations/{source}
+       {"state":"needs_you","note":"…","links":[{"label":"…","url":"…"}],"expiresAt":"<RFC 3339>"}
+DELETE /api/v0/prs/{base64 PR url}/annotations/{source}
+```
+
+Writes need `Authorization: Bearer <token>`, where the token is in
+`$XDG_RUNTIME_DIR/elly/annotation-token` (or `-annotation-token-file`),
+readable only by the user and new on every start. Links must be https, or use
+a scheme named in `-annotation-schemes`; elly shows a custom-scheme link's
+last path segment beside its label. `GET /api/v0/prs` returns each PR's live
+annotations.
+
 ## PAT Oauth permissions
 
 Two token classes work, and they differ in exactly one thing: whether elly can

@@ -268,3 +268,63 @@ func Test_TheyAnsweredOurReview_AddsPoints(t *testing.T) {
 		t.Fatalf("own PR must still score someone else commenting last: %v", minePoints.Reasons)
 	}
 }
+
+func annotated(pr types.ViewPr, states ...string) types.ViewPr {
+	for _, s := range states {
+		pr.Annotations = append(pr.Annotations, types.Annotation{Source: "tool-" + s, State: s, Note: "note for " + s})
+	}
+	return pr
+}
+
+func TestHandledDropsReviewOwedReasons(t *testing.T) {
+	now := time.Now()
+	pr := types.ViewPr{Author: "author", Additions: 10, ThreadsActionable: 2, LastUpdated: now}
+
+	if p := StandardPrPoints(pr, "me", now); p.Total <= 0 {
+		t.Fatalf("precondition: an unannotated small PR with replies owed scores %d", p.Total)
+	}
+	if p := StandardPrPoints(annotated(pr, types.AnnotationHandled), "me", now); p.Total > 0 {
+		t.Errorf("handled PR still counts: %d %v", p.Total, p.Reasons)
+	}
+}
+
+func TestHandledKeepsReasonsOutsideTheTriggers(t *testing.T) {
+	now := time.Now()
+	pr := types.ViewPr{Author: "author", ThreadsWaiting: 1, LastPrCommenter: "author", LastUpdated: now}
+	pr.ReviewStatus = "CHANGES_REQUESTED" // no size points, so the comment reason is what remains
+
+	plain := StandardPrPoints(pr, "me", now)
+	handled := StandardPrPoints(annotated(pr, types.AnnotationHandled), "me", now)
+	if plain.Total != handled.Total {
+		t.Errorf("handled changed a score built only from non-review reasons: %d -> %d", plain.Total, handled.Total)
+	}
+}
+
+func TestNeedsYouCountsEvenWhenScoredBelowZero(t *testing.T) {
+	now := time.Now()
+	pr := types.ViewPr{Author: "author", ReviewStatus: "APPROVED", LastUpdated: now}
+
+	p := StandardPrPoints(annotated(pr, types.AnnotationNeedsYou), "me", now)
+	if p.Total <= 0 {
+		t.Errorf("needs_you on an approved PR scores %d, want it counted", p.Total)
+	}
+	if !strings.Contains(strings.Join(p.Reasons, "|"), "note for needs_you") {
+		t.Errorf("the note is not among the reasons: %v", p.Reasons)
+	}
+}
+
+func TestNeedsYouWinsOverHandled(t *testing.T) {
+	now := time.Now()
+	pr := types.ViewPr{Author: "author", Additions: 10, LastUpdated: now}
+	if p := StandardPrPoints(annotated(pr, types.AnnotationHandled, types.AnnotationNeedsYou), "me", now); p.Total <= 0 {
+		t.Errorf("handled and needs_you together score %d, want counted", p.Total)
+	}
+}
+
+func TestBuryStillHidesANeedsYouPr(t *testing.T) {
+	now := time.Now()
+	pr := types.ViewPr{Author: "author", Buried: true, LastUpdated: now}
+	if p := StandardPrPoints(annotated(pr, types.AnnotationNeedsYou), "me", now); p.Total > 0 {
+		t.Errorf("buried needs_you PR counts: %d", p.Total)
+	}
+}

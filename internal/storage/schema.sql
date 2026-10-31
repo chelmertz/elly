@@ -37,3 +37,16 @@ create table if not exists pat (
     username text not null,
     active integer not null check (active in (0, 1))
 );
+
+-- Kept apart from prs, which is replaced on every fetch. expires_at is
+-- returned exactly as written; expires_unix is what expiry compares.
+create table if not exists annotations (
+    pr_url       text not null,
+    source       text not null,
+    state        text not null check (state in ('handled', 'needs_you')),
+    note         text not null default '',
+    links        text not null default '[]',
+    expires_at   text not null,
+    expires_unix integer not null,
+    primary key (pr_url, source)
+);

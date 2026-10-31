@@ -36,7 +36,13 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 	points := &Points{}
 	points.Reasons = make([]string, 0)
 
-	if pr.ThreadsActionable > 0 {
+	// An annotation from another local tool overrides the review-owed
+	// reasons: handled drops them, needs_you counts the PR whatever it scored.
+	// needs_you wins when two tools disagree.
+	needsYou := annotationNotes(pr, types.AnnotationNeedsYou)
+	handled := len(needsYou) == 0 && len(annotationNotes(pr, types.AnnotationHandled)) > 0
+
+	if pr.ThreadsActionable > 0 && !handled {
 		points.Add(80, fmt.Sprintf("Someone asked us something, or reacted to our comment (%d comments)", pr.ThreadsActionable))
 		// we already need to go over this, don't scale the points
 		// by amount of threads though, it might go overboard
@@ -127,7 +133,7 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 		// Reward short prs, but only award points to "0 point PRs", i.e.
 		// everything else matters more (points for "unresponded comments"
 		// shouldn't have to compete with points for "short PRs").
-		if points.Total == 0 {
+		if points.Total == 0 && !handled {
 			// Sort unreviewed PRs by size, the smallest ones LoC-wise first, so
 			// that the reviewer gets help to get rid of the smallest tasks.
 			diff := int(math.Abs(float64(pr.Additions)) + math.Abs(float64(pr.Deletions)))
@@ -166,10 +172,34 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 		return points.Reasons[i] < points.Reasons[j]
 	})
 
+	if len(needsYou) > 0 && points.Total < needsYouPoints {
+		points.Add(needsYouPoints-points.Total, strings.Join(needsYou, "; "))
+	}
+
 	if pr.Buried {
 		// TODO test that no other combinations of input can negate the effect of something buried
 		points.Remove(1000, "PR is buried")
 	}
 
 	return points
+}
+
+// needsYouPoints is where a needs_you annotation lifts a PR: as high as an own
+// approved PR, since both are one action away from done.
+const needsYouPoints = 100
+
+// annotationNotes returns "source: note" for each annotation in that state.
+func annotationNotes(pr types.ViewPr, state string) []string {
+	var notes []string
+	for _, a := range pr.Annotations {
+		if a.State != state {
+			continue
+		}
+		note := a.Source + ": " + a.Note
+		if a.Note == "" {
+			note = a.Source + ": " + strings.ReplaceAll(state, "_", " ")
+		}
+		notes = append(notes, note)
+	}
+	return notes
 }

@@ -75,7 +75,31 @@ type ViewPr struct {
 	// same commits"; elly itself does not read it.
 	HeadRefOid      string
 	RawJsonResponse json.RawMessage
+	// Annotations are what other local tools say about the PR, unexpired
+	// only. They are stored apart from the PR, which is replaced every fetch.
+	Annotations []Annotation
 }
+
+// Annotation is a note another local tool attaches to a PR: whether the PR
+// is handled or needs the user, in its own words, with links. elly knows
+// nothing about the tool beyond its source name.
+type Annotation struct {
+	Source    string           `json:"source"`
+	State     string           `json:"state"`
+	Note      string           `json:"note"`
+	Links     []AnnotationLink `json:"links"`
+	ExpiresAt string           `json:"expiresAt"`
+}
+
+type AnnotationLink struct {
+	Label string `json:"label"`
+	Url   string `json:"url"`
+}
+
+const (
+	AnnotationHandled  = "handled"
+	AnnotationNeedsYou = "needs_you"
+)
 
 // HasConflict reports whether the PR no longer merges into its base. It is
 // deliberately false for UNKNOWN: github answers UNKNOWN while it is still

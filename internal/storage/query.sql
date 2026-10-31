@@ -84,3 +84,17 @@ replace into meta (key, value) values ('notify_seen', ?);
 
 -- name: GetNotifySeen :one
 select value from meta where key = 'notify_seen' limit 1;
+
+-- name: PutAnnotation :exec
+replace into annotations (pr_url, source, state, note, links, expires_at, expires_unix)
+values (?, ?, ?, ?, ?, ?, ?);
+
+-- name: DeleteAnnotation :exec
+delete from annotations where pr_url = ? and source = ?;
+
+-- name: PurgeExpiredAnnotations :exec
+delete from annotations where expires_unix <= ?;
+
+-- name: LiveAnnotations :many
+select pr_url, source, state, note, links, expires_at from annotations
+where expires_unix > ? order by pr_url, source;

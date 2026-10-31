@@ -55,6 +55,18 @@ type HttpServerConfig struct {
 	Logger               *slog.Logger
 	Tracker              *backoff.Tracker
 	SetupMode            bool // True if no PAT configured (initial state only)
+	// AnnotationToken is the bearer token annotation writes must carry. Empty
+	// disables them.
+	AnnotationToken string
+	// AnnotationSchemes are the link schemes allowed besides https.
+	AnnotationSchemes []string
+}
+
+func (c HttpServerConfig) logger() *slog.Logger {
+	if c.Logger == nil {
+		return slog.Default()
+	}
+	return c.Logger
 }
 
 // getCurrentUsername returns the username from the stored PAT, or empty string if not configured.
@@ -95,13 +107,18 @@ func getCurrentUsername(store storage.Storage) string {
 // parseIndex parses the page template. PR titles, authors and repo names are
 // written by whoever opens a PR that involves the user, so the template must
 // escape them.
-func parseIndex() (*template.Template, error) {
-	return template.ParseFS(index, "index.html")
+func parseIndex(annotationSchemes []string) (*template.Template, error) {
+	return template.New("index.html").Funcs(template.FuncMap{
+		"annotationHref": annotationHref(annotationSchemes),
+		"annotationVerb": annotationVerb,
+	}).ParseFS(index, "index.html")
 }
 
 func ServeWeb(webConfig HttpServerConfig) {
-	temp, err := parseIndex()
+	temp, err := parseIndex(webConfig.AnnotationSchemes)
 	check(err)
+
+	registerAnnotationRoutes(http.DefaultServeMux, webConfig)
 
 	http.HandleFunc("POST /api/v0/prs/{prUrl}/golden", func(w http.ResponseWriter, r *http.Request) {
 		if !webConfig.GoldenTestingEnabled {

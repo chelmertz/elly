@@ -10,7 +10,7 @@ import (
 )
 
 func TestIndexEscapesPrFields(t *testing.T) {
-	temp, err := parseIndex()
+	temp, err := parseIndex(nil)
 	if err != nil {
 		t.Fatal(err)
 	}

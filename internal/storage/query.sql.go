@@ -192,6 +192,20 @@ func (q *Queries) DeactivateAllPATs(ctx context.Context) error {
 	return err
 }
 
+const deleteAnnotation = `-- name: DeleteAnnotation :exec
+delete from annotations where pr_url = ? and source = ?
+`
+
+type DeleteAnnotationParams struct {
+	PrUrl  string
+	Source string
+}
+
+func (q *Queries) DeleteAnnotation(ctx context.Context, arg DeleteAnnotationParams) error {
+	_, err := q.db.ExecContext(ctx, deleteAnnotation, arg.PrUrl, arg.Source)
+	return err
+}
+
 const deletePrs = `-- name: DeletePrs :exec
 delete from prs
 `
@@ -369,6 +383,87 @@ func (q *Queries) ListPrs(ctx context.Context) ([]Pr, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const liveAnnotations = `-- name: LiveAnnotations :many
+select pr_url, source, state, note, links, expires_at from annotations
+where expires_unix > ? order by pr_url, source
+`
+
+type LiveAnnotationsRow struct {
+	PrUrl     string
+	Source    string
+	State     string
+	Note      string
+	Links     string
+	ExpiresAt string
+}
+
+func (q *Queries) LiveAnnotations(ctx context.Context, expiresUnix int64) ([]LiveAnnotationsRow, error) {
+	rows, err := q.db.QueryContext(ctx, liveAnnotations, expiresUnix)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LiveAnnotationsRow
+	for rows.Next() {
+		var i LiveAnnotationsRow
+		if err := rows.Scan(
+			&i.PrUrl,
+			&i.Source,
+			&i.State,
+			&i.Note,
+			&i.Links,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const purgeExpiredAnnotations = `-- name: PurgeExpiredAnnotations :exec
+delete from annotations where expires_unix <= ?
+`
+
+func (q *Queries) PurgeExpiredAnnotations(ctx context.Context, expiresUnix int64) error {
+	_, err := q.db.ExecContext(ctx, purgeExpiredAnnotations, expiresUnix)
+	return err
+}
+
+const putAnnotation = `-- name: PutAnnotation :exec
+replace into annotations (pr_url, source, state, note, links, expires_at, expires_unix)
+values (?, ?, ?, ?, ?, ?, ?)
+`
+
+type PutAnnotationParams struct {
+	PrUrl       string
+	Source      string
+	State       string
+	Note        string
+	Links       string
+	ExpiresAt   string
+	ExpiresUnix int64
+}
+
+func (q *Queries) PutAnnotation(ctx context.Context, arg PutAnnotationParams) error {
+	_, err := q.db.ExecContext(ctx, putAnnotation,
+		arg.PrUrl,
+		arg.Source,
+		arg.State,
+		arg.Note,
+		arg.Links,
+		arg.ExpiresAt,
+		arg.ExpiresUnix,
+	)
+	return err
 }
 
 const storeDegradations = `-- name: StoreDegradations :exec

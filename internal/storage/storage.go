@@ -60,6 +60,10 @@ type Storage interface {
 	// NotifySeen returns what StoreNotifySeen last stored, or nil when
 	// nothing ever was, which makes the next fetch a silent baseline.
 	NotifySeen() map[string][]string
+	// PutAnnotation stores or replaces the annotation from a.Source on a PR.
+	// Expired annotations are purged on every write.
+	PutAnnotation(prUrl string, a types.Annotation, expiresAt time.Time) error
+	DeleteAnnotation(prUrl, source string) error
 }
 
 type DbStorage struct {
@@ -147,6 +151,11 @@ func (s *DbStorage) Prs() StoredState {
 			HeadRefOid:               dbPr.HeadRefOid,
 			RawJsonResponse:          dbPr.RawJsonResponse,
 		})
+	}
+
+	annotations := s.liveAnnotations(time.Now())
+	for i := range prs {
+		prs[i].Annotations = annotations[prs[i].Url]
 	}
 
 	state := StoredState{
@@ -442,4 +451,48 @@ func (s *DbStorage) NotifySeen() map[string][]string {
 		return nil
 	}
 	return seen
+}
+
+func (s *DbStorage) PutAnnotation(prUrl string, a types.Annotation, expiresAt time.Time) error {
+	ctx := context.Background()
+	if err := s.db.PurgeExpiredAnnotations(ctx, time.Now().Unix()); err != nil {
+		return fmt.Errorf("could not purge expired annotations: %w", err)
+	}
+	links, err := json.Marshal(a.Links)
+	if err != nil {
+		return fmt.Errorf("could not marshal annotation links: %w", err)
+	}
+	return s.db.PutAnnotation(ctx, PutAnnotationParams{
+		PrUrl:       prUrl,
+		Source:      a.Source,
+		State:       a.State,
+		Note:        a.Note,
+		Links:       string(links),
+		ExpiresAt:   a.ExpiresAt,
+		ExpiresUnix: expiresAt.Unix(),
+	})
+}
+
+func (s *DbStorage) DeleteAnnotation(prUrl, source string) error {
+	return s.db.DeleteAnnotation(context.Background(), DeleteAnnotationParams{PrUrl: prUrl, Source: source})
+}
+
+// liveAnnotations returns the unexpired annotations per PR url. A read error
+// shows no annotations, which shows more PRs as needing the user, not fewer.
+func (s *DbStorage) liveAnnotations(now time.Time) map[string][]types.Annotation {
+	rows, err := s.db.LiveAnnotations(context.Background(), now.Unix())
+	if err != nil {
+		s.logger.Warn("could not read annotations", slog.Any("error", err))
+		return nil
+	}
+	out := make(map[string][]types.Annotation)
+	for _, r := range rows {
+		a := types.Annotation{Source: r.Source, State: r.State, Note: r.Note, ExpiresAt: r.ExpiresAt}
+		if err := json.Unmarshal([]byte(r.Links), &a.Links); err != nil {
+			s.logger.Warn("could not parse annotation links", slog.String("pr_url", r.PrUrl), slog.Any("error", err))
+			continue
+		}
+		out[r.PrUrl] = append(out[r.PrUrl], a)
+	}
+	return out
 }

@@ -28,6 +28,8 @@ var demo = flag.Bool("demo", false, "mock the PRs so you can take a proper scree
 var versionFlag = flag.Bool("version", false, "show version")
 var verboseFlag = flag.Bool("verbose", false, "verbose logging")
 var notifyFlag = flag.Bool("notify", false, "send a desktop notification (notify-send) when a PR gains a reason to act")
+var annotationSchemes = flag.String("annotation-schemes", "", "comma-separated link schemes annotations may use besides https, e.g. claude-review")
+var annotationTokenFile = flag.String("annotation-token-file", "", "where to write the bearer token annotation writes need (default: $XDG_RUNTIME_DIR/elly/annotation-token; no XDG_RUNTIME_DIR disables annotation writes)")
 var workOwners = flag.String("work-owners", "", "comma-separated repo owners that notify only on reasons to act; any other owner notifies on every change by someone else")
 
 func main() {
@@ -97,6 +99,17 @@ func main() {
 
 	go startRefreshLoop(store, tracker, github.DefaultAPIURL, send, logger)
 
+	annotationToken := ""
+	if path := annotationTokenPath(*annotationTokenFile, os.Getenv("XDG_RUNTIME_DIR")); path != "" {
+		annotationToken, err = server.WriteAnnotationToken(path)
+		if err != nil {
+			logger.Error("could not write annotation token", slog.Any("error", err))
+			os.Exit(1)
+		}
+	} else {
+		logger.Info("annotation writes disabled: no -annotation-token-file and no XDG_RUNTIME_DIR")
+	}
+
 	server.ServeWeb(server.HttpServerConfig{
 		Url:                  *url,
 		GoldenTestingEnabled: *golden,
@@ -106,6 +119,8 @@ func main() {
 		Version:              version,
 		Logger:               logger,
 		SetupMode:            setupMode,
+		AnnotationToken:      annotationToken,
+		AnnotationSchemes:    splitOwners(*annotationSchemes),
 	})
 }
 
@@ -223,6 +238,7 @@ func notifyChanges(store storage.Storage, username string, workOwners []string, 
 	}
 }
 
+// splitOwners splits a comma-separated flag value, dropping empty entries.
 func splitOwners(s string) []string {
 	var owners []string
 	for _, o := range strings.Split(s, ",") {
@@ -231,4 +247,14 @@ func splitOwners(s string) []string {
 		}
 	}
 	return owners
+}
+
+func annotationTokenPath(flagValue, runtimeDir string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if runtimeDir == "" {
+		return ""
+	}
+	return filepath.Join(runtimeDir, "elly", "annotation-token")
 }

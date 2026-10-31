@@ -77,6 +77,10 @@ func (s *testStorage) IsRateLimitActive(time.Time) bool          { return false 
 func (s *testStorage) GetRateLimitUntil() time.Time              { return time.Time{} }
 func (s *testStorage) StoreNotifySeen(map[string][]string) error { return nil }
 func (s *testStorage) NotifySeen() map[string][]string           { return nil }
+func (s *testStorage) PutAnnotation(string, types.Annotation, time.Time) error {
+	return nil
+}
+func (s *testStorage) DeleteAnnotation(string, string) error { return nil }
 
 var _ storage.Storage = (*testStorage)(nil)
 
@@ -354,5 +358,17 @@ func TestSplitOwners(t *testing.T) {
 	got := strings.Join(splitOwners(" acme, ,globex,"), "|")
 	if got != "acme|globex" {
 		t.Errorf("got %q", got)
+	}
+}
+
+func TestAnnotationTokenPath(t *testing.T) {
+	if got := annotationTokenPath("", "/run/user/1"); got != "/run/user/1/elly/annotation-token" {
+		t.Errorf("default: %q", got)
+	}
+	if got := annotationTokenPath("/x/token", "/run/user/1"); got != "/x/token" {
+		t.Errorf("flag: %q", got)
+	}
+	if got := annotationTokenPath("", ""); got != "" {
+		t.Errorf("no runtime dir: %q, want writes disabled", got)
 	}
 }
