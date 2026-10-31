@@ -351,6 +351,6 @@ func ServeWeb(webConfig HttpServerConfig) {
 	})
 
 	webConfig.Logger.Info("starting web server at", slog.String("url", "http://"+webConfig.Url))
-	serverErr := http.ListenAndServe(webConfig.Url, nil)
+	serverErr := http.ListenAndServe(webConfig.Url, guard(webConfig.Url, http.DefaultServeMux))
 	check(serverErr)
 }
