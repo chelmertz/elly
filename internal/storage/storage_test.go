@@ -424,3 +424,69 @@ func TestAnnotations(t *testing.T) {
 		t.Errorf("deleted annotation still shown: %+v", got)
 	}
 }
+
+func TestRateLimit(t *testing.T) {
+	store := setupTestStorage(t)
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+
+	if store.IsRateLimitActive(now) || !store.GetRateLimitUntil().IsZero() {
+		t.Fatal("a fresh database is rate limited")
+	}
+	until := now.Add(time.Hour)
+	if err := store.SetRateLimitUntil(until); err != nil {
+		t.Fatal(err)
+	}
+	if !store.IsRateLimitActive(now) || !store.GetRateLimitUntil().Equal(until) {
+		t.Fatalf("limit until %v not in force at %v", store.GetRateLimitUntil(), now)
+	}
+	if store.IsRateLimitActive(until.Add(time.Second)) {
+		t.Error("an expired limit is still in force")
+	}
+	if !store.GetRateLimitUntil().IsZero() {
+		t.Error("an expired limit was not cleared")
+	}
+}
+
+func TestRateLimitUnreadableCountsAsActive(t *testing.T) {
+	store := setupTestStorage(t)
+	if _, err := store.rawDb.Exec(`replace into meta (key, value) values ('rate_limit_until', 'garbage')`); err != nil {
+		t.Fatal(err)
+	}
+	if !store.IsRateLimitActive(time.Now()) {
+		t.Error("an unreadable limit must count as active, the safe side")
+	}
+}
+
+func TestDegradations(t *testing.T) {
+	store := setupTestStorage(t)
+	if got := store.Degradations(); got != nil {
+		t.Fatalf("fresh database: %v", got)
+	}
+	ds := []types.Degradation{{Kind: "checks_unreadable", Message: "m", Remedy: "r"}}
+	if err := store.StoreDegradations(ds); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Degradations(); len(got) != 1 || got[0] != ds[0] {
+		t.Fatalf("got %v", got)
+	}
+	if err := store.StoreDegradations(nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Degradations(); len(got) != 0 {
+		t.Errorf("a fixed degradation is still reported: %v", got)
+	}
+}
+
+func TestGetPr(t *testing.T) {
+	store := setupTestStorage(t)
+	if err := store.StoreRepoPrs([]types.ViewPr{{Url: "u", Title: "t", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+		t.Fatal(err)
+	}
+	pr, err := store.GetPr("u")
+	if err != nil || pr.Title != "t" {
+		t.Errorf("got %+v %v", pr, err)
+	}
+	if _, err := store.GetPr("missing"); err == nil {
+		t.Error("a missing PR read without error")
+	}
+}
