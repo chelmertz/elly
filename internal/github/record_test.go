@@ -80,7 +80,7 @@ func happyGithub(q graphqlQuery) (int, string) {
 	case failingChecksQuery:
 		return 200, `{"data":{"node":{"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":1,
 			"pageInfo":{"hasNextPage":false,"endCursor":"Q3Vyc29yQ2hlY2s="},"nodes":[null]}}}}]}}},
-			"errors":[{"type":"FORBIDDEN","path":["node","commits","nodes",0],"locations":[{"line":7,"column":13}],"message":"Resource not accessible by Zelfie token"}]}`
+			"errors":[{"type":"FORBIDDEN","path":["node","commits","nodes",0],"locations":[{"line":7,"column":13}],"extensions":{"saml_failure":false,"ip_allow_list_failure":false},"message":"Resource not accessible by Zelfie token"}]}`
 	case mergeabilityQuery:
 		return 200, `{"data":{"nodes":[{"id":"PR_workNodeQQ","mergeable":"MERGEABLE","mergeStateStatus":"BLOCKED"}]}}`
 	}

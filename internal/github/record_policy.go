@@ -224,6 +224,9 @@ func recordingRules(self string) anonymise.Rules {
 		"path[]":             redact,
 		"locations[].line":   keep,
 		"locations[].column": keep,
+		// on the FORBIDDEN a fine-grained token gets for check contexts
+		"extensions.saml_failure":          keep,
+		"extensions.ip_allow_list_failure": keep,
 	})
 	return anonymise.Rules{
 		Paths: paths,
