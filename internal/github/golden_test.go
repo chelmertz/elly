@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -211,4 +212,113 @@ func Test_Poll1_PinnedPrs(t *testing.T) {
 	if pr := find(ownWithThread); pr.HeadRefOid != "0000000000000000000000000000000000000001" {
 		t.Errorf("head commit = %q, want the recorded headRefOid", pr.HeadRefOid)
 	}
+}
+
+// More of poll-1 standing in for hand-written wiring tests. Each pin names the
+// PR or the recorded request that exercises the path.
+func Test_Poll1_PinnedWiring(t *testing.T) {
+	path := filepath.Join(recordingsDir, "poll-1.json")
+	rec := loadRecording(t, path)
+	got := replay(t, rec)
+	prs := map[string]types.ViewPr{}
+	for _, p := range got.Prs {
+		prs[p.Pr.Url] = p.Pr
+	}
+	var search [2]querySearchPrsInvolvingMeGraphQl
+	for i := range search {
+		if err := json.Unmarshal(rec.Exchanges[i].Response, &search[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	node := func(url string) prSearchResultGraphQl {
+		t.Helper()
+		for _, e := range search[0].Data.Search.Edges {
+			var pr prSearchResultGraphQl
+			if err := json.Unmarshal(e.Node, &pr); err != nil {
+				t.Fatal(err)
+			}
+			if pr.Url == url {
+				return pr
+			}
+		}
+		t.Fatalf("%s is not in the involves: search of %s", url, path)
+		return prSearchResultGraphQl{}
+	}
+
+	t.Run("query text", func(t *testing.T) {
+		// What the search asks for - headRefOid, the Team reviewer's name,
+		// only the first and last comment of a thread, no bodies - is pinned
+		// by the replay's exact request match: any change to the query text
+		// makes every recorded request differ. The recording must therefore
+		// hold the query as the code sends it.
+		for i, ex := range rec.Exchanges[:2] {
+			var q graphqlQuery
+			if err := json.Unmarshal(ex.Request, &q); err != nil || q.Query != searchPrsQuery {
+				t.Errorf("exchange %d is not the search query as the code sends it", i+1)
+			}
+		}
+	})
+
+	t.Run("a PR in both searches is one row", func(t *testing.T) {
+		both := "https://github.com/owner1/repo5/pull/9"
+		if len(search[1].Data.Search.Edges) != 1 {
+			t.Fatalf("the review-requested: search should hold exactly %s", both)
+		}
+		node(both) // it is in the involves: search too
+		n := 0
+		for _, p := range got.Prs {
+			if p.Pr.Url == both {
+				n++
+			}
+		}
+		if n != 1 || len(got.Prs) != len(search[0].Data.Search.Edges) {
+			t.Errorf("%s appears %d times, %d rows from %d involves: results", both, n, len(got.Prs), len(search[0].Data.Search.Edges))
+		}
+	})
+
+	t.Run("mergeability is asked for own PRs only, in one batch", func(t *testing.T) {
+		// The replay matches the recorded batch exactly, so asking for
+		// anyone else's PR, or one request per PR, fails there; this
+		// states what the recorded batch is.
+		var batches [][]string
+		for _, ex := range rec.Exchanges {
+			var q struct {
+				Query     string
+				Variables struct{ Ids []string }
+			}
+			if err := json.Unmarshal(ex.Request, &q); err != nil {
+				t.Fatal(err)
+			}
+			if q.Query == mergeabilityQuery {
+				batches = append(batches, q.Variables.Ids)
+			}
+		}
+		var own []string
+		for _, e := range search[0].Data.Search.Edges {
+			var pr prSearchResultGraphQl
+			_ = json.Unmarshal(e.Node, &pr)
+			if pr.Author.Login == "me" {
+				own = append(own, pr.Id)
+			}
+		}
+		slices.Sort(own)
+		if len(batches) != 1 || !slices.Equal(batches[0], own) {
+			t.Errorf("mergeability batches %v, want one batch of the %d own PRs", batches, len(own))
+		}
+		if pr := prs["https://github.com/owner1/repo5/pull/23"]; pr.Mergeable != "" {
+			t.Errorf("someone else's PR was never asked about, so its mergeability must stay unknown, got %q", pr.Mergeable)
+		}
+		if pr := prs["https://github.com/owner1/repo1/pull/1"]; pr.Mergeable == "" {
+			t.Error("an own PR must carry the answer")
+		}
+	})
+
+	t.Run("CI bots never take the last-commenter slot", func(t *testing.T) {
+		// Only bots commented on these; elly keeps the slot empty.
+		for _, url := range []string{"https://github.com/owner1/repo1/pull/15", "https://github.com/owner1/repo5/pull/13"} {
+			if pr := prs[url]; pr.LastPrCommenter != "" {
+				t.Errorf("%s: last commenter %q, want none", url, pr.LastPrCommenter)
+			}
+		}
+	})
 }
