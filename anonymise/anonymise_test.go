@@ -182,6 +182,9 @@ func Test_TimestampsShiftByOneOffset(t *testing.T) {
 	if items(got)[2]["at"] != "" {
 		t.Error("an empty timestamp stays empty")
 	}
+	if offset > -30*24*time.Hour || offset < -731*24*time.Hour {
+		t.Errorf("offset %v is outside 30 days to two years back", offset)
+	}
 	if again := run(t, `{"pollTime": "`+in[0]+`"}`); again["pollTime"] == got["pollTime"] {
 		t.Error("two documents got the same offset")
 	}
@@ -252,6 +255,7 @@ func Test_RefusalsNameThePathNeverTheValue(t *testing.T) {
 		"unknown string path":       `{"items": [{"body": "topsecret"}]}`,
 		"unknown number path":       `{"items": [{"databaseId": 31337}]}`,
 		"null at unknown path":      `{"items": [{"body": null}]}`,
+		"a path a rule only starts": `{"items": [{"auth": null}]}`,
 		"value outside the enum":    `{"items": [{"state": "TOPSECRET"}]}`,
 		"unregistered constant":     `{"requests": [{"query": "query { topsecret }"}]}`,
 		"rewrite refuses":           `{"items": [{"url": "https://elsewhere.example/topsecret"}]}`,
@@ -270,6 +274,9 @@ func Test_RefusalsNameThePathNeverTheValue(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "items[].") && !strings.Contains(err.Error(), "requests[].") {
 				t.Errorf("the refusal must name the path: %v", err)
+			}
+			if name == "counter pattern" && !strings.Contains(err.Error(), "sha value") {
+				t.Errorf("the refusal must name the rule's kind: %v", err)
 			}
 		})
 	}

@@ -162,25 +162,25 @@ func Test_Record_RefusesAbnormalPolls(t *testing.T) {
 		name, reason string
 		answer       func(graphqlQuery) (int, string)
 	}{
-		{"server error, which would be retried", "status 502", func(q graphqlQuery) (int, string) {
+		{"server error, which would be retried", "exchange 3: status 502", func(q graphqlQuery) (int, string) {
 			if q.Query == reviewThreadsPageQuery {
 				return 502, `{"data":null}`
 			}
 			return happyGithub(q)
 		}},
-		{"rate limit", "rate limited", func(q graphqlQuery) (int, string) {
+		{"rate limit", "exchange 5: rate limited", func(q graphqlQuery) (int, string) {
 			if q.Query == mergeabilityQuery {
 				return 200, `{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded for Zelfie"}]}`
 			}
 			return happyGithub(q)
 		}},
-		{"non-JSON body", "not JSON", func(q graphqlQuery) (int, string) {
+		{"non-JSON body", "exchange 4: the body is not JSON", func(q graphqlQuery) (int, string) {
 			if q.Query == failingChecksQuery {
 				return 200, "Zelfie is not json"
 			}
 			return happyGithub(q)
 		}},
-		{"client error", "status 403", func(q graphqlQuery) (int, string) {
+		{"client error", "exchange 2: status 403", func(q graphqlQuery) (int, string) {
 			if strings.Contains(fmt.Sprint(q.Variables["search"]), "review-requested:") {
 				return 403, `{"message":"no Zelfie"}`
 			}
@@ -205,5 +205,20 @@ func Test_Record_RefusesAbnormalPolls(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The search string is rebuilt from what querySearchPrs writes; any other
+// qualifier or value is refused rather than published.
+func Test_RecordingPolicy_RefusesAnUnexpectedSearch(t *testing.T) {
+	for _, search := range []string{
+		"state:closed involves:someone type:pr archived:false",
+		"state:open org:someorg involves:someone type:pr archived:false",
+	} {
+		doc, _ := json.Marshal(map[string]any{"exchanges": []any{map[string]any{"request": map[string]any{
+			"query": searchPrsQuery, "variables": map[string]any{"search": search}}}}})
+		if _, err := anonymise.Anonymise(recordingRules("someone"), doc); err == nil {
+			t.Errorf("%q was published", search)
+		}
 	}
 }
