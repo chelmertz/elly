@@ -422,7 +422,8 @@ func Test_ReactionsDecideAcknowledgement(t *testing.T) {
 	if a, _ := actionableThreads(prWithThread("adam", threadOf(commentBy("me"), commentBy("adam"))), "me"); a != 1 {
 		t.Errorf("my own question answered by the author must be actionable, got %d", a)
 	}
-	// resolved, outdated and collapsed threads never count
+	// resolved and collapsed threads never count; an outdated thread does not
+	// count here because someone else started it
 	for _, mark := range []func(*prReviewThreadGraphQl){
 		func(th *prReviewThreadGraphQl) { th.IsResolved = true },
 		func(th *prReviewThreadGraphQl) { th.IsOutdated = true },
@@ -431,8 +432,44 @@ func Test_ReactionsDecideAcknowledgement(t *testing.T) {
 		th := threadOf(commentBy("adam"), commentBy("adam"))
 		mark(&th)
 		if a, w := actionableThreads(prWithThread("me", th), "me"); a != 0 || w != 0 {
-			t.Errorf("closed thread counted: %d actionable, %d waiting", a, w)
+			t.Errorf("thread someone else started counted: %d actionable, %d waiting", a, w)
 		}
+	}
+}
+
+// The usual answer to a review comment is a push that moves the commented
+// lines, then "done" in the thread. The push marks the thread outdated, and
+// the reply is still owed a look from whoever started it.
+func Test_OutdatedThreadIStartedAndTheyAnswered_IsActionable(t *testing.T) {
+	th := threadOf(commentBy("me"), commentBy("author"))
+	th.IsOutdated = true
+	if a, w := actionableThreads(prWithThread("author", th), "me"); a != 1 || w != 0 {
+		t.Errorf("outdated thread answered by the author: got %d actionable, %d waiting, want 1, 0", a, w)
+	}
+
+	resolved := th
+	resolved.IsResolved = true
+	if a, _ := actionableThreads(prWithThread("author", resolved), "me"); a != 0 {
+		t.Errorf("resolved outdated thread must not count, got %d", a)
+	}
+
+	reacted := threadOf(commentBy("me"), commentBy("author"))
+	reacted.IsOutdated = true
+	reacted.LastComment.Nodes[0].Reactions.Edges = append(reacted.LastComment.Nodes[0].Reactions.Edges, struct {
+		Node struct {
+			Content string
+			User    struct{ Login string }
+		}
+	}{})
+	reacted.LastComment.Nodes[0].Reactions.Edges[0].Node.User.Login = "me"
+	if a, _ := actionableThreads(prWithThread("author", reacted), "me"); a != 0 {
+		t.Errorf("my reaction acknowledges the reply on an outdated thread too, got %d", a)
+	}
+
+	mineLast := threadOf(commentBy("me"), commentBy("author"), commentBy("me"))
+	mineLast.IsOutdated = true
+	if a, _ := actionableThreads(prWithThread("author", mineLast), "me"); a != 0 {
+		t.Errorf("I have the last word on an outdated thread, got %d actionable", a)
 	}
 }
 

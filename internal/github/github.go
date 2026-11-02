@@ -771,7 +771,7 @@ func someoneElseReactedToComment(reactions prReviewThreadCommentReactionGraphQl,
 func actionableThreads(pr prSearchResultGraphQl, myUsername string) (actionable int, waiting int) {
 	ownPr := pr.Author.Login == myUsername
 	for _, t := range pr.ReviewThreads.Edges {
-		if t.Node.IsCollapsed || t.Node.IsOutdated || t.Node.IsResolved {
+		if t.Node.IsCollapsed || t.Node.IsResolved {
 			continue
 		}
 
@@ -784,6 +784,19 @@ func actionableThreads(pr prSearchResultGraphQl, myUsername string) (actionable 
 		lastCommenter := lastComment.Author.Login
 		iCommentedLast := lastCommenter == myUsername
 		iReactedToLastComment := userReactedToComment(lastComment.Reactions, myUsername)
+
+		if t.Node.IsOutdated {
+			// A push moved the commented lines. The usual answer to a review
+			// comment is exactly that push plus "done" in the thread, so a
+			// thread we started still counts when someone else has the last
+			// word; every other outdated thread stays out.
+			starter := t.Node.FirstComment.Nodes[0].Author.Login
+			if starter == myUsername && !iCommentedLast && !iReactedToLastComment {
+				actionable++
+			}
+			continue
+		}
+
 		someoneElseReactedMyLastComment := iCommentedLast && someoneElseReactedToComment(lastComment.Reactions, myUsername)
 
 		if ownPr && !iCommentedLast && !iReactedToLastComment {
