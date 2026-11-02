@@ -327,6 +327,23 @@ func Test_ReviewThreadPageQuery_SharesThreadFields(t *testing.T) {
 	}
 }
 
+func Test_ReviewedBy(t *testing.T) {
+	var pr prSearchResultGraphQl
+	for _, login := range []string{"adam", "me", "dependabot[bot]", "adam", "eve"} {
+		var e struct {
+			Node struct {
+				Author                  struct{ Login string }
+				Url, State, SubmittedAt string
+			}
+		}
+		e.Node.Author.Login = login
+		pr.Reviews.Edges = append(pr.Reviews.Edges, e)
+	}
+	if got := strings.Join(reviewedBy(pr, "me"), ","); got != "adam,eve" {
+		t.Fatalf("reviewedBy = %q, want adam,eve", got)
+	}
+}
+
 func Test_RereviewFrom(t *testing.T) {
 	type review struct{ login, state, at string }
 	build := func(author string, draft bool, myLastCommit string, requested []string, reviews []review, myThreadReplyAt string) prSearchResultGraphQl {

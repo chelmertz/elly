@@ -105,6 +105,7 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 		`alter table prs add column mergeable text not null default ''`,
 		`alter table prs add column merge_state_status text not null default ''`,
 		`alter table prs add column head_ref_oid text not null default ''`,
+		`alter table prs add column reviewed_by text not null default ''`,
 	} {
 		if _, err := db.ExecContext(ctx, alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			check(err)
@@ -142,6 +143,7 @@ func (s *DbStorage) Prs() StoredState {
 			Deletions:                int(dbPr.Deletions),
 			ReviewRequestedFromUsers: splitLogins(dbPr.ReviewRequestedFromUsers),
 			RereviewFrom:             splitLogins(dbPr.RereviewFrom),
+			ReviewedBy:               splitLogins(dbPr.ReviewedBy),
 			Buried:                   dbPr.Buried,
 			ChecksState:              dbPr.ChecksState,
 			ChecksFailing:            splitLogins(dbPr.ChecksFailing),
@@ -237,6 +239,7 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 			Deletions:                int64(pr.Deletions),
 			ReviewRequestedFromUsers: strings.Join(pr.ReviewRequestedFromUsers, ","),
 			RereviewFrom:             strings.Join(pr.RereviewFrom, ","),
+			ReviewedBy:               strings.Join(pr.ReviewedBy, ","),
 			Buried:                   pr.Buried,
 			ChecksState:              pr.ChecksState,
 			ChecksFailing:            strings.Join(pr.ChecksFailing, ","),

@@ -44,6 +44,7 @@ type Pr struct {
 	Deletions                int64
 	ReviewRequestedFromUsers string
 	RereviewFrom             string
+	ReviewedBy               string
 	Buried                   bool
 	ChecksState              string
 	ChecksFailing            string

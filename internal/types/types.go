@@ -54,6 +54,7 @@ type ViewPr struct {
 	Deletions                int
 	ReviewRequestedFromUsers []string
 	RereviewFrom             []string // reviewers of my PR who reviewed before my latest change and were not re-requested
+	ReviewedBy               []string // everyone but me and bots who submitted a review; github drops them from the request list when they do
 	Buried                   bool
 	// ChecksState is github's own statusCheckRollup verdict for the head
 	// commit: SUCCESS, FAILURE, PENDING, EXPECTED, or "" when the PR has no

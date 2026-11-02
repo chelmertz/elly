@@ -97,10 +97,12 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 			points.Add(20, fmt.Sprintf("Ask %s to re-review, they reviewed before your latest change", strings.Join(pr.RereviewFrom, ", ")))
 		}
 
-		if len(pr.ReviewRequestedFromUsers) == 0 {
+		if len(pr.ReviewRequestedFromUsers) == 0 && len(pr.ReviewedBy) == 0 {
 			// points represents "actions to take", and if there are no
 			// reviewers assigned to your pr, there's a chance no-one will look
-			// at it
+			// at it. Someone who already reviewed counts: github drops them
+			// from the request list when they submit, and asking them again
+			// is the re-review reason above.
 			points.Add(10, "You should add reviewers")
 		}
 

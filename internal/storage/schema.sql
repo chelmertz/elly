@@ -15,6 +15,7 @@ create table if not exists prs (
     deletions integer not null,
     review_requested_from_users text not null,
     rereview_from text not null default '',
+    reviewed_by text not null default '',
     buried boolean not null,
     checks_state text not null default '',
     checks_failing text not null default '',

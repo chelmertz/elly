@@ -634,6 +634,7 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 			Deletions:                pr.Deletions,
 			ReviewRequestedFromUsers: reviewUsers,
 			RereviewFrom:             rereview,
+			ReviewedBy:               reviewedBy(pr, username),
 			ChecksState:              checksState,
 			ChecksFailing:            checksFailing,
 			ChecksComplete:           checksComplete,
@@ -675,6 +676,20 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Kind < out[j].Kind })
 	return viewPrs, out, nil
+}
+
+// reviewedBy names everyone but the user and bots who submitted a review, in
+// the order they first did.
+func reviewedBy(pr prSearchResultGraphQl, myUsername string) []string {
+	out := []string{}
+	for _, r := range pr.Reviews.Edges {
+		login := r.Node.Author.Login
+		if login == myUsername || login == "" || strings.HasSuffix(login, "[bot]") || slices.Contains(ignoredLastPrCommenters, login) || slices.Contains(out, login) {
+			continue
+		}
+		out = append(out, login)
+	}
+	return out
 }
 
 // rereviewFrom names the reviewers of the user's own PR who should be asked

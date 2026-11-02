@@ -81,6 +81,18 @@ func Test_StandardPrPoints(t *testing.T) {
 	}
 }
 
+// Github drops a reviewer from the request list once they submit a review,
+// so a reviewed PR has no requested reviewers and is not missing any.
+func Test_ReviewedPr_DoesNotAskForReviewers(t *testing.T) {
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{Author: "me", LastUpdated: now, ReviewedBy: []string{"adam"}}
+	for _, r := range StandardPrPoints(pr, "me", now).Reasons {
+		if strings.Contains(r, "add reviewers") {
+			t.Fatalf("a reviewed PR was told to add reviewers: %q", r)
+		}
+	}
+}
+
 func Test_RereviewPending_AddsPointsOnOwnPr(t *testing.T) {
 	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
 	pr := types.ViewPr{Author: "me", Url: "https://github.com/o/r/pull/1", LastUpdated: now, ReviewRequestedFromUsers: []string{"adam"}, RereviewFrom: []string{"adam"}}
