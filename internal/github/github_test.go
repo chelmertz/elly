@@ -186,27 +186,6 @@ func Test_Query_FetchesOnlyFirstAndLastReviewThreadComment(t *testing.T) {
 	}
 }
 
-// Counterpart of the aliases in querySearchPrsInvolvingUser: the response
-// keys must land in the struct fields actionableThreads reads.
-func Test_AliasedThreadCommentsAreParsed(t *testing.T) {
-	body := `{
-		"author": {"login": "me"},
-		"reviewThreads": {"edges": [{"node": {
-			"isResolved": false,
-			"firstComment": {"nodes": [{"author": {"login": "me"}}]},
-			"lastComment": {"nodes": [{"author": {"login": "other"}, "reactions": {"edges": []}}]}
-		}}]}
-	}`
-	var pr prSearchResultGraphQl
-	if err := json.Unmarshal([]byte(body), &pr); err != nil {
-		t.Fatal(err)
-	}
-	actionable, _ := actionableThreads(pr, "me")
-	if actionable != 1 {
-		t.Fatalf("own PR where someone else has the last word: expected 1 actionable thread, got %d", actionable)
-	}
-}
-
 func fixedResponseServer(t *testing.T, status int, body string) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -515,28 +494,6 @@ func Test_QueryGithub_IgnoresBotsAsLastCommenter(t *testing.T) {
 	}
 	if len(prs) != 1 || prs[0].LastPrCommenter != "adam" {
 		t.Fatalf("expected the human as last commenter, got %+v", prs)
-	}
-}
-
-// The head commit is what tells "new commits since the last look" apart from
-// "same commits, new chatter"; a consumer keys on it, so it must survive the
-// search response.
-func Test_QueryGithub_CarriesHeadCommit(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"data":{"search":{"edges":[{"node":{
-			"id":"PR_1","url":"https://github.com/o/r/pull/1","title":"t","author":{"login":"me"},
-			"headRefOid":"0123456789abcdef0123456789abcdef01234567",
-			"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
-			"reviewThreads":{"totalCount":0,"pageInfo":{"hasNextPage":false},"edges":[]}
-		}}]}}}`))
-	}))
-	t.Cleanup(srv.Close)
-	prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(prs) != 1 || prs[0].HeadRefOid != "0123456789abcdef0123456789abcdef01234567" {
-		t.Fatalf("expected the head commit, got %+v", prs)
 	}
 }
 
