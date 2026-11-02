@@ -387,6 +387,18 @@ func (s *DbStorage) GetPAT() (StoredPAT, bool, error) {
 	}, true, nil
 }
 
+// ReadPAT returns the active PAT from the database at dbPath, opened read-only:
+// unlike NewStorage it neither creates the file nor migrates the schema, so it
+// is safe against the database of an elly that is running.
+func ReadPAT(dbPath string) (StoredPAT, bool, error) {
+	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=ro", dbPath))
+	if err != nil {
+		return StoredPAT{}, false, fmt.Errorf("could not open database: %w", err)
+	}
+	defer db.Close() //nolint:errcheck // read-only handle, nothing to flush
+	return (&DbStorage{db: New(db), rawDb: db}).GetPAT()
+}
+
 func (s *DbStorage) ClearPAT() error {
 	if err := s.db.ClearActivePAT(context.Background()); err != nil {
 		return fmt.Errorf("could not clear PAT: %w", err)

@@ -30,6 +30,8 @@ var verboseFlag = flag.Bool("verbose", false, "verbose logging")
 var notifyFlag = flag.Bool("notify", false, "send a desktop notification (notify-send) when a PR gains a reason to act")
 var annotationSchemes = flag.String("annotation-schemes", "", "comma-separated link schemes annotations may use besides https, e.g. claude-review")
 var annotationTokenFile = flag.String("annotation-token-file", "", "where to write the bearer token annotation writes need (default: $XDG_RUNTIME_DIR/elly/annotation-token; no XDG_RUNTIME_DIR disables annotation writes)")
+var recordDir = flag.String("record", "", "development: run one poll, write it anonymised to the next free poll-N.json in this directory, and exit")
+var recordOwners = flag.String("record-owners", "", "comma-separated repo owners -record keeps; every other PR is left out of the recording")
 var workOwners = flag.String("work-owners", "", "comma-separated repo owners that notify only on reasons to act; any other owner notifies on every change by someone else")
 
 func main() {
@@ -59,6 +61,16 @@ func main() {
 
 	if *dbPath == "" {
 		*dbPath = defaultDBPath()
+	}
+
+	if *recordDir != "" {
+		path, err := record(*recordDir, splitOwners(*recordOwners), *verboseFlag, *dbPath, github.DefaultAPIURL, logger)
+		if err != nil {
+			logger.Error("could not record a poll", slog.Any("error", err))
+			os.Exit(1)
+		}
+		logger.Info("recorded a poll", "file", path)
+		os.Exit(0)
 	}
 	dbDir := filepath.Dir(*dbPath)
 	if err := os.MkdirAll(dbDir, 0o700); err != nil {
@@ -272,4 +284,46 @@ func annotationTokenPath(flagValue, runtimeDir string) string {
 		return ""
 	}
 	return filepath.Join(runtimeDir, "elly", "annotation-token")
+}
+
+// record runs one poll against github and writes it, anonymised, to the next
+// free poll-N.json in dir. The database is only read, for the token and the
+// username; no server starts, nothing is stored and nothing is notified. It
+// refuses -verbose, because debug logging prints whole response bodies.
+func record(dir string, owners []string, verbose bool, dbPath, baseURL string, logger *slog.Logger) (string, error) {
+	if verbose {
+		return "", errors.New("-record refuses -verbose: debug logging prints response bodies")
+	}
+	if len(owners) == 0 {
+		return "", errors.New("-record needs -record-owners: the search reaches every org the token can see")
+	}
+	pat, found, err := storage.ReadPAT(dbPath)
+	if err != nil {
+		return "", fmt.Errorf("could not read the token: %w", err)
+	}
+	if !found {
+		return "", errors.New("no token stored; set one up in elly first")
+	}
+	out, err := github.Record(baseURL, pat.Token, pat.Username, owners, logger)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	for n := 1; ; n++ {
+		path := filepath.Join(dir, fmt.Sprintf("poll-%d.json", n))
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if _, err := f.Write(out); err != nil {
+			_ = f.Close()
+			return "", err
+		}
+		return path, f.Close()
+	}
 }

@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -494,5 +496,36 @@ func TestGetPr(t *testing.T) {
 	}
 	if _, err := store.GetPr("missing"); err == nil {
 		t.Error("a missing PR read without error")
+	}
+}
+
+// A recording reads the token of a running elly's database, and must neither
+// create the file nor touch its schema while doing so.
+func TestReadPAT_ReadsWithoutWriting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "elly.db")
+	store := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
+	if err := store.StorePAT("tok", "someone", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pat, found, err := ReadPAT(path)
+	if err != nil || !found || pat.Token != "tok" || pat.Username != "someone" {
+		t.Fatalf("got %+v %v %v", pat, found, err)
+	}
+	after, _ := os.ReadFile(path)
+	if !bytes.Equal(before, after) {
+		t.Error("reading the PAT changed the database file")
+	}
+
+	missing := filepath.Join(t.TempDir(), "absent.db")
+	if _, _, err := ReadPAT(missing); err == nil {
+		t.Error("a missing database must be an error")
+	}
+	if _, err := os.Stat(missing); !os.IsNotExist(err) {
+		t.Error("reading must not create a database")
 	}
 }

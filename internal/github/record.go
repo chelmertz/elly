@@ -135,9 +135,12 @@ func (r *recorder) keepOwners(response []byte) ([]byte, error) {
 	}
 	data, _ := doc["data"].(map[string]any)
 	search, _ := data["search"].(map[string]any)
+	if search["edges"] == nil {
+		return response, nil // no results at all
+	}
 	edges, ok := search["edges"].([]any)
 	if !ok {
-		return nil, errors.New("the search response has no edges")
+		return nil, errors.New("the search response has no list of edges")
 	}
 	kept := []any{}
 	for _, e := range edges {
