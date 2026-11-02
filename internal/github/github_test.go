@@ -688,8 +688,7 @@ func Test_fetchFailingChecks(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	failing, complete, _ := fetchFailingChecks(srv.URL, "token", "PR_node", "https://github.com/o/r/pull/1",
-		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	failing, complete, _ := api{baseURL: srv.URL, token: "token", logger: slog.New(slog.NewTextHandler(io.Discard, nil))}.fetchFailingChecks("PR_node", "https://github.com/o/r/pull/1")
 	if !complete {
 		t.Error("both pages were served, so the list must be complete")
 	}
@@ -718,8 +717,7 @@ func Test_fetchFailingChecks_RefusedContextsAreNotAnEmptyList(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	failing, complete, _ := fetchFailingChecks(srv.URL, "token", "PR_node", "https://github.com/o/r/pull/1",
-		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	failing, complete, _ := api{baseURL: srv.URL, token: "token", logger: slog.New(slog.NewTextHandler(io.Discard, nil))}.fetchFailingChecks("PR_node", "https://github.com/o/r/pull/1")
 	if len(failing) != 0 {
 		t.Errorf("no names are readable, got %v", failing)
 	}
@@ -818,8 +816,7 @@ func Test_fetchFailingChecks_ReportsTheMissingPermission(t *testing.T) {
 	defer srv.Close()
 
 	var logs bytes.Buffer
-	_, complete, degraded := fetchFailingChecks(srv.URL, "token", "PR_node", "https://github.com/o/r/pull/1",
-		slog.New(slog.NewTextHandler(&logs, nil)))
+	_, complete, degraded := api{baseURL: srv.URL, token: "token", logger: slog.New(slog.NewTextHandler(&logs, nil))}.fetchFailingChecks("PR_node", "https://github.com/o/r/pull/1")
 	// Every red PR hits this on every poll with a fine-grained token, so a
 	// WARN here is per-poll noise about something no token setting can fix.
 	if strings.Contains(logs.String(), "level=WARN") {

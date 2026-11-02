@@ -236,14 +236,30 @@ const serverErrorRetries = 2
 // github recovers from in seconds.
 var serverErrorBackoff = []time.Duration{1 * time.Second, 3 * time.Second}
 
+// api is what one poll talks to github with.
+type api struct {
+	baseURL string
+	token   string
+	logger  *slog.Logger
+	// tap, when set, sees every exchange before elly reads it, and answers
+	// with the body elly continues with, or an error that ends the request.
+	// Only a recording sets it.
+	tap func(request []byte, status int, response []byte) ([]byte, error)
+}
+
 // graphqlRequest posts one query, retrying a 5xx a couple of times before
 // giving up. Only 5xx is retried: a 4xx, a rate limit and a parse failure are
 // all answers rather than hiccups, and repeating them helps nobody.
 func graphqlRequest(baseURL string, query graphqlQuery, token string, logger *slog.Logger) ([]byte, error) {
+	return api{baseURL: baseURL, token: token, logger: logger}.request(query)
+}
+
+func (a api) request(query graphqlQuery) ([]byte, error) {
+	logger := a.logger
 	var body []byte
 	var err error
 	for attempt := 0; ; attempt++ {
-		body, err = graphqlRequestOnce(baseURL, query, token, logger)
+		body, err = a.requestOnce(query)
 		if err == nil || !errors.Is(err, ErrGithubServer) || attempt >= serverErrorRetries {
 			return body, err
 		}
@@ -257,7 +273,8 @@ func graphqlRequest(baseURL string, query graphqlQuery, token string, logger *sl
 	}
 }
 
-func graphqlRequestOnce(baseURL string, query graphqlQuery, token string, logger *slog.Logger) ([]byte, error) {
+func (a api) requestOnce(query graphqlQuery) ([]byte, error) {
+	baseURL, token, logger := a.baseURL, a.token, a.logger
 	jsonBytes, err := json.Marshal(query)
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal graphql json: %w", err)
@@ -288,6 +305,11 @@ func graphqlRequestOnce(baseURL string, query graphqlQuery, token string, logger
 	respBody, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, fmt.Errorf("could not read github username response: %w", err)
+	}
+	if a.tap != nil {
+		if respBody, err = a.tap(jsonBytes, response.StatusCode, respBody); err != nil {
+			return nil, err
+		}
 	}
 
 	// 5xx bodies are not reliably json (502s come as html), so decide on
@@ -483,6 +505,11 @@ func QueryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 }
 
 func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([]types.ViewPr, []types.Degradation, error) {
+	return api{baseURL: baseURL, token: token, logger: logger}.poll(username)
+}
+
+func (a api) poll(username string) ([]types.ViewPr, []types.Degradation, error) {
+	logger := a.logger
 	// Keyed by Kind so one refusal repeated across every red PR is reported once.
 	degradations := map[string]types.Degradation{}
 
@@ -490,7 +517,7 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 	// JSON (not the parsed response) of each PR, for debugging reasons.
 	// Debugging > efficiency, in this case.
 	search := func(qualifier string) ([]prEdgeGraphQl, error) {
-		respBody, err := graphqlRequest(baseURL, querySearchPrs(qualifier, username), token, logger)
+		respBody, err := a.request(querySearchPrs(qualifier, username))
 		if err != nil {
 			return nil, err
 		}
@@ -560,7 +587,7 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 			lastPrCommenter = c.Node.Author.Login
 		}
 
-		if err := fetchRemainingReviewThreads(baseURL, token, &pr, logger); err != nil {
+		if err := a.fetchRemainingReviewThreads(&pr); err != nil {
 			// the poll goes on with what the search returned; the count for
 			// this PR is a lower bound until the next poll succeeds
 			logger.Warn("could not fetch all review threads", slog.String("pr_url", pr.Url), slog.Any("err", err))
@@ -600,7 +627,7 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 		checksComplete := true
 		if checksState == "FAILURE" || checksState == "ERROR" {
 			var degraded *types.Degradation
-			checksFailing, checksComplete, degraded = fetchFailingChecks(baseURL, token, pr.Id, pr.Url, logger)
+			checksFailing, checksComplete, degraded = a.fetchFailingChecks(pr.Id, pr.Url)
 			if degraded != nil {
 				degradations[degraded.Kind] = *degraded
 			}
@@ -656,7 +683,7 @@ func queryGithub(baseURL, token string, username string, logger *slog.Logger) ([
 	// so on someone else's PR the answer would score nothing and change no
 	// advice.
 	if len(ownNodeIds) > 0 {
-		merge := fetchMergeability(baseURL, token, ownNodeIds, logger)
+		merge := a.fetchMergeability(ownNodeIds)
 		for i := range viewPrs {
 			if m, ok := merge[viewPrs[i].Url]; ok {
 				viewPrs[i].Mergeable = m.Mergeable
@@ -966,7 +993,8 @@ type mergeInfo struct {
 // unanswered PR is simply absent from the result, which leaves its fields
 // empty - "not known", the same thing github's own UNKNOWN means - rather than
 // asserting that it merges cleanly.
-func fetchMergeability(baseURL, token string, urlsToNodeIds map[string]string, logger *slog.Logger) map[string]mergeInfo {
+func (a api) fetchMergeability(urlsToNodeIds map[string]string) map[string]mergeInfo {
+	logger := a.logger
 	out := make(map[string]mergeInfo, len(urlsToNodeIds))
 	nodeIdToUrl := make(map[string]string, len(urlsToNodeIds))
 	ids := make([]string, 0, len(urlsToNodeIds))
@@ -980,7 +1008,7 @@ func fetchMergeability(baseURL, token string, urlsToNodeIds map[string]string, l
 
 	for start := 0; start < len(ids); start += mergeabilityBatchSize {
 		end := min(start+mergeabilityBatchSize, len(ids))
-		body, err := graphqlRequest(baseURL, queryMergeability(ids[start:end]), token, logger)
+		body, err := a.request(queryMergeability(ids[start:end]))
 		if err != nil {
 			// Deliberately not a Degradation: unlike the Checks permission this
 			// is transient, and a banner that appears and clears on alternating
@@ -1024,11 +1052,12 @@ const mergeabilityQuery = `query($ids: [ID!]!) {
   }
 }`
 
-func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Logger) ([]string, bool, *types.Degradation) {
+func (a api) fetchFailingChecks(prNodeId, prUrl string) ([]string, bool, *types.Degradation) {
+	logger := a.logger
 	var failing []string
 	cursor := ""
 	for pages := 0; pages < maxCheckContextPages; pages++ {
-		body, err := graphqlRequest(baseURL, queryFailingChecks(prNodeId, cursor), token, logger)
+		body, err := a.request(queryFailingChecks(prNodeId, cursor))
 		if err != nil {
 			logger.Warn("could not fetch failing checks", slog.String("pr_url", prUrl), slog.Any("err", err))
 			return failing, false, nil
@@ -1175,7 +1204,8 @@ const reviewThreadsPageQuery = `query($id: ID!, $after: String) {
 // this, a PR with more than one page of threads (80 on one PR seen
 // 2026-09-08) had its newest threads, which come last, silently ignored,
 // and reported zero actionable threads.
-func fetchRemainingReviewThreads(baseURL, token string, pr *prSearchResultGraphQl, logger *slog.Logger) error {
+func (a api) fetchRemainingReviewThreads(pr *prSearchResultGraphQl) error {
+	logger := a.logger
 	pages := 0
 	for pr.ReviewThreads.PageInfo.HasNextPage {
 		if pages == maxReviewThreadPages {
@@ -1183,7 +1213,7 @@ func fetchRemainingReviewThreads(baseURL, token string, pr *prSearchResultGraphQ
 			return nil
 		}
 		pages++
-		body, err := graphqlRequest(baseURL, queryReviewThreadsPage(pr.Id, pr.ReviewThreads.PageInfo.EndCursor), token, logger)
+		body, err := a.request(queryReviewThreadsPage(pr.Id, pr.ReviewThreads.PageInfo.EndCursor))
 		if err != nil {
 			return fmt.Errorf("review threads page %d of %s: %w", pages+1, pr.Url, err)
 		}
