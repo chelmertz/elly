@@ -224,7 +224,7 @@ func Test_MergeConflict_AddPointsOnOwnPr(t *testing.T) {
 }
 
 // Someone else's PR that we reviewed, where the author has since answered.
-// matchi-frontend#1995 on 2026-09-18: five open threads of ours, the author
+// A work frontend PR on 2026-09-18: five open threads of ours, the author
 // replied with a direct question and offered to push either change, and elly
 // scored the PR -10 - the ThreadsWaiting penalty with nothing to offset it,
 // because "someone else commented last" was fenced inside the own-PR branch.
@@ -232,16 +232,16 @@ func Test_MergeConflict_AddPointsOnOwnPr(t *testing.T) {
 func Test_TheyAnsweredOurReview_AddsPoints(t *testing.T) {
 	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
 	reviewed := types.ViewPr{
-		Author: "mirrenil", Url: "https://github.com/o/r/pull/1995", LastUpdated: now,
+		Author: "author1", Url: "https://github.com/o/r/pull/1", LastUpdated: now,
 		ChecksState: "SUCCESS", ChecksComplete: true,
 		ThreadsWaiting:  5,
-		LastPrCommenter: "mirrenil",
+		LastPrCommenter: "author1",
 	}
 
 	answered := StandardPrPoints(reviewed, "me", now)
 	found := false
 	for _, r := range answered.Reasons {
-		if strings.Contains(r, "mirrenil") {
+		if strings.Contains(r, "author1") {
 			found = true
 		}
 	}
@@ -261,7 +261,7 @@ func Test_TheyAnsweredOurReview_AddsPoints(t *testing.T) {
 	driveBy := reviewed
 	driveBy.ThreadsWaiting = 0
 	for _, r := range StandardPrPoints(driveBy, "me", now).Reasons {
-		if strings.Contains(r, "mirrenil") {
+		if strings.Contains(r, "author1") {
 			t.Fatalf("the rule must not fire without a thread of ours: %v", r)
 		}
 	}
@@ -272,7 +272,7 @@ func Test_TheyAnsweredOurReview_AddsPoints(t *testing.T) {
 	minePoints := StandardPrPoints(mine, "me", now)
 	found = false
 	for _, r := range minePoints.Reasons {
-		if strings.Contains(r, "mirrenil") {
+		if strings.Contains(r, "author1") {
 			found = true
 		}
 	}

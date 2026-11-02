@@ -869,7 +869,7 @@ const maxReviewThreadPages = 10
 // because it runs only for a PR whose rollup state is already FAILURE.
 const checkContextPageSize = "100"
 
-// maxCheckContextPages bounds that loop. One matchi-backend PR carries 138
+// maxCheckContextPages bounds that loop. One backend PR at work carries 138
 // contexts; ten pages is far beyond anything seen, and past it the names are
 // reported as a lower bound while the state stays authoritative.
 const maxCheckContextPages = 10
