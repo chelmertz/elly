@@ -166,7 +166,7 @@ func countCommentsByUser(pr prSearchResultGraphQl, username string) map[int]stru
 // of the 5000 hourly points and run right at github's 10 s query timeout.
 // Only the first comment's author and the last comment's reactions are used.
 func Test_Query_FetchesOnlyFirstAndLastReviewThreadComment(t *testing.T) {
-	q := querySearchPrs(qualifierInvolves, "me")
+	q := querySearchPrs(qualifierInvolves, "me").Query
 	for _, want := range []string{"firstComment: comments(first: 1)", "lastComment: comments(last: 1)"} {
 		if !strings.Contains(q, want) {
 			t.Errorf("query lacks %q", want)
@@ -268,7 +268,10 @@ func counterValue(t *testing.T, c prometheus.Counter) float64 {
 func Test_QueryGithub_PaginatesReviewThreadsPerPR(t *testing.T) {
 	var pageRequests int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload struct{ Query string }
+		var payload struct {
+			Query     string
+			Variables map[string]any
+		}
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
@@ -283,7 +286,7 @@ func Test_QueryGithub_PaginatesReviewThreadsPerPR(t *testing.T) {
 					{"node":{"isResolved":true,"firstComment":{"nodes":[{"author":{"login":"other"}}]},"lastComment":{"nodes":[{"author":{"login":"me"},"reactions":{"edges":[]}}]}}}
 				]}
 			}}]}}}`))
-		case strings.Contains(q, `node(id: "PR_1")`) && strings.Contains(q, `after: "c1"`):
+		case strings.Contains(q, "reviewThreads(first: "+reviewThreadPageSize) && payload.Variables["id"] == "PR_1" && payload.Variables["after"] == "c1":
 			pageRequests++
 			// second page: the unresolved thread where the reviewer has the last word
 			_, _ = w.Write([]byte(`{"data":{"node":{"reviewThreads":{"totalCount":2,"pageInfo":{"hasNextPage":false,"endCursor":"c2"},"edges":[
@@ -316,13 +319,13 @@ func Test_QueryGithub_PaginatesReviewThreadsPerPR(t *testing.T) {
 // The follow-up query must fetch the same thread fields as the search query,
 // or the two pages are counted by different rules.
 func Test_ReviewThreadPageQuery_SharesThreadFields(t *testing.T) {
-	q := queryReviewThreadsPage("PR_1", "c1")
-	for _, want := range []string{`node(id: "PR_1")`, `after: "c1"`, "firstComment: comments(first: 1)", "lastComment: comments(last: 1)", "isResolved", "pageInfo"} {
+	q := queryReviewThreadsPage("PR_1", "c1").Query
+	for _, want := range []string{"node(id: $id)", "after: $after", "firstComment: comments(first: 1)", "lastComment: comments(last: 1)", "isResolved", "pageInfo"} {
 		if !strings.Contains(q, want) {
 			t.Errorf("page query lacks %q", want)
 		}
 	}
-	if !strings.Contains(querySearchPrs(qualifierInvolves, "me"), "hasNextPage") {
+	if !strings.Contains(querySearchPrs(qualifierInvolves, "me").Query, "hasNextPage") {
 		t.Error("search query lacks pageInfo, so no follow-up can ever happen")
 	}
 }
@@ -539,7 +542,7 @@ func Test_QueryGithub_CarriesHeadCommit(t *testing.T) {
 
 func Test_SearchQuery_AsksForHeadCommit(t *testing.T) {
 	for _, qualifier := range []string{qualifierInvolves, qualifierReviewRequested} {
-		if q := querySearchPrs(qualifier, "me"); !strings.Contains(q, "headRefOid") {
+		if q := querySearchPrs(qualifier, "me").Query; !strings.Contains(q, "headRefOid") {
 			t.Errorf("%s query is missing headRefOid", qualifier)
 		}
 	}
@@ -751,7 +754,7 @@ func Test_graphqlRequest_RetriesServerErrors(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	body, err := graphqlRequest(srv.URL, "{}", "token", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	body, err := graphqlRequest(srv.URL, graphqlQuery{Query: "{}"}, "token", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatalf("two 502s then a 200 must succeed, got %v", err)
 	}
@@ -774,7 +777,7 @@ func Test_graphqlRequest_GivesUpAfterRetries(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := graphqlRequest(srv.URL, "{}", "token", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	_, err := graphqlRequest(srv.URL, graphqlQuery{Query: "{}"}, "token", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if !errors.Is(err, ErrGithubServer) {
 		t.Fatalf("err = %v, want ErrGithubServer", err)
 	}
@@ -795,7 +798,7 @@ func Test_graphqlRequest_DoesNotRetryNonServerErrors(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _ = graphqlRequest(srv.URL, "{}", "token", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	_, _ = graphqlRequest(srv.URL, graphqlQuery{Query: "{}"}, "token", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if calls != 1 {
 		t.Errorf("a 4xx must be asked once, got %d attempts", calls)
 	}
@@ -887,7 +890,7 @@ func Test_QueryGithub_TeamReviewersAreNamed(t *testing.T) {
 // The search query has to ask for the team's name, or no amount of parsing can
 // recover it.
 func Test_SearchQuery_AsksForTeamReviewers(t *testing.T) {
-	q := querySearchPrs(qualifierInvolves, "me")
+	q := querySearchPrs(qualifierInvolves, "me").Query
 	for _, want := range []string{"... on Team", "name"} {
 		if !strings.Contains(q, want) {
 			t.Errorf("query is missing %q", want)

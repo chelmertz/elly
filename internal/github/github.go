@@ -239,7 +239,7 @@ var serverErrorBackoff = []time.Duration{1 * time.Second, 3 * time.Second}
 // graphqlRequest posts one query, retrying a 5xx a couple of times before
 // giving up. Only 5xx is retried: a 4xx, a rate limit and a parse failure are
 // all answers rather than hiccups, and repeating them helps nobody.
-func graphqlRequest(baseURL, query, token string, logger *slog.Logger) ([]byte, error) {
+func graphqlRequest(baseURL string, query graphqlQuery, token string, logger *slog.Logger) ([]byte, error) {
 	var body []byte
 	var err error
 	for attempt := 0; ; attempt++ {
@@ -257,13 +257,8 @@ func graphqlRequest(baseURL, query, token string, logger *slog.Logger) ([]byte, 
 	}
 }
 
-func graphqlRequestOnce(baseURL, query, token string, logger *slog.Logger) ([]byte, error) {
-	payload := struct {
-		Query string `json:"query"`
-	}{
-		Query: query,
-	}
-	jsonBytes, err := json.Marshal(payload)
+func graphqlRequestOnce(baseURL string, query graphqlQuery, token string, logger *slog.Logger) ([]byte, error) {
+	jsonBytes, err := json.Marshal(query)
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal graphql json: %w", err)
 	}
@@ -893,19 +888,22 @@ var failedConclusions = map[string]bool{
 // queryFailingChecks names the failing checks on one PR's head commit, by node
 // id the way queryReviewThreadsPage does. It is only ever called for a PR whose
 // statusCheckRollup state is already FAILURE.
-func queryFailingChecks(prNodeId, after string) string {
-	cursor := "null"
+func queryFailingChecks(prNodeId, after string) graphqlQuery {
+	var cursor any // null asks for the first page
 	if after != "" {
-		cursor = `"` + after + `"`
+		cursor = after
 	}
-	return fmt.Sprintf(`query {
-  node(id: %q) {
+	return graphqlQuery{Query: failingChecksQuery, Variables: map[string]any{"id": prNodeId, "after": cursor}}
+}
+
+const failingChecksQuery = `query($id: ID!, $after: String) {
+  node(id: $id) {
     ... on PullRequest {
       commits(last: 1) {
         nodes {
           commit {
             statusCheckRollup {
-              contexts(first: `+checkContextPageSize+`, after: %s) {
+              contexts(first: ` + checkContextPageSize + `, after: $after) {
                 totalCount
                 pageInfo { hasNextPage endCursor }
                 nodes {
@@ -920,8 +918,7 @@ func queryFailingChecks(prNodeId, after string) string {
       }
     }
   }
-}`, prNodeId, cursor)
-}
+}`
 
 // checkContext is one entry of a statusCheckRollup, flattened across the two
 // shapes github uses: CheckRun (actions) carries name/conclusion, StatusContext
@@ -1013,13 +1010,12 @@ func fetchMergeability(baseURL, token string, urlsToNodeIds map[string]string, l
 	return out
 }
 
-func queryMergeability(nodeIds []string) string {
-	quoted := make([]string, 0, len(nodeIds))
-	for _, id := range nodeIds {
-		quoted = append(quoted, `"`+id+`"`)
-	}
-	return `query {
-  nodes(ids: [` + strings.Join(quoted, ", ") + `]) {
+func queryMergeability(nodeIds []string) graphqlQuery {
+	return graphqlQuery{Query: mergeabilityQuery, Variables: map[string]any{"ids": nodeIds}}
+}
+
+const mergeabilityQuery = `query($ids: [ID!]!) {
+  nodes(ids: $ids) {
     ... on PullRequest {
       id
       mergeable
@@ -1027,7 +1023,6 @@ func queryMergeability(nodeIds []string) string {
     }
   }
 }`
-}
 
 func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Logger) ([]string, bool, *types.Degradation) {
 	var failing []string
@@ -1153,25 +1148,27 @@ const reviewThreadFields = `
                 }`
 
 // queryReviewThreadsPage fetches one more page of a PR's review threads.
-func queryReviewThreadsPage(prID, after string) string {
-	return fmt.Sprintf(`query {
-  node(id: %s) {
+func queryReviewThreadsPage(prID, after string) graphqlQuery {
+	return graphqlQuery{Query: reviewThreadsPageQuery, Variables: map[string]any{"id": prID, "after": after}}
+}
+
+const reviewThreadsPageQuery = `query($id: ID!, $after: String) {
+  node(id: $id) {
     ... on PullRequest {
-      reviewThreads(first: `+reviewThreadPageSize+`, after: %s) {
+      reviewThreads(first: ` + reviewThreadPageSize + `, after: $after) {
         totalCount
         pageInfo {
           hasNextPage
           endCursor
         }
         edges {
-          node {`+reviewThreadFields+`
+          node {` + reviewThreadFields + `
           }
         }
       }
     }
   }
-}`, strconv.Quote(prID), strconv.Quote(after))
-}
+}`
 
 // fetchRemainingReviewThreads appends the pages after the first to
 // pr.ReviewThreads.Edges, so actionableThreads sees every thread. Before
@@ -1217,13 +1214,20 @@ const (
 	qualifierReviewRequested = "review-requested"
 )
 
-func querySearchPrs(qualifier, username string) string {
-	// the amount of nodes given in "first: x", etc. needs to be a bit
-	// calibrated - if everything is too high, github will complain with a
-	// MAX_NODE_LIMIT_EXCEEDED error
-	query := `query {
-  search(type: ISSUE, query: "state:open ` + qualifier + `:%s type:pr archived:false", first: 100) {
-    edges {
+// querySearchPrs searches for open PRs matching qualifier:username. The
+// login can only travel inside the search string, so a recording maps that
+// variable token by token.
+func querySearchPrs(qualifier, username string) graphqlQuery {
+	return graphqlQuery{Query: searchPrsQuery, Variables: map[string]any{
+		"search": "state:open " + qualifier + ":" + username + " type:pr archived:false",
+	}}
+}
+
+// The amount of nodes given in "first: x", etc. needs to be a bit calibrated -
+// if everything is too high, github will complain with a
+// MAX_NODE_LIMIT_EXCEEDED error.
+const searchPrsQuery = `query($search: String!) {
+  search(type: ISSUE, query: $search, first: 100) {    edges {
       node {
         ... on PullRequest {
           id
@@ -1319,5 +1323,13 @@ func querySearchPrs(qualifier, username string) string {
     }
   }
 }`
-	return fmt.Sprintf(query, username)
+
+// graphqlQuery is one request body. Query is always one of queryConstants;
+// everything that varies between polls is in Variables.
+type graphqlQuery struct {
+	Query     string         `json:"query"`
+	Variables map[string]any `json:"variables,omitempty"`
 }
+
+// queryConstants is every query text a poll sends.
+var queryConstants = []string{searchPrsQuery, reviewThreadsPageQuery, failingChecksQuery, mergeabilityQuery}
