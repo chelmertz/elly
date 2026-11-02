@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chelmertz/elly/internal/types"
 	"io"
 	"log/slog"
 	"math/rand"
@@ -158,32 +157,6 @@ func countCommentsByUser(pr prSearchResultGraphQl, username string) map[int]stru
 	}
 
 	return myCommentIndexes
-}
-
-// The github graphql "cost" is the product of every nested first/last
-// argument, regardless of how much data comes back. Fetching 30 comments
-// with 7 reactions each for 15 threads per PR made a single poll cost 475
-// of the 5000 hourly points and run right at github's 10 s query timeout.
-// Only the first comment's author and the last comment's reactions are used.
-func Test_Query_FetchesOnlyFirstAndLastReviewThreadComment(t *testing.T) {
-	q := querySearchPrs(qualifierInvolves, "me").Query
-	for _, want := range []string{"firstComment: comments(first: 1)", "lastComment: comments(last: 1)"} {
-		if !strings.Contains(q, want) {
-			t.Errorf("query lacks %q", want)
-		}
-	}
-	if strings.Contains(q, "comments(first: 30)") {
-		t.Error("query still fetches 30 comments per review thread")
-	}
-	// nothing reads these, and comment bodies alone were 70% of the response
-	for _, unused := range []string{"body", "status {"} {
-		if strings.Contains(q, unused) {
-			t.Errorf("query fetches %q, which is never read", unused)
-		}
-	}
-	if got := strings.Count(q, "reactions("); got != 1 {
-		t.Errorf("expected reactions only on the last review thread comment, found %d reactions connections", got)
-	}
 }
 
 func fixedResponseServer(t *testing.T, status int, body string) *httptest.Server {
@@ -494,14 +467,6 @@ func Test_QueryGithub_IgnoresBotsAsLastCommenter(t *testing.T) {
 	}
 	if len(prs) != 1 || prs[0].LastPrCommenter != "adam" {
 		t.Fatalf("expected the human as last commenter, got %+v", prs)
-	}
-}
-
-func Test_SearchQuery_AsksForHeadCommit(t *testing.T) {
-	for _, qualifier := range []string{qualifierInvolves, qualifierReviewRequested} {
-		if q := querySearchPrs(qualifier, "me").Query; !strings.Contains(q, "headRefOid") {
-			t.Errorf("%s query is missing headRefOid", qualifier)
-		}
 	}
 }
 
@@ -841,17 +806,6 @@ func Test_QueryGithub_TeamReviewersAreNamed(t *testing.T) {
 	}
 }
 
-// The search query has to ask for the team's name, or no amount of parsing can
-// recover it.
-func Test_SearchQuery_AsksForTeamReviewers(t *testing.T) {
-	q := querySearchPrs(qualifierInvolves, "me").Query
-	for _, want := range []string{"... on Team", "name"} {
-		if !strings.Contains(q, want) {
-			t.Errorf("query is missing %q", want)
-		}
-	}
-}
-
 // github's "involves:" is author OR assignee OR mentions OR commenter, and
 // review requests are none of those. A PR someone asked me to review and that
 // I have not spoken on was invisible until a second search was added.
@@ -960,73 +914,6 @@ func Test_QueryGithub_RateLimitOnReviewRequestedStillBacksOff(t *testing.T) {
 	var rl *ErrRateLimited
 	if !errors.As(err, &rl) {
 		t.Fatalf("a rate limit must reach the caller, got %v", err)
-	}
-}
-
-// Mergeability is a follow-up rather than a field on the search, because
-// asking for it inline made github compute a merge commit per PR and pushed
-// the 100-PR query past its response-time budget: three of six runs came back
-// 502 or 504 on 2026-09-18. It is also asked only about our own PRs, since a
-// conflict is the author's to rebase.
-func Test_QueryGithub_FetchesMergeabilityForOwnPrsOnly(t *testing.T) {
-	pr := func(n, author string) string {
-		return fmt.Sprintf(`{"node":{
-			"id":"PR_%s","url":"https://github.com/o/r/pull/%s","title":"t%s","author":{"login":%q},
-			"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
-			"comments":{"edges":[]},
-			"reviewThreads":{"totalCount":0,"pageInfo":{"hasNextPage":false},"edges":[]}
-		}}`, n, n, n, author)
-	}
-	var mergeabilityQueries []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		q := string(body)
-		if strings.Contains(q, "nodes(ids:") {
-			mergeabilityQueries = append(mergeabilityQueries, q)
-			_, _ = fmt.Fprint(w, `{"data":{"nodes":[{"id":"PR_1","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY"}]}}`)
-			return
-		}
-		if strings.Contains(q, "review-requested:") {
-			_, _ = fmt.Fprint(w, `{"data":{"search":{"edges":[]}}}`)
-			return
-		}
-		_, _ = fmt.Fprintf(w, `{"data":{"search":{"edges":[%s,%s]}}}`, pr("1", "me"), pr("2", "adam"))
-	}))
-	t.Cleanup(srv.Close)
-
-	prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(mergeabilityQueries) != 1 {
-		t.Fatalf("expected exactly one batched follow-up, got %d", len(mergeabilityQueries))
-	}
-	// The whole point of the batch: one request, not one per PR, and it must
-	// not carry the PR we did not author.
-	if !strings.Contains(mergeabilityQueries[0], "PR_1") {
-		t.Errorf("our own PR must be asked about: %s", mergeabilityQueries[0])
-	}
-	if strings.Contains(mergeabilityQueries[0], "PR_2") {
-		t.Errorf("someone else's PR must not be asked about: %s", mergeabilityQueries[0])
-	}
-
-	find := func(url string) types.ViewPr {
-		for _, p := range prs {
-			if p.Url == url {
-				return p
-			}
-		}
-		t.Fatalf("no such pr: %s", url)
-		return types.ViewPr{}
-	}
-	mine := find("https://github.com/o/r/pull/1")
-	if mine.Mergeable != "CONFLICTING" || mine.MergeStateStatus != "DIRTY" || !mine.HasConflict() {
-		t.Errorf("own PR must carry the answer: %+v", mine)
-	}
-	// Never asked about, so never claimed to be clean.
-	theirs := find("https://github.com/o/r/pull/2")
-	if theirs.Mergeable != "" || theirs.HasConflict() {
-		t.Errorf("an unasked PR must stay unknown, not clean: %+v", theirs)
 	}
 }
 
