@@ -1051,13 +1051,15 @@ func fetchFailingChecks(baseURL, token, prNodeId, prUrl string, logger *slog.Log
 			}
 		}
 		if err := json.Unmarshal(body, &envelope); err == nil && len(envelope.Errors) > 0 {
-			logger.Warn("github refused some check contexts",
+			// Debug, not Warn: a fine-grained token hits this for every red PR
+			// on every poll, and the refresh loop already says so once.
+			logger.Debug("github refused some check contexts",
 				slog.String("pr_url", prUrl),
 				slog.String("type", envelope.Errors[0].Type),
 				slog.String("message", envelope.Errors[0].Message),
 				slog.String("hint", "github restricts the Checks permission to Github Apps; only a classic token with the repo scope names an Actions job"))
 			degraded := &types.Degradation{
-				Kind:    "checks_unreadable",
+				Kind:    types.DegradationChecksUnreadable,
 				Message: "Github refuses to name the failing checks: " + envelope.Errors[0].Message,
 				Seen:    time.Now(),
 			}

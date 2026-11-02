@@ -25,6 +25,18 @@ type Degradation struct {
 	Seen time.Time
 }
 
+// DegradationChecksUnreadable is reported on every poll by a fine-grained
+// token, which github never grants the Checks permission. Red or green stays
+// correct; only the names of failing Actions jobs are missing.
+const DegradationChecksUnreadable = "checks_unreadable"
+
+// TokenLimitation says the degradation follows from the kind of token rather
+// than from a fault: another token type is the only remedy, so it is kept out
+// of the page and logged once per process, but still reported by the API.
+func (d Degradation) TokenLimitation() bool {
+	return d.Kind == DegradationChecksUnreadable
+}
+
 type ViewPr struct {
 	ReviewStatus             string
 	Url                      string

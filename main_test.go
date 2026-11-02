@@ -372,3 +372,39 @@ func TestAnnotationTokenPath(t *testing.T) {
 		t.Errorf("no runtime dir: %q, want writes disabled", got)
 	}
 }
+
+// A fine-grained token makes every poll report "checks_unreadable", and
+// nothing short of a different token type changes that. One INFO line per
+// process says so; a WARN every poll was noise. Other degradations still warn
+// on every poll they occur in.
+func TestLogDegradations_TokenLimitationOnceAtInfo(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	announced := map[string]bool{}
+	poll := []types.Degradation{
+		{Kind: "checks_unreadable", Message: "checks-message"},
+		{Kind: "review_requests_unreadable", Message: "requests-message"},
+	}
+	for range 3 {
+		logDegradations(poll, announced, logger)
+	}
+
+	var checksInfo, checksWarn, requestsWarn int
+	for _, line := range strings.Split(logs.String(), "\n") {
+		switch {
+		case strings.Contains(line, "checks_unreadable") && strings.Contains(line, "level=INFO"):
+			checksInfo++
+		case strings.Contains(line, "checks_unreadable") && strings.Contains(line, "level=WARN"):
+			checksWarn++
+		case strings.Contains(line, "review_requests_unreadable") && strings.Contains(line, "level=WARN"):
+			requestsWarn++
+		}
+	}
+	if checksInfo != 1 || checksWarn != 0 {
+		t.Errorf("checks_unreadable: want 1 INFO and 0 WARN over 3 polls, got %d INFO and %d WARN:\n%s",
+			checksInfo, checksWarn, logs.String())
+	}
+	if requestsWarn != 3 {
+		t.Errorf("review_requests_unreadable: want a WARN per poll (3), got %d:\n%s", requestsWarn, logs.String())
+	}
+}

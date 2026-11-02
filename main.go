@@ -18,6 +18,7 @@ import (
 	"github.com/chelmertz/elly/internal/notify"
 	"github.com/chelmertz/elly/internal/server"
 	"github.com/chelmertz/elly/internal/storage"
+	"github.com/chelmertz/elly/internal/types"
 )
 
 var timeoutMinutes = flag.Int("timeout", 5, "refresh PRs every N minutes")
@@ -169,6 +170,7 @@ func initPAT(store storage.Storage, githubBaseURL string, logger *slog.Logger) (
 }
 
 func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL string, send func(notify.Notification), logger *slog.Logger) {
+	announced := map[string]bool{}
 	for tracker.Tick() {
 		storedPat, found, _ := store.GetPAT()
 		if !found {
@@ -210,10 +212,7 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 		if err := store.StoreDegradations(degradations); err != nil {
 			logger.Warn("could not store degradations", slog.Any("error", err))
 		}
-		for _, d := range degradations {
-			logger.Warn("degraded", slog.String("kind", d.Kind),
-				slog.String("message", d.Message), slog.String("remedy", d.Remedy))
-		}
+		logDegradations(degradations, announced, logger)
 		if err := store.StoreRepoPrs(prs); err != nil {
 			logger.Error("could not store prs", slog.Any("error", err))
 			continue
@@ -221,6 +220,24 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 		if send != nil {
 			notifyChanges(store, storedPat.Username, splitOwners(*workOwners), send, logger)
 		}
+	}
+}
+
+// logDegradations warns about each degradation on every poll it occurs in,
+// except a token limitation, which is stated once at INFO per process: it
+// recurs on every poll and only a different token type would change it.
+func logDegradations(ds []types.Degradation, announced map[string]bool, logger *slog.Logger) {
+	for _, d := range ds {
+		if d.TokenLimitation() {
+			if !announced[d.Kind] {
+				announced[d.Kind] = true
+				logger.Info("names of failing Actions jobs are unavailable with this token type",
+					slog.String("kind", d.Kind), slog.String("remedy", d.Remedy))
+			}
+			continue
+		}
+		logger.Warn("degraded", slog.String("kind", d.Kind),
+			slog.String("message", d.Message), slog.String("remedy", d.Remedy))
 	}
 }
 

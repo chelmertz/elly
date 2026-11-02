@@ -25,7 +25,10 @@ Anything that does not pass both stays uncommitted. A revert is one commit.
 
 When Github refuses data, elly says so rather than showing an empty result.
 `fetchFailingChecks` in `internal/github` returns a `types.Degradation`, which
-reaches `GET /api/v0/config/status` and the banner on the page. A missing
+reaches `GET /api/v0/config/status` and the banner on the page. The one
+exception is a token limitation (`checks_unreadable` with a fine-grained
+token): the API still reports it, but the page leaves it out and the log says
+it once per process, since only a different token type changes it. A missing
 capability is reported as missing: an empty `ChecksFailing` on a red PR means
 "names unavailable", never "nothing is failing". Keep any new blind spot on
 that path.

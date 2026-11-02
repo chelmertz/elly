@@ -1,6 +1,7 @@
 package github
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -759,8 +760,14 @@ func Test_fetchFailingChecks_ReportsTheMissingPermission(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	var logs bytes.Buffer
 	_, complete, degraded := fetchFailingChecks(srv.URL, "token", "PR_node", "https://github.com/o/r/pull/1",
-		slog.New(slog.NewTextHandler(io.Discard, nil)))
+		slog.New(slog.NewTextHandler(&logs, nil)))
+	// Every red PR hits this on every poll with a fine-grained token, so a
+	// WARN here is per-poll noise about something no token setting can fix.
+	if strings.Contains(logs.String(), "level=WARN") {
+		t.Errorf("a refused check list is the token type, not a fault, and must not warn:\n%s", logs.String())
+	}
 	if complete {
 		t.Error("a refused list is not a complete one")
 	}

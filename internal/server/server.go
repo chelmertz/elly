@@ -38,9 +38,23 @@ type IndexHtmlData struct {
 	RateLimitedUntil       string
 	// Degradations is what elly currently cannot do. Rendered in the meta bar
 	// beside the rate-limit notice, so a deficiency is visible on the page
-	// rather than only in the log or to whoever thinks to ask the API.
+	// rather than only in the log or to whoever thinks to ask the API. Token
+	// limitations are left out; see pageDegradations.
 	Degradations []types.Degradation
 	SetupMode    bool
+}
+
+// pageDegradations leaves out token limitations: a warning on every page view
+// about something only a different token type fixes is noise. The API still
+// reports them, so a consumer never mistakes missing check names for none.
+func pageDegradations(ds []types.Degradation) []types.Degradation {
+	var out []types.Degradation
+	for _, d := range ds {
+		if !d.TokenLimitation() {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 //go:embed index.html
@@ -276,7 +290,7 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 			Version:                webConfig.Version,
 			GoldenTestingEnabled:   webConfig.GoldenTestingEnabled,
 			RateLimitedUntil:       rateLimitUntilStr,
-			Degradations:           webConfig.Store.Degradations(),
+			Degradations:           pageDegradations(webConfig.Store.Degradations()),
 			SetupMode:              setupMode,
 		}
 		err := temp.Execute(w, data)

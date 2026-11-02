@@ -145,3 +145,47 @@ func TestPageAndHealth(t *testing.T) {
 		t.Errorf("page: %d, has the PR: %v", rec.Code, strings.Contains(rec.Body.String(), "small one"))
 	}
 }
+
+// A fine-grained token can never be granted the Checks permission, so
+// "checks_unreadable" is the normal state of such a setup rather than a fault:
+// it stays in the API, where the pr-status skill reads it, but a warning on
+// every page view about something nobody can fix was noise. Any other
+// degradation still shows on the page.
+func TestPageHidesTokenLimitationsTheApiStillReports(t *testing.T) {
+	w := newRoutes(t, "")
+	if err := w.store.StorePAT("ghp_x", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.store.StoreDegradations([]types.Degradation{
+		{Kind: "checks_unreadable", Message: "checks-message", Remedy: "checks-remedy"},
+		{Kind: "review_requests_unreadable", Message: "requests-message", Remedy: "requests-remedy"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	page := w.do("GET", "/", "").Body.String()
+	for _, hidden := range []string{"checks-message", "checks-remedy"} {
+		if strings.Contains(page, hidden) {
+			t.Errorf("the page shows %q, a token limitation rather than a fault", hidden)
+		}
+	}
+	for _, shown := range []string{"requests-message", "requests-remedy"} {
+		if !strings.Contains(page, shown) {
+			t.Errorf("the page lost %q, a real degradation", shown)
+		}
+	}
+
+	var status struct {
+		Degradations []map[string]string `json:"degradations"`
+	}
+	if err := json.NewDecoder(w.do("GET", "/api/v0/config/status", "").Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	var kinds []string
+	for _, d := range status.Degradations {
+		kinds = append(kinds, d["kind"])
+	}
+	if got := strings.Join(kinds, ","); got != "checks_unreadable,review_requests_unreadable" {
+		t.Errorf("the API must keep reporting every degradation, got kinds %q", got)
+	}
+}
