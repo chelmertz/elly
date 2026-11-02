@@ -147,10 +147,6 @@ func (pr ViewPr) ToggleBuryUrl() string {
 	}
 }
 
-func (pr ViewPr) GoldenUrl() string {
-	return fmt.Sprintf("/api/v0/prs/%s/golden", pr.Id())
-}
-
 // A property of the type json.RawMessage gets printed as a list of bytes, which
 // is hard to read. Change the format when printing this through fmt's %v
 func (pr ViewPr) String() string {

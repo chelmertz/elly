@@ -24,7 +24,6 @@ import (
 var timeoutMinutes = flag.Int("timeout", 5, "refresh PRs every N minutes")
 var url = flag.String("url", "localhost:9876", "URL for web GUI")
 var dbPath = flag.String("db", "", "path to SQLite database file (default: OS-appropriate data dir)")
-var golden = flag.Bool("golden", false, "provide a button for turning a PR into a test. do NOT use outside of development")
 var demo = flag.Bool("demo", false, "mock the PRs so you can take a proper screenshot of the GUI")
 var versionFlag = flag.Bool("version", false, "show version")
 var verboseFlag = flag.Bool("verbose", false, "verbose logging")
@@ -83,7 +82,7 @@ func main() {
 	if setupMode {
 		logger.Info("starting elly in setup mode", "version", version, "db", *dbPath)
 	} else {
-		logger.Info("starting elly", "version", version, "db", *dbPath, "timeout_minutes", *timeoutMinutes, "golden_testing_enabled", *golden, "demo", *demo)
+		logger.Info("starting elly", "version", version, "db", *dbPath, "timeout_minutes", *timeoutMinutes, "demo", *demo)
 	}
 
 	tracker := backoff.New(logger, time.Duration(*timeoutMinutes)*time.Minute)
@@ -112,16 +111,15 @@ func main() {
 	}
 
 	server.ServeWeb(server.HttpServerConfig{
-		Url:                  *url,
-		GoldenTestingEnabled: *golden,
-		Store:                store,
-		Tracker:              tracker,
-		TimeoutMinutes:       *timeoutMinutes,
-		Version:              version,
-		Logger:               logger,
-		SetupMode:            setupMode,
-		AnnotationToken:      annotationToken,
-		AnnotationSchemes:    splitOwners(*annotationSchemes),
+		Url:               *url,
+		Store:             store,
+		Tracker:           tracker,
+		TimeoutMinutes:    *timeoutMinutes,
+		Version:           version,
+		Logger:            logger,
+		SetupMode:         setupMode,
+		AnnotationToken:   annotationToken,
+		AnnotationSchemes: splitOwners(*annotationSchemes),
 	})
 }
 

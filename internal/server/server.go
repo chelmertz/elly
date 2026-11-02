@@ -34,7 +34,6 @@ type IndexHtmlData struct {
 	LastRefreshed          string
 	RefreshIntervalMinutes int
 	Version                string
-	GoldenTestingEnabled   bool
 	RateLimitedUntil       string
 	// Degradations is what elly currently cannot do. Rendered in the meta bar
 	// beside the rate-limit notice, so a deficiency is visible on the page
@@ -61,14 +60,13 @@ func pageDegradations(ds []types.Degradation) []types.Degradation {
 var index embed.FS
 
 type HttpServerConfig struct {
-	Url                  string
-	GoldenTestingEnabled bool
-	Store                storage.Storage
-	TimeoutMinutes       int
-	Version              string
-	Logger               *slog.Logger
-	Tracker              *backoff.Tracker
-	SetupMode            bool // True if no PAT configured (initial state only)
+	Url            string
+	Store          storage.Storage
+	TimeoutMinutes int
+	Version        string
+	Logger         *slog.Logger
+	Tracker        *backoff.Tracker
+	SetupMode      bool // True if no PAT configured (initial state only)
 	// AnnotationToken is the bearer token annotation writes must carry. Empty
 	// disables them.
 	AnnotationToken string
@@ -151,54 +149,6 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 	check(err)
 
 	registerAnnotationRoutes(mux, webConfig)
-
-	mux.HandleFunc("POST /api/v0/prs/{prUrl}/golden", func(w http.ResponseWriter, r *http.Request) {
-		if !webConfig.GoldenTestingEnabled {
-			// Nothing to see here, the feature is turned off - restart with -golden to turn it on
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		storedPrs := webConfig.Store.Prs()
-		prs_ := storedPrs.Prs
-
-		prUrlBytes, err := base64.StdEncoding.DecodeString(r.PathValue("prUrl"))
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, "invalid PR ID") //nolint:errcheck // best-effort response body
-			return
-		}
-		ghPrUrl := string(prUrlBytes)
-
-		var foundPr types.ViewPr
-		found := false // just to avoid dealing with an empty state PR, or mucking with a pointer
-		for _, pr := range prs_ {
-			if ghPrUrl == pr.Url {
-				// not the most efficient but I've never had more than ~30 PRs showing
-				// query the DB if this ever gets expensive
-				foundPr = pr
-				found = true
-				break
-			}
-		}
-		if !found {
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w, "couldn't turn PR %s into a golden copy, PR not found", ghPrUrl) //nolint:errcheck // best-effort response body
-			return
-		}
-
-		webConfig.Logger.Info("found a pr to turn into golden copy", "pr", foundPr)
-
-		now := time.Now()
-		currentUser := getCurrentUsername(webConfig.Store)
-		points.StoreGoldenTest(points.GoldenTest{
-			PrDomain:    foundPr,
-			Points:      *points.StandardPrPoints(foundPr, currentUser, now),
-			CurrentUser: currentUser,
-			CurrentTime: now,
-		})
-		w.WriteHeader(http.StatusOK)
-	})
 
 	mux.HandleFunc("POST /api/v0/prs/{prUrl}/{action}", func(w http.ResponseWriter, r *http.Request) {
 		prUrlBytes, err := base64.StdEncoding.DecodeString(r.PathValue("prUrl"))
@@ -288,7 +238,6 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 			LastRefreshed:          storedPrs.LastFetched.Format(time.RFC3339),
 			RefreshIntervalMinutes: webConfig.TimeoutMinutes,
 			Version:                webConfig.Version,
-			GoldenTestingEnabled:   webConfig.GoldenTestingEnabled,
 			RateLimitedUntil:       rateLimitUntilStr,
 			Degradations:           pageDegradations(webConfig.Store.Degradations()),
 			SetupMode:              setupMode,
