@@ -43,7 +43,7 @@ mutate:
 	CGO_ENABLED=0 go tool gremlins unleash --workers 1 --threshold-efficacy $(MUTATION_EFFICACY) --threshold-mcover $(MUTATION_COVERAGE) .
 
 # The property tests with 10000 cases each instead of rapid's default 100.
-PROP_PACKAGES = ./internal/notify ./internal/points ./internal/server
+PROP_PACKAGES = ./anonymise ./internal/github ./internal/notify ./internal/points ./internal/server
 props-long:
 	CGO_ENABLED=0 go test -run Prop $(PROP_PACKAGES) -args -rapid.checks=10000
 

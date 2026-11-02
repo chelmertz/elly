@@ -9,4 +9,4 @@ internal/points/golden_test*json
 result
 
 # rapid writes a failing case here to replay it; not for the repo
-testdata/rapid/
+**/testdata/rapid/

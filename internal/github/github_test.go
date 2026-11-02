@@ -19,20 +19,6 @@ import (
 	"time"
 )
 
-func Test_WhenReviewThreadIsEmpty_WillNotRequireAction(t *testing.T) {
-	constructedButEmpty, _ := actionableThreads(prWithThread("author", threadOf()), "currentUser")
-
-	if constructedButEmpty != 0 {
-		t.Fatalf("expected 0 actionable threads on an empty struct, got %d", constructedButEmpty)
-	}
-
-	actuallyEmpty, _ := actionableThreads(prSearchResultGraphQl{}, "currentUser")
-
-	if actuallyEmpty != 0 {
-		t.Fatalf("expected 0 actionable threads for an empty pr, got %d", actuallyEmpty)
-	}
-}
-
 func Test_WhenHavingUnansweredComments_WillCountTowardsWaiting(t *testing.T) {
 	_, got := actionableThreads(prWithThread("author", threadOf(
 		prReviewThreadCommentGraphQl{Author: struct{ Login string }{Login: "currentUser"}},
