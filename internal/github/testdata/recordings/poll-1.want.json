@@ -1,0 +1,1233 @@
+{
+  "Prs": [
+    {
+      "Pr": {
+        "ReviewStatus": "APPROVED",
+        "Url": "https://github.com/owner1/repo1/pull/1",
+        "Title": "redacted-3",
+        "Author": "me",
+        "RepoName": "repo1",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo1",
+        "IsDraft": false,
+        "LastUpdated": "2026-02-07T20:24:17Z",
+        "LastPrCommenter": "me",
+        "ThreadsActionable": 1,
+        "ThreadsWaiting": 0,
+        "Additions": 29,
+        "Deletions": 24,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [
+          "user1"
+        ],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "MERGEABLE",
+        "MergeStateStatus": "CLEAN",
+        "HeadRefOid": "0000000000000000000000000000000000000001",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 180,
+        "Reasons": [
+          "+100: Own PR is approved, should be a simple merge",
+          "+80: Someone asked us something, or reacted to our comment (1 comments)"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo2/pull/2",
+        "Title": "redacted-4",
+        "Author": "user2",
+        "RepoName": "repo2",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo2",
+        "IsDraft": false,
+        "LastUpdated": "2026-02-07T14:38:18Z",
+        "LastPrCommenter": "user2",
+        "ThreadsActionable": 1,
+        "ThreadsWaiting": 0,
+        "Additions": 554,
+        "Deletions": 42,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [
+          "user2"
+        ],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000002",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 90,
+        "Reasons": [
+          "+10: Someone else commented last (user2)",
+          "+80: Someone asked us something, or reacted to our comment (1 comments)"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo3/pull/3",
+        "Title": "redacted-7",
+        "Author": "user2",
+        "RepoName": "repo3",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo3",
+        "IsDraft": false,
+        "LastUpdated": "2026-02-07T17:38:56Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 147,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [
+          "user2"
+        ],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000003",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 30,
+        "Reasons": [
+          "+30: PR is smallish, 147 loc changed is \u003c150"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "",
+        "Url": "https://github.com/owner1/repo4/pull/4",
+        "Title": "redacted-8",
+        "Author": "user2",
+        "RepoName": "repo4",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo4",
+        "IsDraft": false,
+        "LastUpdated": "2026-02-07T17:39:07Z",
+        "LastPrCommenter": "me",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 1,
+        "Additions": 25,
+        "Deletions": 17,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [
+          "user2"
+        ],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000004",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -10,
+        "Reasons": [
+          "-10: Someone should respond to our comments (1 comments)"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "CHANGES_REQUESTED",
+        "Url": "https://github.com/owner1/repo5/pull/5",
+        "Title": "redacted-9",
+        "Author": "me",
+        "RepoName": "repo5",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo5",
+        "IsDraft": false,
+        "LastUpdated": "2026-02-07T09:02:33Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 1,
+        "ThreadsWaiting": 0,
+        "Additions": 11,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [
+          "user2"
+        ],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "MERGEABLE",
+        "MergeStateStatus": "BLOCKED",
+        "HeadRefOid": "0000000000000000000000000000000000000005",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 130,
+        "Reasons": [
+          "+50: Someone wants you to change something",
+          "+80: Someone asked us something, or reacted to our comment (1 comments)"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "APPROVED",
+        "Url": "https://github.com/owner1/repo2/pull/6",
+        "Title": "redacted-10",
+        "Author": "user6",
+        "RepoName": "repo2",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo2",
+        "IsDraft": false,
+        "LastUpdated": "2026-02-07T09:49:38Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 3,
+        "Additions": 556,
+        "Deletions": 31,
+        "ReviewRequestedFromUsers": [
+          "user4",
+          "user5"
+        ],
+        "RereviewFrom": [],
+        "ReviewedBy": [
+          "user3"
+        ],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000006",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -110,
+        "Reasons": [
+          "-100: PR is someone else's and is approved",
+          "-10: Someone should respond to our comments (3 comments)"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo3/pull/7",
+        "Title": "redacted-15",
+        "Author": "user7",
+        "RepoName": "repo3",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo3",
+        "IsDraft": false,
+        "LastUpdated": "2026-02-07T10:03:06Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 1,
+        "Additions": 58,
+        "Deletions": 1,
+        "ReviewRequestedFromUsers": [
+          "user6",
+          "user5"
+        ],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000007",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -10,
+        "Reasons": [
+          "-10: Someone should respond to our comments (1 comments)"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo2/pull/8",
+        "Title": "redacted-16",
+        "Author": "me",
+        "RepoName": "repo2",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo2",
+        "IsDraft": true,
+        "LastUpdated": "2026-01-24T23:26:09Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 29,
+        "Deletions": 15,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "MERGEABLE",
+        "MergeStateStatus": "BLOCKED",
+        "HeadRefOid": "0000000000000000000000000000000000000008",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 11,
+        "Reasons": [
+          "+10: You should add reviewers",
+          "+11: Your PR has not been updated in a while, you should take actions",
+          "-10: PR is my draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo5/pull/9",
+        "Title": "redacted-19",
+        "Author": "user8",
+        "RepoName": "repo5",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo5",
+        "IsDraft": true,
+        "LastUpdated": "2026-01-27T22:09:00Z",
+        "LastPrCommenter": "me",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 134,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [
+          "me"
+        ],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000009",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -70,
+        "Reasons": [
+          "-70: PR is someone else's old draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo5/pull/10",
+        "Title": "redacted-20",
+        "Author": "me",
+        "RepoName": "repo5",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo5",
+        "IsDraft": false,
+        "LastUpdated": "2026-01-19T15:05:29Z",
+        "LastPrCommenter": "me",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 332,
+        "Deletions": 342,
+        "ReviewRequestedFromUsers": [
+          "user7"
+        ],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "CONFLICTING",
+        "MergeStateStatus": "DIRTY",
+        "HeadRefOid": "0000000000000000000000000000000000000010",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 61,
+        "Reasons": [
+          "+11: Your PR has not been updated in a while, you should take actions",
+          "+50: Merge conflict with the base branch - rebase before asking anyone to review"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo5/pull/11",
+        "Title": "redacted-21",
+        "Author": "user8",
+        "RepoName": "repo5",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo5",
+        "IsDraft": true,
+        "LastUpdated": "2026-01-27T22:09:02Z",
+        "LastPrCommenter": "me",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 1,
+        "Additions": 322,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [
+          "user7"
+        ],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000011",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -80,
+        "Reasons": [
+          "-10: Someone should respond to our comments (1 comments)",
+          "-70: PR is someone else's old draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo5/pull/12",
+        "Title": "redacted-22",
+        "Author": "user8",
+        "RepoName": "repo5",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo5",
+        "IsDraft": true,
+        "LastUpdated": "2026-01-28T09:16:52Z",
+        "LastPrCommenter": "me",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 7,
+        "Additions": 609,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [
+          "user7"
+        ],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "FAILURE",
+        "ChecksFailing": null,
+        "ChecksComplete": false,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000012",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -80,
+        "Reasons": [
+          "-10: Someone should respond to our comments (7 comments)",
+          "-70: PR is someone else's old draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo5/pull/13",
+        "Title": "redacted-23",
+        "Author": "me",
+        "RepoName": "repo5",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo5",
+        "IsDraft": false,
+        "LastUpdated": "2026-01-19T14:18:01Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 109,
+        "Deletions": 27,
+        "ReviewRequestedFromUsers": [
+          "user7"
+        ],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "MERGEABLE",
+        "MergeStateStatus": "BLOCKED",
+        "HeadRefOid": "0000000000000000000000000000000000000013",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 11,
+        "Reasons": [
+          "+11: Your PR has not been updated in a while, you should take actions"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo5/pull/14",
+        "Title": "redacted-24",
+        "Author": "me",
+        "RepoName": "repo5",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo5",
+        "IsDraft": true,
+        "LastUpdated": "2026-01-17T18:20:30Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 426,
+        "Deletions": 62,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "MERGEABLE",
+        "MergeStateStatus": "BLOCKED",
+        "HeadRefOid": "0000000000000000000000000000000000000014",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 11,
+        "Reasons": [
+          "+10: You should add reviewers",
+          "+11: Your PR has not been updated in a while, you should take actions",
+          "-10: PR is my draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo1/pull/15",
+        "Title": "redacted-25",
+        "Author": "me",
+        "RepoName": "repo1",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo1",
+        "IsDraft": true,
+        "LastUpdated": "2026-01-11T20:00:18Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 10,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "MERGEABLE",
+        "MergeStateStatus": "BLOCKED",
+        "HeadRefOid": "0000000000000000000000000000000000000015",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 11,
+        "Reasons": [
+          "+10: You should add reviewers",
+          "+11: Your PR has not been updated in a while, you should take actions",
+          "-10: PR is my draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo2/pull/16",
+        "Title": "redacted-26",
+        "Author": "me",
+        "RepoName": "repo2",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo2",
+        "IsDraft": false,
+        "LastUpdated": "2026-01-04T09:28:52Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 0,
+        "Deletions": 2,
+        "ReviewRequestedFromUsers": [
+          "user7"
+        ],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "MERGEABLE",
+        "MergeStateStatus": "BLOCKED",
+        "HeadRefOid": "0000000000000000000000000000000000000016",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 11,
+        "Reasons": [
+          "+11: Your PR has not been updated in a while, you should take actions"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "APPROVED",
+        "Url": "https://github.com/owner1/repo2/pull/17",
+        "Title": "redacted-27",
+        "Author": "me",
+        "RepoName": "repo2",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo2",
+        "IsDraft": true,
+        "LastUpdated": "2025-12-21T14:41:35Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 515,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [
+          "user3"
+        ],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "MERGEABLE",
+        "MergeStateStatus": "CLEAN",
+        "HeadRefOid": "0000000000000000000000000000000000000017",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 101,
+        "Reasons": [
+          "+100: Own PR is approved, should be a simple merge",
+          "+11: Your PR has not been updated in a while, you should take actions",
+          "-10: PR is my draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo5/pull/18",
+        "Title": "redacted-28",
+        "Author": "me",
+        "RepoName": "repo5",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo5",
+        "IsDraft": true,
+        "LastUpdated": "2025-12-24T16:43:18Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 443,
+        "Deletions": 4,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "CONFLICTING",
+        "MergeStateStatus": "DIRTY",
+        "HeadRefOid": "0000000000000000000000000000000000000018",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 61,
+        "Reasons": [
+          "+10: You should add reviewers",
+          "+11: Your PR has not been updated in a while, you should take actions",
+          "+50: Merge conflict with the base branch - rebase before asking anyone to review",
+          "-10: PR is my draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo2/pull/19",
+        "Title": "redacted-29",
+        "Author": "me",
+        "RepoName": "repo2",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo2",
+        "IsDraft": true,
+        "LastUpdated": "2026-01-05T13:24:35Z",
+        "LastPrCommenter": "user9",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 893,
+        "Deletions": 10,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "MERGEABLE",
+        "MergeStateStatus": "BLOCKED",
+        "HeadRefOid": "0000000000000000000000000000000000000019",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 21,
+        "Reasons": [
+          "+10: Someone else commented last (user9)",
+          "+10: You should add reviewers",
+          "+11: Your PR has not been updated in a while, you should take actions",
+          "-10: PR is my draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo6/pull/20",
+        "Title": "redacted-30",
+        "Author": "me",
+        "RepoName": "repo6",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo6",
+        "IsDraft": true,
+        "LastUpdated": "2025-09-23T00:59:14Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 136,
+        "Deletions": 5,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "FAILURE",
+        "ChecksFailing": null,
+        "ChecksComplete": false,
+        "Mergeable": "MERGEABLE",
+        "MergeStateStatus": "BEHIND",
+        "HeadRefOid": "0000000000000000000000000000000000000020",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 61,
+        "Reasons": [
+          "+10: You should add reviewers",
+          "+11: Your PR has not been updated in a while, you should take actions",
+          "+50: CI is failing - fix it before asking anyone to review",
+          "-10: PR is my draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "APPROVED",
+        "Url": "https://github.com/owner1/repo7/pull/21",
+        "Title": "redacted-31",
+        "Author": "user10",
+        "RepoName": "repo7",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo7",
+        "IsDraft": true,
+        "LastUpdated": "2025-09-21T09:42:15Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 22,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000021",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -170,
+        "Reasons": [
+          "-100: PR is someone else's and is approved",
+          "-70: PR is someone else's old draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo6/pull/22",
+        "Title": "redacted-34",
+        "Author": "user6",
+        "RepoName": "repo6",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo6",
+        "IsDraft": true,
+        "LastUpdated": "2025-09-21T10:46:55Z",
+        "LastPrCommenter": "user11",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 142,
+        "Deletions": 43,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000022",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -70,
+        "Reasons": [
+          "-70: PR is someone else's old draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo5/pull/23",
+        "Title": "redacted-35",
+        "Author": "user12",
+        "RepoName": "repo5",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo5",
+        "IsDraft": true,
+        "LastUpdated": "2025-09-23T10:36:42Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 3,
+        "ThreadsWaiting": 0,
+        "Additions": 3981,
+        "Deletions": 188,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [
+          "user12"
+        ],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000023",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 10,
+        "Reasons": [
+          "+80: Someone asked us something, or reacted to our comment (3 comments)",
+          "-70: PR is someone else's old draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo2/pull/24",
+        "Title": "redacted-38",
+        "Author": "user7",
+        "RepoName": "repo2",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo2",
+        "IsDraft": false,
+        "LastUpdated": "2026-01-07T14:26:27Z",
+        "LastPrCommenter": "me",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 7,
+        "Additions": 322,
+        "Deletions": 33,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000024",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -10,
+        "Reasons": [
+          "-10: Someone should respond to our comments (7 comments)"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "APPROVED",
+        "Url": "https://github.com/owner1/repo2/pull/25",
+        "Title": "redacted-39",
+        "Author": "user7",
+        "RepoName": "repo2",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo2",
+        "IsDraft": false,
+        "LastUpdated": "2025-09-22T19:25:42Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 339,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000025",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -100,
+        "Reasons": [
+          "-100: PR is someone else's and is approved"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo5/pull/26",
+        "Title": "redacted-40",
+        "Author": "me",
+        "RepoName": "repo5",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo5",
+        "IsDraft": true,
+        "LastUpdated": "2025-07-24T00:44:37Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 2,
+        "ThreadsWaiting": 0,
+        "Additions": 329,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "MERGEABLE",
+        "MergeStateStatus": "BLOCKED",
+        "HeadRefOid": "0000000000000000000000000000000000000026",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 91,
+        "Reasons": [
+          "+10: You should add reviewers",
+          "+11: Your PR has not been updated in a while, you should take actions",
+          "+80: Someone asked us something, or reacted to our comment (2 comments)",
+          "-10: PR is my draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "CHANGES_REQUESTED",
+        "Url": "https://github.com/owner1/repo2/pull/27",
+        "Title": "redacted-41",
+        "Author": "user7",
+        "RepoName": "repo2",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo2",
+        "IsDraft": false,
+        "LastUpdated": "2025-12-02T14:16:06Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 70,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [
+          "user13"
+        ],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000027",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -100,
+        "Reasons": [
+          "-100: Changes are already requested"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "APPROVED",
+        "Url": "https://github.com/owner1/repo2/pull/28",
+        "Title": "redacted-42",
+        "Author": "user7",
+        "RepoName": "repo2",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo2",
+        "IsDraft": false,
+        "LastUpdated": "2025-09-22T23:51:37Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 7,
+        "Additions": 899,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000028",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -110,
+        "Reasons": [
+          "-100: PR is someone else's and is approved",
+          "-10: Someone should respond to our comments (7 comments)"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "APPROVED",
+        "Url": "https://github.com/owner1/repo2/pull/29",
+        "Title": "redacted-43",
+        "Author": "user7",
+        "RepoName": "repo2",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo2",
+        "IsDraft": false,
+        "LastUpdated": "2025-09-22T19:31:55Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 2,
+        "Additions": 92,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [
+          "user13"
+        ],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000029",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -110,
+        "Reasons": [
+          "-100: PR is someone else's and is approved",
+          "-10: Someone should respond to our comments (2 comments)"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo8/pull/30",
+        "Title": "redacted-44",
+        "Author": "user7",
+        "RepoName": "repo8",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo8",
+        "IsDraft": false,
+        "LastUpdated": "2025-07-30T13:55:02Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 1,
+        "Additions": 27,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000030",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -10,
+        "Reasons": [
+          "-10: Someone should respond to our comments (1 comments)"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo9/pull/31",
+        "Title": "redacted-44",
+        "Author": "user7",
+        "RepoName": "repo9",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo9",
+        "IsDraft": false,
+        "LastUpdated": "2025-07-30T13:54:36Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 1,
+        "Additions": 27,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000031",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -10,
+        "Reasons": [
+          "-10: Someone should respond to our comments (1 comments)"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo1/pull/32",
+        "Title": "redacted-49",
+        "Author": "user7",
+        "RepoName": "repo1",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo1",
+        "IsDraft": false,
+        "LastUpdated": "2025-12-02T16:15:58Z",
+        "LastPrCommenter": "user7",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 97909,
+        "Deletions": 82,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000032",
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 10,
+        "Reasons": [
+          "+10: PR is bigish, 97991 loc changed is \u003e300"
+        ]
+      }
+    }
+  ],
+  "Degradations": [
+    {
+      "Kind": "checks_unreadable",
+      "Message": "Github refuses to name the failing checks: redacted-50",
+      "Remedy": "Github restricts the \"Checks\" permission to Github Apps, so a fine-grained token cannot be granted it and cannot name a failing Actions job. Swap in a classic token with the \"repo\" scope to see the names, at the cost of a far broader token. Red or green is correct either way. External reporters such as buildkite are named already, through \"Commit statuses\".",
+      "Seen": "0001-01-01T00:00:00Z"
+    }
+  ]
+}
