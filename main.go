@@ -197,7 +197,11 @@ func initPAT(store storage.Storage, githubBaseURL string, logger *slog.Logger) (
 
 func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL string, send func(notify.Notification), logger *slog.Logger) {
 	announced := map[string]bool{}
-	for tracker.Tick() {
+	for {
+		requested, ok := tracker.Next()
+		if !ok {
+			return
+		}
 		storedPat, found, _ := store.GetPAT()
 		if !found {
 			logger.Debug("no PAT configured, skipping refresh")
@@ -208,7 +212,9 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 			continue
 		}
 
-		if time.Since(store.Prs().LastFetched) < tracker.BaseInterval() {
+		// A timer tick (the one at startup included) skips a poll younger
+		// than the interval; "poll now" and a new token do not.
+		if !requested && time.Since(store.Prs().LastFetched) < tracker.BaseInterval() {
 			continue
 		}
 

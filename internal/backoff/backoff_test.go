@@ -222,3 +222,23 @@ func Test_TransientErrored_BacksOffGentlerThanErrored(t *testing.T) {
 		t.Errorf("it must still back off somewhat, got %v", transient.currentInterval())
 	}
 }
+
+// A requested refresh says so, also when a timer signal was already pending:
+// the loop skips a timer signal within the interval, and a request that
+// queued behind one would be lost.
+func TestNextTellsARequestedRefresh(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		bt := New(discardLogger(), 5*time.Minute)
+		defer bt.Stop()
+		if requested, ok := bt.Next(); !ok || requested {
+			t.Fatalf("the startup signal: requested %v ok %v", requested, ok)
+		}
+		time.Sleep(6 * time.Minute) // a timer signal is pending now
+		synctest.Wait()
+		bt.RequestRefresh()
+		synctest.Wait()
+		if requested, ok := bt.Next(); !ok || !requested {
+			t.Fatalf("after a request: requested %v ok %v", requested, ok)
+		}
+	})
+}

@@ -36,7 +36,7 @@ type Tracker struct {
 	consecutiveOK     int
 	cooldownThreshold int
 
-	c       chan struct{} // "time to refresh" signals
+	c       chan bool     // "time to refresh" signals; true for a requested one
 	refresh chan struct{} // manual refresh requests
 	done    chan struct{} // closed by Stop()
 	stopped sync.Once
@@ -49,7 +49,7 @@ func New(logger *slog.Logger, baseInterval time.Duration) *Tracker {
 		multiplier:        1.0,
 		maxMultiplier:     4.0,
 		cooldownThreshold: 3,
-		c:                 make(chan struct{}, 1),
+		c:                 make(chan bool, 1),
 		refresh:           make(chan struct{}, 1),
 		done:              make(chan struct{}),
 	}
@@ -62,12 +62,16 @@ func New(logger *slog.Logger, baseInterval time.Duration) *Tracker {
 // Tick blocks until it is time to refresh, then returns true.
 // Returns false when Stop() has been called (the tracker is done).
 func (t *Tracker) Tick() bool {
-	v, ok := <-t.c
-	if !ok {
-		return false
-	}
-	_ = v
-	return true
+	_, ok := t.Next()
+	return ok
+}
+
+// Next is Tick that also says whether the refresh was requested
+// (RequestRefresh) rather than due by the timer: a requested one should poll
+// even when the last poll is recent.
+func (t *Tracker) Next() (requested, ok bool) {
+	requested, ok = <-t.c
+	return requested, ok
 }
 
 // RequestRefresh triggers a non-blocking refresh signal.
@@ -177,7 +181,7 @@ func (t *Tracker) run() {
 
 	// Send immediate first signal.
 	select {
-	case t.c <- struct{}{}:
+	case t.c <- false:
 	case <-t.done:
 		return
 	}
@@ -189,7 +193,7 @@ func (t *Tracker) run() {
 		select {
 		case <-timer.C:
 			select {
-			case t.c <- struct{}{}:
+			case t.c <- false:
 			default: // don't block if pending
 			}
 			timer.Reset(t.currentInterval())
@@ -201,10 +205,13 @@ func (t *Tracker) run() {
 				default:
 				}
 			}
+			// A pending timer signal is replaced, so the request is not
+			// lost behind a tick that may skip.
 			select {
-			case t.c <- struct{}{}:
+			case <-t.c:
 			default:
 			}
+			t.c <- true
 			timer.Reset(t.currentInterval())
 		case <-t.done:
 			return

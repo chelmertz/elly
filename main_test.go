@@ -503,3 +503,33 @@ func TestGithubAPIFlag(t *testing.T) {
 		}
 	}
 }
+
+// "poll now" (the r key, the button, and the refresh after a PAT PUT) polls
+// even when the last poll is younger than the interval; a timer-driven tick,
+// the one at startup included, still skips then.
+func TestRefreshLoop_ManualRefreshPollsWithinTheInterval(t *testing.T) {
+	logger := testLogger(t)
+	store := storage.NewStorage(logger, t.TempDir()+"/elly.db")
+	if err := store.StorePAT("ghp_x", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.StoreRepoPrs(nil); err != nil { // polled just now
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	githubAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		_, _ = w.Write([]byte(`{"data":{"search":{"edges":[]}}}`))
+	}))
+	defer githubAPI.Close()
+	tracker := backoff.New(logger, time.Hour)
+	defer tracker.Stop()
+	go startRefreshLoop(store, tracker, githubAPI.URL, nil, logger)
+
+	time.Sleep(100 * time.Millisecond)
+	if n := calls.Load(); n != 0 {
+		t.Fatalf("the startup tick polled %d times within the interval", n)
+	}
+	tracker.RequestRefresh()
+	waitFor(t, "a poll on request", func() bool { return calls.Load() > 0 })
+}
