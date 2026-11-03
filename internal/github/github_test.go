@@ -1244,3 +1244,22 @@ func Test_RecordingURL_MapsEveryPart(t *testing.T) {
 		t.Errorf("got %q, want %q", got.Url, want)
 	}
 }
+
+// GitHub answers a query that timed out on its side with HTTP 200 and
+// {"data":null,"errors":[...]}. That is no answer: read as an empty search it
+// replaced the stored list with nothing and counted as a successful poll.
+func Test_QueryGithub_AnAnswerWithoutDataIsAFailedPoll(t *testing.T) {
+	noRetryPause(t)
+	for _, body := range []string{
+		`{"data":null,"errors":[{"message":"Something went wrong while executing your query. This may be the result of a timeout."}]}`,
+		`{"errors":[{"type":"INTERNAL","message":"boom"}]}`,
+		`null`,
+		`{}`,
+	} {
+		srv := fixedResponseServer(t, 200, body)
+		prs, _, err := QueryGithub(srv.URL, "token", "user", slog.New(slog.DiscardHandler))
+		if err == nil {
+			t.Errorf("%s: read as a successful poll with %d PRs", body, len(prs))
+		}
+	}
+}

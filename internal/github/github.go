@@ -322,6 +322,7 @@ func (a api) requestOnce(query graphqlQuery) ([]byte, error) {
 	// since graphql returns 200 but still possibly errors, we need to check for
 	// those somewhere, and it seems more proper to do it close to the actual request
 	var errorResponse struct {
+		Data   json.RawMessage
 		Errors []struct {
 			Type    string
 			Message string
@@ -382,6 +383,15 @@ func (a api) requestOnce(query graphqlQuery) ([]byte, error) {
 	if response.StatusCode >= 400 {
 		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", string(respBody)))
 		return nil, fmt.Errorf("%w: github response code %d", ErrClient, response.StatusCode)
+	}
+	// No data at all is no answer, whatever the status: GitHub says
+	// {"data":null,"errors":[...]} for a query that timed out on its side.
+	// Read as an empty search it would replace the stored list with
+	// nothing, so it fails the request like a 5xx, and is retried like one.
+	// Errors beside data are partial answers, which callers read.
+	if len(errorResponse.Data) == 0 || string(errorResponse.Data) == "null" {
+		logger.Warn("github answered without data", slog.Any("response_body_graphql_errors", errorResponse.Errors))
+		return nil, fmt.Errorf("%w: github answered without data: %v", ErrGithubServer, errorResponse.Errors)
 	}
 	return respBody, nil
 }
