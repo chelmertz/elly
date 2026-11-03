@@ -580,3 +580,95 @@ func TestNewStorage_AcceptsNewStatesOnAnOldAnnotationsTable(t *testing.T) {
 		})
 	}
 }
+
+// seedAccount stores what a poll for one account leaves behind: a PR, buried,
+// with an annotation, plus the notification history.
+func seedAccount(t *testing.T, store *DbStorage, url string) {
+	t.Helper()
+	if err := store.StoreRepoPrs([]types.ViewPr{{Url: url, Title: "t", Author: "a", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Bury(url); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.StoreNotifySeen(map[string][]string{url: {"approved"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutAnnotation(url, types.Annotation{Source: "tool", State: types.AnnotationHandled, Links: []types.AnnotationLink{}}, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Clearing the token leaves nothing that would be served as current: the
+// PRs it fetched go, and so does the last poll time, so a token set again
+// is polled at once instead of a full interval later.
+func TestClearPAT_DeletesTheStoredPrs(t *testing.T) {
+	store := setupTestStorage(t)
+	if err := store.StorePAT("ghp_a", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	seedAccount(t, store, "https://github.com/o/r/pull/1")
+	if err := store.ClearPAT(); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Prs(); len(got.Prs) != 0 || !got.LastFetched.IsZero() {
+		t.Errorf("after clearing: %d PRs, last fetched %v", len(got.Prs), got.LastFetched)
+	}
+}
+
+// Another account's token must not inherit the old account's PRs, buries,
+// annotations or notification history: tick and the bar would read them as
+// the new login's.
+func TestStorePAT_AnotherAccountStartsEmpty(t *testing.T) {
+	url := "https://github.com/o/r/pull/1"
+	for _, c := range []struct {
+		name, second string
+		clearFirst   bool
+		keeps        bool
+	}{
+		{"a new token for the same login keeps everything", "me", false, true},
+		{"the same login in another case is the same login", "Me", false, true},
+		{"another login starts empty", "other", false, false},
+		{"another login after a clear starts empty", "other", true, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			store := setupTestStorage(t)
+			if err := store.StorePAT("ghp_a", "me", time.Time{}); err != nil {
+				t.Fatal(err)
+			}
+			seedAccount(t, store, url)
+			if c.clearFirst {
+				if err := store.ClearPAT(); err != nil {
+					t.Fatal(err)
+				}
+				// a poll can land between the clear and the next token
+				if err := store.StoreRepoPrs([]types.ViewPr{{Url: url, Title: "t", Author: "a", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := store.StorePAT("ghp_b", c.second, time.Time{}); err != nil {
+				t.Fatal(err)
+			}
+			if c.keeps {
+				prs := store.Prs().Prs
+				if len(prs) != 1 || !prs[0].Buried || len(prs[0].Annotations) != 1 || store.NotifySeen() == nil {
+					t.Errorf("same login lost state: %+v, seen %v", prs, store.NotifySeen())
+				}
+				return
+			}
+			if got := store.Prs(); len(got.Prs) != 0 || !got.LastFetched.IsZero() {
+				t.Errorf("another login inherited %d PRs, last fetched %v", len(got.Prs), got.LastFetched)
+			}
+			if seen := store.NotifySeen(); seen != nil {
+				t.Errorf("another login inherited the notification history %v", seen)
+			}
+			// the PR comes back for the new login: no bury, no annotation
+			if err := store.StoreRepoPrs([]types.ViewPr{{Url: url, Title: "t", Author: "a", LastUpdated: time.Now().Add(-time.Hour), RawJsonResponse: []byte("{}")}}); err != nil {
+				t.Fatal(err)
+			}
+			if prs := store.Prs().Prs; len(prs) != 1 || prs[0].Buried || len(prs[0].Annotations) != 0 {
+				t.Errorf("another login inherited the bury or annotation: %+v", prs)
+			}
+		})
+	}
+}

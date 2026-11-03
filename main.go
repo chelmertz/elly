@@ -222,6 +222,12 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 			continue
 		}
 		tracker.Succeeded()
+		// The token was replaced or cleared while this poll ran: its PRs
+		// belong to the old token's login, so none of them is stored.
+		if current, found, _ := store.GetPAT(); !found || current.Token != storedPat.Token {
+			logger.Info("the token changed during the poll, dropping its result")
+			continue
+		}
 		// Written on every successful poll, including when the slice is empty,
 		// so a deficiency that has been fixed stops being reported.
 		if err := store.StoreDegradations(degradations); err != nil {

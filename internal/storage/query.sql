@@ -99,3 +99,15 @@ delete from annotations where expires_unix <= ?;
 -- name: LiveAnnotations :many
 select pr_url, source, state, note, links, expires_at from annotations
 where expires_unix > ? order by pr_url, source;
+
+-- name: LastPATUsername :one
+select username from pat order by rowid desc limit 1;
+
+-- name: ClearLastFetched :exec
+delete from meta where key = 'last_fetched';
+
+-- name: ClearNotifySeen :exec
+delete from meta where key = 'notify_seen';
+
+-- name: DeleteAllAnnotations :exec
+delete from annotations;

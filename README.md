@@ -126,6 +126,15 @@ it requests. It answers only these:
   DENY`), so no other site can lay a decoy over a page and take the user's
   click.
 
+## The token
+
+Set it on the page (`PUT /api/v0/config/pat`) or through `GITHUB_PAT`.
+Clearing it (`DELETE /api/v0/config/pat`) stops polling until a new one is
+set and deletes the stored PRs, so nothing goes on being served as current.
+A token for another GitHub login than the previous one first deletes the
+stored PRs, buries, annotations and notification history, and a poll still
+running with the old token stores nothing.
+
 ## PAT Oauth permissions
 
 Two token classes work, and they differ in exactly one thing: whether elly can

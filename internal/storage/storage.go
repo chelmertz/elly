@@ -42,12 +42,14 @@ type Storage interface {
 	IsRateLimitActive(now time.Time) bool
 	// GetRateLimitUntil returns the rate limit expiry time, or zero time if not rate limited.
 	GetRateLimitUntil() time.Time
-	// StorePAT stores a new PAT, deactivating any existing active PAT.
+	// StorePAT stores a new PAT, deactivating any existing active PAT. A
+	// PAT for another login than the previous one first deletes the stored
+	// PRs, buries, annotations and notification history.
 	StorePAT(token, username string, expiresAt time.Time) error
 	// GetPAT returns the active PAT. Returns (pat, true, nil) if found,
 	// (zero, false, nil) if not configured, or (zero, false, err) on error.
 	GetPAT() (StoredPAT, bool, error)
-	// ClearPAT deactivates the active PAT.
+	// ClearPAT deactivates the active PAT and deletes the stored PRs.
 	ClearPAT() error
 	// StoreDegradations records what the last poll could not do. An empty
 	// slice clears the record.
@@ -365,6 +367,25 @@ func (s *DbStorage) StorePAT(token, username string, expiresAt time.Time) error 
 
 	qtx := s.db.WithTx(tx)
 
+	// Another account must not inherit this one's PRs, buries, annotations
+	// or notification history: tick, the bar and the page would read them as
+	// the new login's. GitHub logins are case-insensitive.
+	previous, err := qtx.LastPATUsername(ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("could not read the previous PAT's login: %w", err)
+	}
+	if err == nil && !strings.EqualFold(previous, username) {
+		if err := forgetPrs(ctx, qtx); err != nil {
+			return err
+		}
+		if err := qtx.ClearNotifySeen(ctx); err != nil {
+			return fmt.Errorf("could not clear the previous login's notify state: %w", err)
+		}
+		if err := qtx.DeleteAllAnnotations(ctx); err != nil {
+			return fmt.Errorf("could not clear the previous login's annotations: %w", err)
+		}
+	}
+
 	if err := qtx.DeactivateAllPATs(ctx); err != nil {
 		return fmt.Errorf("could not deactivate existing PATs: %w", err)
 	}
@@ -431,9 +452,33 @@ func ReadPAT(dbPath string) (StoredPAT, bool, error) {
 	return (&DbStorage{db: New(db), rawDb: db}).GetPAT()
 }
 
+// ClearPAT deactivates the active PAT and deletes the PRs it fetched, so
+// nothing goes on being served as current, and clears the last poll time, so
+// the next token is polled at once.
 func (s *DbStorage) ClearPAT() error {
-	if err := s.db.ClearActivePAT(context.Background()); err != nil {
+	ctx := context.Background()
+	tx, err := s.rawDb.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("could not begin clearing the PAT: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
+	q := s.db.WithTx(tx)
+	if err := q.ClearActivePAT(ctx); err != nil {
 		return fmt.Errorf("could not clear PAT: %w", err)
+	}
+	if err := forgetPrs(ctx, q); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// forgetPrs deletes the stored PRs, buries with them, and the last poll time.
+func forgetPrs(ctx context.Context, q *Queries) error {
+	if err := q.DeletePrs(ctx); err != nil {
+		return fmt.Errorf("could not delete the stored PRs: %w", err)
+	}
+	if err := q.ClearLastFetched(ctx); err != nil {
+		return fmt.Errorf("could not clear the last poll time: %w", err)
 	}
 	return nil
 }

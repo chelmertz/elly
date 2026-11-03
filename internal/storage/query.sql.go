@@ -59,6 +59,24 @@ func (q *Queries) ClearActivePAT(ctx context.Context) error {
 	return err
 }
 
+const clearLastFetched = `-- name: ClearLastFetched :exec
+delete from meta where key = 'last_fetched'
+`
+
+func (q *Queries) ClearLastFetched(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, clearLastFetched)
+	return err
+}
+
+const clearNotifySeen = `-- name: ClearNotifySeen :exec
+delete from meta where key = 'notify_seen'
+`
+
+func (q *Queries) ClearNotifySeen(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, clearNotifySeen)
+	return err
+}
+
 const clearRateLimitUntil = `-- name: ClearRateLimitUntil :exec
 delete from meta where key = 'rate_limit_until'
 `
@@ -193,6 +211,15 @@ update pat set active = 0 where active = 1
 
 func (q *Queries) DeactivateAllPATs(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, deactivateAllPATs)
+	return err
+}
+
+const deleteAllAnnotations = `-- name: DeleteAllAnnotations :exec
+delete from annotations
+`
+
+func (q *Queries) DeleteAllAnnotations(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllAnnotations)
 	return err
 }
 
@@ -336,6 +363,17 @@ type InsertPATParams struct {
 func (q *Queries) InsertPAT(ctx context.Context, arg InsertPATParams) error {
 	_, err := q.db.ExecContext(ctx, insertPAT, arg.Pat, arg.ExpiresAt, arg.Username)
 	return err
+}
+
+const lastPATUsername = `-- name: LastPATUsername :one
+select username from pat order by rowid desc limit 1
+`
+
+func (q *Queries) LastPATUsername(ctx context.Context) (string, error) {
+	row := q.db.QueryRowContext(ctx, lastPATUsername)
+	var username string
+	err := row.Scan(&username)
+	return username, err
 }
 
 const listPrs = `-- name: ListPrs :many

@@ -327,8 +327,8 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 			return
 		}
 
-		webConfig.Tracker.Stop()
-
+		// The poll loop idles without a token rather than ending, so a
+		// token set later is polled.
 		w.WriteHeader(http.StatusNoContent)
 	})
 

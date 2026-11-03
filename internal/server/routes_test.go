@@ -18,8 +18,9 @@ import (
 )
 
 type routesWorld struct {
-	mux   *http.ServeMux
-	store *storage.DbStorage
+	mux     *http.ServeMux
+	store   *storage.DbStorage
+	tracker *backoff.Tracker
 }
 
 func newRoutes(t *testing.T, githubURL string) routesWorld {
@@ -36,8 +37,10 @@ func newRoutes(t *testing.T, githubURL string) routesWorld {
 	if err := store.StoreRepoPrs(prs); err != nil {
 		t.Fatal(err)
 	}
-	cfg := HttpServerConfig{Store: store, Logger: logger, Tracker: backoff.New(logger, time.Minute), GithubURL: githubURL}
-	return routesWorld{mux: routes(cfg), store: store}
+	tracker := backoff.New(logger, time.Minute)
+	t.Cleanup(tracker.Stop)
+	cfg := HttpServerConfig{Store: store, Logger: logger, Tracker: tracker, GithubURL: githubURL}
+	return routesWorld{mux: routes(cfg), store: store, tracker: tracker}
 }
 
 func (w routesWorld) do(method, url, body string) *httptest.ResponseRecorder {
@@ -261,5 +264,34 @@ func TestThePageSetsAndShowsTheToken(t *testing.T) {
 		if !strings.Contains(page, want) {
 			t.Errorf("with a token: page lacks %s", want)
 		}
+	}
+}
+
+// Clearing the token idles the poll loop rather than ending it, so a token
+// set later is polled; and the PRs the old token fetched stop being served.
+func TestClearingTheTokenKeepsThePollLoop(t *testing.T) {
+	w := newRoutes(t, "")
+	if err := w.store.StorePAT("ghp_old", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if !w.tracker.Tick() {
+		t.Fatal("no first tick")
+	}
+	if rec := w.do("DELETE", "/api/v0/config/pat", ""); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d", rec.Code)
+	}
+	if n := len(w.store.Prs().Prs); n != 0 {
+		t.Errorf("%d PRs still served after the token was cleared", n)
+	}
+	w.tracker.RequestRefresh()
+	ticked := make(chan bool, 1)
+	go func() { ticked <- w.tracker.Tick() }()
+	select {
+	case ok := <-ticked:
+		if !ok {
+			t.Error("clearing the token ended the poll loop")
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("no tick after clearing the token")
 	}
 }

@@ -408,3 +408,49 @@ func TestLogDegradations_TokenLimitationOnceAtInfo(t *testing.T) {
 		t.Errorf("review_requests_unreadable: want a WARN per poll (3), got %d:\n%s", requestsWarn, logs.String())
 	}
 }
+
+// A poll that started with one token and finished after another was set
+// stores nothing: its PRs belong to the old login, and the next poll, with
+// the new token, would otherwise be served them first.
+func TestRefreshLoop_DropsAPollWhoseTokenWasReplaced(t *testing.T) {
+	logger := testLogger(t)
+	store := storage.NewStorage(logger, t.TempDir()+"/elly.db")
+	if err := store.StorePAT("ghp_old", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	var swapped atomic.Bool
+	seen := make(chan int, 1)
+	githubAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Header.Get("Authorization") {
+		case "bearer ghp_old":
+			if swapped.CompareAndSwap(false, true) {
+				if err := store.StorePAT("ghp_new", "other", time.Time{}); err != nil {
+					t.Error(err)
+				}
+			}
+		case "bearer ghp_new":
+			select {
+			case seen <- len(store.Prs().Prs):
+			default:
+			}
+		}
+		_, _ = w.Write([]byte(`{"data":{"search":{"edges":[{"node":{
+			"id":"PR_1","url":"https://github.com/o/r/pull/1","title":"t","author":{"login":"me"},
+			"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
+			"reviewThreads":{"totalCount":0,"pageInfo":{"hasNextPage":false},"edges":[]}
+		}}]}}}`))
+	}))
+	defer githubAPI.Close()
+	tracker := backoff.New(logger, time.Millisecond)
+	defer tracker.Stop()
+	go startRefreshLoop(store, tracker, githubAPI.URL, nil, logger)
+
+	select {
+	case n := <-seen:
+		if n != 0 {
+			t.Errorf("the new token's first poll found %d PRs fetched with the old one", n)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("no poll with the new token")
+	}
+}
