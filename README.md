@@ -4,8 +4,7 @@ Github pull requests grouped by whose turn it is, via a web page & API.
 
 Requires a Github PAT (personal access token). Set it under the account line in
 the page's side menu, or pass it via the `GITHUB_PAT` environment variable. elly should be hosted
-locally. Every response forbids framing (`frame-ancestors 'none'`, `X-Frame-Options:
-DENY`), so no other site can lay a decoy over a page and take the user's click.
+locally; see [What elly lets in](#what-elly-lets-in).
 
 ![Screenshot of GUI](gui.png)
 
@@ -104,6 +103,25 @@ a scheme named in `-annotation-schemes`; elly shows a custom-scheme link's
 last path segment beside its label. `GET /api/v0/prs` returns each PR's live
 annotations.
 
+## What elly lets in
+
+elly listens on localhost, where every web page the browser has open can send
+it requests. It answers only these:
+
+- **Host** must be a loopback name (`localhost`, `127.0.0.1`, `[::1]`) on the
+  listen port, the `-url` host itself when it is not a wildcard, or one of
+  `-allowed-hosts` (comma-separated, matched as the Host header carries it,
+  e.g. `elly.example` behind a reverse proxy). A wildcard bind such as
+  `0.0.0.0:9876` gets the same check, so a site that points its own name at
+  this machine (DNS rebinding) is refused everywhere.
+- **A write** (anything but GET, HEAD and OPTIONS) is refused when its
+  `Origin` is not one of those hosts, or when its `Sec-Fetch-Site` is present
+  and not `same-origin` or `none`. Another localhost port counts as another
+  site. curl and scripts send neither header and pass.
+- **No response may be framed** (`frame-ancestors 'none'`, `X-Frame-Options:
+  DENY`), so no other site can lay a decoy over a page and take the user's
+  click.
+
 ## PAT Oauth permissions
 
 Two token classes work, and they differ in exactly one thing: whether elly can
@@ -167,9 +185,15 @@ docker run -d \
   --name elly \
   --restart unless-stopped \
   -v elly-data:/data \
-  -p 9876:9876 \
+  -p 127.0.0.1:9876:9876 \
   ghcr.io/chelmertz/elly:latest
 ```
+
+Publish the port on `127.0.0.1`, as above: elly inside the container binds
+every interface, and `-p 9876:9876` would offer the token-backed API to the
+whole network. Requests then arrive as `localhost:9876`, which elly answers.
+Published on another host port, say `-p 127.0.0.1:8080:9876`, the Host is
+`localhost:8080`; pass `-allowed-hosts localhost:8080` after the image name.
 
 If you have `gh` CLI installed and authenticated, you can use `$(gh auth
 token)` instead of a PAT you stashed away somewhere:

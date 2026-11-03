@@ -2,7 +2,7 @@ services:
   elly:
     build: .
     ports:
-      - "9876:9876"
+      - "127.0.0.1:9876:9876"
     environment:
       - GITHUB_PAT=${GITHUB_PAT}
     volumes:

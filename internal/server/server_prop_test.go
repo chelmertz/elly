@@ -16,7 +16,7 @@ import (
 
 func TestPropGuardRefusesEveryForeignHost(t *testing.T) {
 	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	g := guard("localhost:9876", ok)
+	g := guard("localhost:9876", nil, ok)
 	rapid.Check(t, func(t *rapid.T) {
 		name := rapid.OneOf(rapid.SampledFrom([]string{"localhost", "127.0.0.1", "127.1.2.3", "localhost.evil.example"}), rapid.StringMatching(`[a-z0-9.-]{1,20}`)).Draw(t, "name")
 		// Mostly the listen port, or the port check alone hides the name check.
@@ -35,7 +35,7 @@ func TestPropGuardRefusesEveryForeignHost(t *testing.T) {
 
 func TestPropGuardRefusesEveryCrossSiteWrite(t *testing.T) {
 	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	g := guard("localhost:9876", ok)
+	g := guard("localhost:9876", nil, ok)
 	rapid.Check(t, func(t *rapid.T) {
 		method := rapid.SampledFrom([]string{"POST", "PUT", "DELETE", "PATCH"}).Draw(t, "method")
 		origin := "https://" + rapid.StringMatching(`[a-z]{1,10}\.example`).Draw(t, "site")

@@ -58,6 +58,9 @@ type HttpServerConfig struct {
 	// ReviewRepos are where claude-review runs rounds, "owner/*" or
 	// "owner/repo" (review_repos in its config); see buildNext.
 	ReviewRepos []string
+	// AllowedHosts are Host values elly answers besides loopback names on
+	// the listen port (-allowed-hosts); see guard.
+	AllowedHosts []string
 	// GithubURL is where a pasted PAT is checked; empty means GitHub's API.
 	GithubURL string
 }
@@ -134,7 +137,7 @@ func parseNext() (*template.Template, error) {
 func ServeWeb(webConfig HttpServerConfig) {
 	mux := routes(webConfig)
 	webConfig.Logger.Info("starting web server at", slog.String("url", "http://"+webConfig.Url))
-	serverErr := http.ListenAndServe(webConfig.Url, guard(webConfig.Url, mux))
+	serverErr := http.ListenAndServe(webConfig.Url, guard(webConfig.Url, webConfig.AllowedHosts, mux))
 	check(serverErr)
 }
 
