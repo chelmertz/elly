@@ -261,6 +261,21 @@ nav.side .meta button, .token button {
     font: inherit;
 }
 .token .actions { display: flex; gap: var(--s3); }
+dialog.keys {
+    padding: var(--s5);
+    background: var(--raised);
+    border: 0;
+    border-radius: var(--s2);
+    color: var(--fg);
+    font-size: 14px;
+}
+dialog.keys::backdrop { background: rgb(0 0 0 / 40%); }
+dialog.keys h2 { margin: 0 0 var(--s3); font-size: 15px; }
+dialog.keys dl { display: grid; grid-template-columns: auto 1fr; gap: var(--s1) var(--s4); margin: 0 0 var(--s4); }
+dialog.keys dt { font-family: var(--mono); color: var(--fg2); }
+dialog.keys dd { margin: 0; color: var(--muted); }
+dialog.keys a, dialog.keys button { color: var(--blue); }
+dialog.keys button { padding: 0; background: none; border: 0; font: inherit; cursor: pointer; }
 /* a link in running text, not a menu row */
 .token label a { display: inline; padding: 0; font-size: inherit; color: var(--blue); }
 nav.side .meta .token + p { margin-top: var(--s3); }
@@ -290,7 +305,7 @@ nav.side .meta .token + p { margin-top: var(--s3); }
         {{end}}
         <ol id="{{$g.Slug}}-list"{{if $g.Folded}} hidden{{end}}>
         {{range $r := $g.Rows}}
-            <li class="pr{{if $r.Stuck}} stuck{{end}}" id="{{$r.Anchor}}" data-search="{{$r.Search}}"{{if $r.OnYou}} data-turn-at="{{$r.TurnAt}}"{{end}}>
+            <li class="pr{{if $r.Stuck}} stuck{{end}}" id="{{$r.Anchor}}" data-search="{{$r.Search}}" data-url="{{$r.Url}}"{{if $r.OnYou}} data-turn-at="{{$r.TurnAt}}"{{end}}>
                 <div class="row">
                     <button type="button" class="toggle" aria-expanded="false" aria-controls="{{$r.Anchor}}-panel">
                         <span class="dot" aria-hidden="true"></span>
@@ -363,10 +378,25 @@ nav.side .meta .token + p { margin-top: var(--s3); }
                 </div>
             </form>
         </details>
-        {{with .Version}}<p>elly {{.}}</p>{{end}}
+        <p>{{with .Version}}elly {{.}} · {{end}}<button type="button" class="keys-open">keys</button></p>
     </div>
 </nav>
 </div>
+<dialog class="keys" aria-labelledby="keys-title">
+    <h2 id="keys-title">Keys</h2>
+    <dl>
+        <dt>j or ↓</dt><dd>next row</dd>
+        <dt>k or ↑</dt><dd>previous row</dd>
+        <dt>enter</dt><dd>open the PR on GitHub</dd>
+        <dt>o</dt><dd>open or close the row's details</dd>
+        <dt>b</dt><dd>bury or unbury</dd>
+        <dt>r</dt><dd>poll now</dd>
+        <dt>/</dt><dd>filter</dd>
+        <dt>?</dt><dd>this list; esc closes it</dd>
+    </dl>
+    <p>{{with .Version}}elly {{.}} · {{end}}<a href="https://github.com/chelmertz/elly">source</a></p>
+    <form method="dialog"><button>Close</button></form>
+</dialog>
 <script>
 // Everything here only toggles attributes and sets textContent on elements
 // the server rendered; no HTML is built from PR strings.
@@ -461,13 +491,40 @@ nav.side .meta .token + p { margin-top: var(--s3); }
     input.addEventListener("keydown", (e) => {
         if (e.key === "Escape") { input.value = ""; filter(); input.blur(); }
     });
+    // the keys act on the focused row; none fires while typing in a field
+    const keys = document.querySelector("dialog.keys");
+    const typing = (t) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || t.isContentEditable;
+    const visibleRows = () => Array.from(document.querySelectorAll(".pr")).filter((el) => el.offsetParent !== null);
+    const currentRow = () => document.activeElement instanceof Element ? document.activeElement.closest(".pr") : null;
+    const focusRow = (pr) => {
+        if (!pr) return;
+        const btn = pr.querySelector(".toggle");
+        btn.focus();
+        btn.scrollIntoView({block: "nearest"});
+    };
     window.addEventListener("keydown", (e) => {
-        if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
-        const t = e.target;
-        if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t.isContentEditable) return;
+        if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || keys.open) return;
+        const rows = visibleRows();
+        const pr = currentRow();
+        const i = rows.indexOf(pr);
+        switch (e.key) {
+        case "/": input.focus(); break;
+        case "j": case "ArrowDown": focusRow(rows[Math.min(i + 1, rows.length - 1)]); break;
+        case "k": case "ArrowUp": focusRow(rows[Math.max(i - 1, 0)]); break;
+        case "Enter":
+            // on the row itself; Enter on a link or button in its panel stays theirs
+            if (!pr || !document.activeElement.classList.contains("toggle")) return;
+            window.open(pr.dataset.url, "_blank", "noopener");
+            break;
+        case "o": if (!pr) return; setOpen(pr, !pr.classList.contains("open")); break;
+        case "b": if (!pr) return; pr.querySelector("button.bury").click(); break;
+        case "r": poll.click(); break;
+        case "?": keys.showModal(); break;
+        default: return;
+        }
         e.preventDefault();
-        input.focus();
     });
+    document.querySelector("button.keys-open").addEventListener("click", () => keys.showModal());
 
     document.querySelectorAll("button.bury").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -518,7 +575,7 @@ nav.side .meta .token + p { margin-top: var(--s3); }
     // reload after each poll, unless the user is in the middle of something
     const minutes = parseInt(document.body.dataset.refreshMinutes, 10) || 5;
     setInterval(() => {
-        if (input.value || document.querySelector(".pr.open") || document.activeElement === input || document.querySelector("details.token[open]")) return;
+        if (input.value || document.querySelector(".pr.open") || document.activeElement === input || document.querySelector("details.token[open]") || keys.open) return;
         selfReload = true;
         location.reload();
     }, minutes * 60000);

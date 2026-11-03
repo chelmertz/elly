@@ -41,7 +41,9 @@ latest activity by someone other than you, or from its last update when there
 is none. Clicking a row opens its history, why it is in its group, and its
 state. `/` focuses a filter that matches number, title, repo and author as a
 subsequence. Every row has an id, such as `/#pr-owner-repo-123`, and a link
-to it highlights the row. A blue dot marks a PR that became your turn since
+to it highlights the row. j and k (or the arrows) move between the rows outside
+folded groups, enter opens the PR, o its details, b buries it, r polls now and
+? lists the keys; none of them fires while typing in a field. A blue dot marks a PR that became your turn since
 your previous visit, remembered in the browser only. The page follows the
 system's light or dark theme. `/next`, where it lived beside the old page,
 redirects to `/`.

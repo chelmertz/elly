@@ -1,7 +1,11 @@
 package server
 
 import (
+	"context"
 	"html"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -348,5 +352,35 @@ func TestNextStartHandsAnAskedReviewToClaudeReview(t *testing.T) {
 	}
 	if page := renderNext(t, buildNext(prs, "me", now, nil, repos)); strings.Contains(page, ">Start</a>") {
 		t.Error("Start renders although the claude-review scheme is not allowed")
+	}
+}
+
+// The keyboard is page script, so it runs in a real browser: testdata/keys.mjs
+// drives headless chromium over the DevTools protocol. Skipped where node or
+// chromium is missing.
+func TestPageKeys(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("no node on PATH")
+	}
+	var browser string
+	for _, name := range []string{"chromium", "chromium-browser", "google-chrome"} {
+		if browser, err = exec.LookPath(name); err == nil {
+			break
+		}
+	}
+	if err != nil {
+		t.Skip("no chromium on PATH")
+	}
+	now := time.Now()
+	page := filepath.Join(t.TempDir(), "page.html")
+	if err := os.WriteFile(page, []byte(renderNext(t, buildNext(nextFixture(now), "me", now, nil, nil))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, node, "testdata/keys.mjs", browser, page).CombinedOutput()
+	if err != nil {
+		t.Errorf("%v\n%s", err, out)
 	}
 }
