@@ -16,6 +16,11 @@
         version = self.shortRev or "dirty";
         vendorHash = "sha256-Bf3BcXMzk12YY5KdOT9aNHLg4RgHcCv9tPyqWE8dKnY=";
         src = ./.;
+        # the i3blocks script ships with the binary, so a bar that runs it
+        # from the profile never lags behind the elly it talks to
+        postInstall = ''
+          install -Dm755 contrib/elly_i3blocks.sh $out/bin/elly-i3blocks
+        '';
       };
 
       devShells.x86_64-linux.default = pkgs.mkShell {

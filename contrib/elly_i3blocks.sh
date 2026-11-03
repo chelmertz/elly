@@ -9,9 +9,9 @@ text_or_icon="$1"
 elly_url=http://localhost:9876
 prs=$(curl -sf "$elly_url/api/v0/prs?minPoints=1")
 
-# left click - open elly in browser
+# left click - open /next, the page ordered by whose turn it is
 if [ "$BLOCK_BUTTON" = "1" ]; then
-	xdg-open "$elly_url" &
+	xdg-open "$elly_url/next" &
 	wmctrl -a firefox
 fi
 
