@@ -300,7 +300,7 @@ nav.side .meta .token + p { margin-top: var(--s3); }
                         <span class="who">{{$r.Repo}} · {{$r.Author}}</span>
                         <span class="wait {{if eq $r.Bucket "week+"}}week{{else}}{{$r.Bucket}}{{end}}" title="since the last activity by someone else">{{$r.Bucket}}</span>
                     </button>
-                    <a class="verb{{if $r.VerbPrimary}} primary{{end}}" href="{{$r.VerbHref}}">{{$r.Verb}}</a>
+                    <a class="verb{{if $r.VerbPrimary}} primary{{end}}" href="{{$r.VerbHref}}"{{with $r.VerbTitle}} title="{{.}}"{{end}}>{{$r.Verb}}</a>
                 </div>
                 {{with $r.Ask}}<div class="ask">{{.}}</div>{{end}}
                 {{with $r.Note}}<div class="note">{{.}}</div>{{end}}

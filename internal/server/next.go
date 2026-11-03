@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"html/template"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -92,6 +93,7 @@ type nextRow struct {
 	Bucket      string
 	Verb        string
 	VerbHref    template.URL
+	VerbTitle   string
 	VerbPrimary bool
 	Tag         *nextTag
 	// Stuck marks the row's edge: nothing but the user moves the PR.
@@ -127,7 +129,10 @@ type nextLink struct {
 
 // buildNext groups and orders the PRs for the page. Inside a group the
 // order is the points order.
-func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []string) NextData {
+//
+// reviewRepos ("owner/*" or "owner/repo") are where claude-review runs
+// rounds; a review asked of the user there gets Start instead of Review.
+func buildNext(prs []types.ViewPr, username string, now time.Time, schemes, reviewRepos []string) NextData {
 	href := annotationHref(schemes)
 	ranks := points.Rank(prs, username, now)
 	sorted := slices.Clone(prs)
@@ -158,6 +163,10 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 		if turn.VerbUrl != "" {
 			verbHref = href(turn.VerbUrl)
 		}
+		verbTitle := ""
+		if u := startUrl(pr, reviewRepos); u != "" && turn.Verb == "Review" && allowedLink(u, schemes) {
+			turn.Verb, verbHref, verbTitle = "Start", href(u), "Start claude-review"
+		}
 		row := nextRow{
 			Anchor:      types.Anchor(pr.Url),
 			Number:      types.Number(pr.Url),
@@ -171,6 +180,7 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 			Bucket:      bucket(now.Sub(since)),
 			Verb:        turn.Verb,
 			VerbHref:    verbHref,
+			VerbTitle:   verbTitle,
 			VerbPrimary: turn.Group == points.GroupOneClick,
 			Tag:         reviewTag(pr),
 			Why:         append([]string{turn.Reason}, reasonsByWeight(pts.Reasons)...),
@@ -472,4 +482,26 @@ func stateFacts(pr types.ViewPr, username string) []string {
 		out = append(out, note)
 	}
 	return out
+}
+
+// prUrlParts takes a GitHub PR URL apart. Owner and repo are GitHub's
+// characters only, and never "." or "..", so a link built from them cannot
+// step out of its path.
+var prUrlParts = regexp.MustCompile(`^https://github\.com/([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)/pull/([1-9][0-9]*)$`)
+
+// startUrl is the claude-review link that starts a round on pr, or "" when
+// pr is outside reviewRepos. The match is claude-review's repoAllowed:
+// "owner/*" or "owner/repo", case-insensitive.
+func startUrl(pr types.ViewPr, reviewRepos []string) string {
+	m := prUrlParts.FindStringSubmatch(pr.Url)
+	if m == nil || m[1] == "." || m[1] == ".." || m[2] == "." || m[2] == ".." {
+		return ""
+	}
+	for _, a := range reviewRepos {
+		o, r, _ := strings.Cut(strings.ToLower(a), "/")
+		if o == strings.ToLower(m[1]) && (r == "*" || r == strings.ToLower(m[2])) {
+			return "claude-review://" + m[1] + "/" + m[2] + "/" + m[3]
+		}
+	}
+	return ""
 }

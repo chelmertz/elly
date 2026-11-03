@@ -33,6 +33,7 @@ var annotationSchemes = flag.String("annotation-schemes", "", "comma-separated l
 var annotationTokenFile = flag.String("annotation-token-file", "", "where to write the bearer token annotation writes need (default: $XDG_RUNTIME_DIR/elly/annotation-token; no XDG_RUNTIME_DIR disables annotation writes)")
 var recordDir = flag.String("record", "", "development: run one poll, write it anonymised to the next free poll-N.json in this directory, and exit")
 var recordOwners = flag.String("record-owners", "", "comma-separated repo owners -record keeps; every other PR is left out of the recording")
+var reviewRepos = flag.String("review-repos", "", "comma-separated owner/* or owner/repo where claude-review runs rounds; a review asked of you there gets a Start verb (claude-review's review_repos)")
 var workOwners = flag.String("work-owners", "", "comma-separated repo owners that notify only on reasons to act; any other owner notifies on every change by someone else")
 
 func main() {
@@ -133,6 +134,7 @@ func main() {
 		SetupMode:         setupMode,
 		AnnotationToken:   annotationToken,
 		AnnotationSchemes: splitOwners(*annotationSchemes),
+		ReviewRepos:       splitOwners(*reviewRepos),
 	})
 }
 

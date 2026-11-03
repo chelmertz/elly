@@ -46,6 +46,13 @@ your previous visit, remembered in the browser only. The page follows the
 system's light or dark theme. `/next`, where it lived beside the old page,
 redirects to `/`.
 
+With `-review-repos=owner/*,owner/repo` and `claude-review` in
+`-annotation-schemes`, a review asked of you in one of those repos offers
+Start instead of Review: a `claude-review://owner/repo/number` link that hands
+the PR to claude-review, which then shows it under "With claude". Owner and
+repo come from the PR URL and are refused when they are `.` or `..`; the
+match is claude-review's own, so pass the same list as its `review_repos`.
+
 `GET /api/v0/prs?turn=you` returns exactly the PRs in the groups on you, in
 page order, so a status bar can show the same count as the page.
 `?minPoints=N` filters by score instead, which counts a PR nobody has touched

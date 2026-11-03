@@ -156,4 +156,3 @@ func TestWriteAnnotationToken(t *testing.T) {
 		t.Error("token did not rotate on restart")
 	}
 }
-
