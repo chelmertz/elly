@@ -45,3 +45,25 @@ func TestGuard(t *testing.T) {
 		})
 	}
 }
+
+// A page that frames elly could lay a decoy over it and land the user's
+// click on an Approve link, so no response may be framed, refusals included.
+func TestGuardForbidsFraming(t *testing.T) {
+	handler := guard("localhost:9876", newRoutes(t, "").mux)
+	for _, c := range []struct{ path, host string }{
+		{"/", "localhost:9876"},
+		{"/next", "localhost:9876"},
+		{"/next", "attacker.example:9876"},
+	} {
+		r := httptest.NewRequest("GET", c.path, nil)
+		r.Host = c.host
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		if got := w.Header().Get("Content-Security-Policy"); got != "frame-ancestors 'none'" {
+			t.Errorf("GET %s from %s: Content-Security-Policy %q", c.path, c.host, got)
+		}
+		if got := w.Header().Get("X-Frame-Options"); got != "DENY" {
+			t.Errorf("GET %s from %s: X-Frame-Options %q", c.path, c.host, got)
+		}
+	}
+}

@@ -5,7 +5,8 @@ GUI & API.
 
 Requires a Github PAT (personal access token). Configure it through the web UI
 settings, or pass it via the `GITHUB_PAT` environment variable. elly should be hosted
-locally.
+locally. Every response forbids framing (`frame-ancestors 'none'`, `X-Frame-Options:
+DENY`), so no other site can lay a decoy over a page and take the user's click.
 
 ![Screenshot of GUI](gui.png)
 

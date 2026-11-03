@@ -16,11 +16,15 @@ import (
 //     (":9876", e.g. in Docker) has no single name, so it skips this check.
 //   - A write whose Origin is another site is refused. Clients that send no
 //     Origin (curl, scripts) are not browsers and pass.
+//   - No response may be framed: a site that frames a page could lay a decoy
+//     over it and land the user's click on an Approve link.
 func guard(listen string, next http.Handler) http.Handler {
 	listenHost, listenPort, _ := net.SplitHostPort(listen)
 	wildcard := listenHost == "" || net.ParseIP(listenHost).IsUnspecified()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+		w.Header().Set("X-Frame-Options", "DENY")
 		if !wildcard && !allowedHost(r.Host, listenHost, listenPort) {
 			http.Error(w, "unexpected Host", http.StatusForbidden)
 			return
