@@ -1264,3 +1264,23 @@ func Test_QueryGithub_AnAnswerWithoutDataIsAFailedPoll(t *testing.T) {
 		}
 	}
 }
+
+// One RATE_LIMITED answer with a reset in the year 3000 stopped polling for
+// good: the time was stored as given. A wait is capped at maxRateLimitWait.
+func Test_Request_RateLimitWaitIsCapped(t *testing.T) {
+	for header, value := range map[string]string{"x-ratelimit-reset": "32503680000", "retry-after": "999999999"} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set(header, value)
+			_, _ = w.Write([]byte(`{"errors":[{"type":"RATE_LIMITED","message":"slow down"}]}`))
+		}))
+		_, err := graphqlRequest(srv.URL, graphqlQuery{Query: "{}"}, "token", slog.New(slog.DiscardHandler))
+		srv.Close()
+		var rl *ErrRateLimited
+		if !errors.As(err, &rl) {
+			t.Fatalf("%s: got %v, want a rate limit", header, err)
+		}
+		if wait := time.Until(rl.UnblockedAt); wait > time.Hour+time.Second || wait < time.Hour-time.Minute {
+			t.Errorf("%s %s: wait %v, want an hour", header, value, wait)
+		}
+	}
+}

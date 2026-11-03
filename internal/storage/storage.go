@@ -44,7 +44,8 @@ type Storage interface {
 	GetRateLimitUntil() time.Time
 	// StorePAT stores a new PAT, deactivating any existing active PAT. A
 	// PAT for another login than the previous one first deletes the stored
-	// PRs, buries, annotations and notification history.
+	// PRs, buries, annotations and notification history. It clears any
+	// stored rate limit: a new token is a new quota.
 	StorePAT(token, username string, expiresAt time.Time) error
 	// GetPAT returns the active PAT. Returns (pat, true, nil) if found,
 	// (zero, false, nil) if not configured, or (zero, false, err) on error.
@@ -386,6 +387,10 @@ func (s *DbStorage) StorePAT(token, username string, expiresAt time.Time) error 
 		}
 	}
 
+	// A new token is a new quota: the old one's rate limit does not hold it.
+	if err := qtx.ClearRateLimitUntil(ctx); err != nil {
+		return fmt.Errorf("could not clear the rate limit: %w", err)
+	}
 	if err := qtx.DeactivateAllPATs(ctx); err != nil {
 		return fmt.Errorf("could not deactivate existing PATs: %w", err)
 	}

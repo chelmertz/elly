@@ -25,6 +25,11 @@ var ErrInvalidToken = errors.New("github token is invalid")
 
 const DefaultAPIURL = "https://api.github.com"
 
+// maxRateLimitWait caps how long one rate-limit answer holds polling. GitHub's
+// primary limit resets hourly; a reset further out is a garbled header, and
+// stored as given it stopped polling for good.
+const maxRateLimitWait = time.Hour
+
 type ErrRateLimited struct {
 	UnblockedAt time.Time
 }
@@ -366,6 +371,9 @@ func (a api) requestOnce(query graphqlQuery) ([]byte, error) {
 							earliestRetry = retryAfterDate
 						}
 					}
+				}
+				if limit := time.Now().Add(maxRateLimitWait); earliestRetry.After(limit) {
+					earliestRetry = limit
 				}
 				if earliestRetry.IsZero() {
 					logger.Warn("github rate limited, no retry time found", slog.Any("response_body_graphql_errors", errorResponse.Errors), slog.Any("response_headers", response.Header))

@@ -712,3 +712,17 @@ func TestPrsReportsWhenTheyWereFetched(t *testing.T) {
 		t.Errorf("LastFetched %v, want between %v and now", got, before)
 	}
 }
+
+// A new token is a new quota: the hold the old one ran into goes with it.
+func TestStorePATClearsTheRateLimit(t *testing.T) {
+	store := setupTestStorage(t)
+	if err := store.SetRateLimitUntil(time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.StorePAT("ghp_new", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if store.IsRateLimitActive(time.Now()) {
+		t.Error("a new token is still held by the old one's rate limit")
+	}
+}
