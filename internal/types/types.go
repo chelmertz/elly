@@ -174,9 +174,12 @@ func (pr ViewPr) String() string {
 
 // Anchor is the PR's element id on the /next page, derived from its URL alone
 // so a desktop notification, which carries only the URL, can link straight to
-// the row: https://github.com/Owner/repo.name/pull/7 is pr-owner-repo-name-7.
-// Anything outside [a-z0-9-] becomes a dash, so a hostile URL cannot break
-// out of the id or the fragment.
+// the row: https://github.com/Owner/repo.name/pull/7 is pr-owner-repo_2ename-7.
+// Path segments are joined by "-"; inside one, a-z and 0-9 stay as they are
+// and every other byte becomes "_" and two hex digits. Distinct repos keep
+// distinct ids (wid.get, wid-get and wid_get are three repos), GitHub's
+// case-insensitive names fold to one, and a hostile URL cannot break out of
+// the id or the fragment.
 func Anchor(prUrl string) string {
 	u, err := url.Parse(prUrl)
 	path := prUrl
@@ -189,11 +192,12 @@ func Anchor(prUrl string) string {
 	b.WriteString("pr")
 	for _, p := range parts {
 		b.WriteByte('-')
-		for _, r := range strings.ToLower(p) {
-			if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' {
-				b.WriteRune(r)
+		lower := strings.ToLower(p)
+		for i := 0; i < len(lower); i++ {
+			if c := lower[i]; c >= 'a' && c <= 'z' || c >= '0' && c <= '9' {
+				b.WriteByte(c)
 			} else {
-				b.WriteByte('-')
+				fmt.Fprintf(&b, "_%02x", c)
 			}
 		}
 	}
