@@ -4,6 +4,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,6 +37,7 @@ var recordDir = flag.String("record", "", "development: run one poll, write it a
 var recordOwners = flag.String("record-owners", "", "comma-separated repo owners -record keeps; every other PR is left out of the recording")
 var reviewRepos = flag.String("review-repos", "", "comma-separated owner/* or owner/repo where claude-review runs rounds; a review asked of you there gets a Start verb (claude-review's review_repos)")
 var allowedHosts = flag.String("allowed-hosts", "", "comma-separated Host values elly answers besides loopback names on the listen port, e.g. elly.example behind a reverse proxy (port included unless it is the scheme's default)")
+var githubAPIFlag = flag.String("github-api", github.DefaultAPIURL, "development: the GitHub API to poll and check tokens with, e.g. a stub on a loopback address")
 var workOwners = flag.String("work-owners", "", "comma-separated repo owners that notify only on reasons to act; any other owner notifies on every change by someone else")
 
 func main() {
@@ -66,8 +69,14 @@ func main() {
 		*dbPath = defaultDBPath()
 	}
 
+	apiURL, err := githubAPI(*githubAPIFlag)
+	if err != nil {
+		logger.Error("bad flag", slog.Any("error", err))
+		os.Exit(2)
+	}
+
 	if *recordDir != "" {
-		path, err := record(*recordDir, splitOwners(*recordOwners), *verboseFlag, *dbPath, github.DefaultAPIURL, logger)
+		path, err := record(*recordDir, splitOwners(*recordOwners), *verboseFlag, *dbPath, apiURL, logger)
 		if err != nil {
 			logger.Error("could not record a poll", slog.Any("error", err))
 			os.Exit(1)
@@ -88,7 +97,7 @@ func main() {
 		store = storage.NewStorage(logger, *dbPath)
 	}
 
-	setupMode, err := initPAT(store, github.DefaultAPIURL, logger)
+	setupMode, err := initPAT(store, apiURL, logger)
 	if err != nil {
 		logger.Error("failed to initialize PAT", slog.Any("error", err))
 		os.Exit(1)
@@ -112,7 +121,7 @@ func main() {
 		send = notify.Sender{Bin: bin, PageUrl: "http://" + *url, Logger: logger}.Send
 	}
 
-	go startRefreshLoop(store, tracker, github.DefaultAPIURL, send, logger)
+	go startRefreshLoop(store, tracker, apiURL, send, logger)
 
 	annotationToken := ""
 	if path := annotationTokenPath(*annotationTokenFile, os.Getenv("XDG_RUNTIME_DIR")); path != "" {
@@ -137,6 +146,7 @@ func main() {
 		AnnotationSchemes: splitOwners(*annotationSchemes),
 		ReviewRepos:       splitOwners(*reviewRepos),
 		AllowedHosts:      splitOwners(*allowedHosts),
+		GithubURL:         apiURL,
 	})
 }
 
@@ -338,4 +348,24 @@ func record(dir string, owners []string, verbose bool, dbPath, baseURL string, l
 		}
 		return path, f.Close()
 	}
+}
+
+// githubAPI checks -github-api: GitHub's API, or an http(s) URL on a
+// loopback address, where a development stub listens. Anything else would
+// hand the stored token to whoever answers there.
+func githubAPI(raw string) (string, error) {
+	raw = strings.TrimSuffix(raw, "/")
+	if raw == github.DefaultAPIURL {
+		return raw, nil
+	}
+	u, err := neturl.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("-github-api: %w", err)
+	}
+	host := u.Hostname()
+	ip := net.ParseIP(host)
+	if (u.Scheme != "http" && u.Scheme != "https") || (host != "localhost" && (ip == nil || !ip.IsLoopback())) {
+		return "", fmt.Errorf("-github-api %q: only %s or an http(s) URL on a loopback address", raw, github.DefaultAPIURL)
+	}
+	return raw, nil
 }

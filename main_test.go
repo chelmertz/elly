@@ -454,3 +454,27 @@ func TestRefreshLoop_DropsAPollWhoseTokenWasReplaced(t *testing.T) {
 		t.Fatal("no poll with the new token")
 	}
 }
+
+// -github-api points a throwaway elly at a stub; anything but GitHub or a
+// loopback address would hand the stored token to whoever runs it.
+func TestGithubAPIFlag(t *testing.T) {
+	for raw, ok := range map[string]bool{
+		github.DefaultAPIURL:         true,
+		"http://127.0.0.1:5000":      true,
+		"http://localhost:5000/":     true,
+		"http://[::1]:5000":          true,
+		"https://api.github.example": false,
+		"http://10.0.0.1:5000":       false,
+		"http://localhost.evil.test": false,
+		"ftp://127.0.0.1:5000":       false,
+		"127.0.0.1:5000":             false,
+	} {
+		got, err := githubAPI(raw)
+		if (err == nil) != ok {
+			t.Errorf("%q: %q, %v", raw, got, err)
+		}
+		if ok && strings.HasSuffix(got, "/") {
+			t.Errorf("%q: %q keeps its trailing slash, and paths are appended to it", raw, got)
+		}
+	}
+}

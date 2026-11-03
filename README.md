@@ -262,6 +262,11 @@ handler with seeded PRs and holds the rules in [What elly lets in](#what-elly-le
 no 5xx, the base headers on every response, no GET that changes stored state,
 and no cross-site or rebound request that succeeds.
 
+`-github-api http://127.0.0.1:<port>` points a throwaway elly (with its own
+`-db`, `-url` and `-annotation-token-file`) at a stub of GitHub's GraphQL
+API, so it polls and serves seeded PRs. It takes GitHub's API or a loopback
+address only, since elly sends the stored token there.
+
 See [dev.md](dev.md) for some useful commands during development.
 
 ## Design decisions
