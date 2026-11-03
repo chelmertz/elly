@@ -121,9 +121,16 @@ it requests. It answers only these:
   `0.0.0.0:9876` gets the same check, so a site that points its own name at
   this machine (DNS rebinding) is refused everywhere.
 - **A write** (anything but GET, HEAD and OPTIONS) is refused when its
-  `Origin` is not one of those hosts, or when its `Sec-Fetch-Site` is present
-  and not `same-origin` or `none`. Another localhost port counts as another
-  site. curl and scripts send neither header and pass.
+  `Origin` is not `http://` on one of those hosts (`https://` passes only for
+  an `-allowed-hosts` name, where a proxy may terminate TLS), or when its
+  `Sec-Fetch-Site` is present and not `same-origin` or `none`. Another
+  localhost port counts as another site. curl and scripts send neither header
+  and pass.
+- **A read** (GET or HEAD) whose `Sec-Fetch-Site` is `cross-site` or
+  `same-site` is refused unless its `Sec-Fetch-Mode` is `navigate`: a link
+  clicked elsewhere opens the page, a script, image or style sheet on another
+  site or port cannot reach in. A typed URL or a bookmark sends `none`, and
+  curl and scripts send neither header.
 - **A write with a body** must say `Content-Type: application/json`, which a
   cross-site form cannot send without a preflight elly never answers. A
   request with `Authorization: Bearer …` is exempt, since a browser cannot

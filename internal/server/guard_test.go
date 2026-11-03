@@ -45,7 +45,40 @@ func TestGuard(t *testing.T) {
 		{"cross-site write without origin", "localhost:9876", nil, "POST", "localhost:9876", "", "cross-site", http.StatusForbidden},
 		{"same-site write (another port) without origin", "localhost:9876", nil, "PUT", "localhost:9876", "", "same-site", http.StatusForbidden},
 		{"a write the user typed (none)", "localhost:9876", nil, "POST", "localhost:9876", "", "none", http.StatusNoContent},
-		{"cross-site read is left to CORS", "localhost:9876", nil, "GET", "localhost:9876", "https://evil.example", "cross-site", http.StatusNoContent},
+		{"a write from https on a loopback name is not elly's page", "localhost:9876", nil, "POST", "localhost:9876", "https://localhost:9876", "", http.StatusForbidden},
+		{"a write from another scheme on a loopback name", "localhost:9876", nil, "POST", "localhost:9876", "ftp://localhost:9876", "", http.StatusForbidden},
+	}
+	// Reads: a cross-site or same-site GET or HEAD that is not a top-level
+	// navigation is a script, an image or a form reaching in, and is refused.
+	// A typed URL, a bookmark or a link the user clicks navigates.
+	reads := []struct {
+		name, method, site, mode string
+		want                     int
+	}{
+		{"cross-site fetch", "GET", "cross-site", "cors", http.StatusForbidden},
+		{"cross-site no-cors (an img or script tag)", "GET", "cross-site", "no-cors", http.StatusForbidden},
+		{"another local port's fetch", "GET", "same-site", "cors", http.StatusForbidden},
+		{"cross-site HEAD", "HEAD", "cross-site", "no-cors", http.StatusForbidden},
+		{"cross-site site without a mode", "GET", "cross-site", "", http.StatusForbidden},
+		{"a link clicked on another site", "GET", "cross-site", "navigate", http.StatusNoContent},
+		{"a typed URL or a bookmark", "GET", "none", "navigate", http.StatusNoContent},
+		{"elly's own page fetching", "GET", "same-origin", "cors", http.StatusNoContent},
+		{"curl and scripts send no Sec-Fetch headers", "GET", "", "", http.StatusNoContent},
+	}
+	for _, c := range reads {
+		r := httptest.NewRequest(c.method, "/api/v0/prs", nil)
+		r.Host = "localhost:9876"
+		if c.site != "" {
+			r.Header.Set("Sec-Fetch-Site", c.site)
+		}
+		if c.mode != "" {
+			r.Header.Set("Sec-Fetch-Mode", c.mode)
+		}
+		w := httptest.NewRecorder()
+		guard("localhost:9876", nil, ok).ServeHTTP(w, r)
+		if w.Code != c.want {
+			t.Errorf("%s: got %d, want %d", c.name, w.Code, c.want)
+		}
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
