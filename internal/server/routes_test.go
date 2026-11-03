@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,7 +26,11 @@ type routesWorld struct {
 
 func newRoutes(t *testing.T, githubURL string) routesWorld {
 	t.Helper()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	return newRoutesLogging(t, githubURL, slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
+func newRoutesLogging(t *testing.T, githubURL string, logger *slog.Logger) routesWorld {
+	t.Helper()
 	store := storage.NewStorage(logger, filepath.Join(t.TempDir(), "elly.db"))
 	now := time.Now()
 	prs := []types.ViewPr{
@@ -117,7 +122,7 @@ func TestPatRoutesRefuseBadInput(t *testing.T) {
 	for body, want := range map[string]string{
 		"not json":          "invalid JSON",
 		`{}`:                "token is required",
-		`{"token":"ghp_x"}`: "invalid token",
+		`{"token":"ghp_x"}`: "GitHub refused the token",
 	} {
 		rec := w.do("PUT", "/api/v0/config/pat", body)
 		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
@@ -293,5 +298,91 @@ func TestClearingTheTokenKeepsThePollLoop(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Error("no tick after clearing the token")
+	}
+}
+
+// GitHub refusing the token is the user's to fix; GitHub being unreachable is
+// not, and says to try again. GitHub's own text stays in the log, and the
+// token appears nowhere.
+func TestPatPutTellsARefusedTokenFromAnUnreachableGitHub(t *testing.T) {
+	const token = "ghp_secretvalue"
+	for _, c := range []struct {
+		name     string
+		status   int // 0: GitHub is down
+		want     int
+		wantBody string
+	}{
+		{"refused", http.StatusUnauthorized, http.StatusBadRequest, "GitHub refused the token"},
+		{"forbidden", http.StatusForbidden, http.StatusBadRequest, "GitHub refused the token"},
+		{"server error", http.StatusBadGateway, http.StatusBadGateway, "could not reach GitHub, try again"},
+		{"down", 0, http.StatusBadGateway, "could not reach GitHub, try again"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(c.status)
+			}))
+			if c.status == 0 {
+				gh.Close()
+			} else {
+				defer gh.Close()
+			}
+			var logs strings.Builder
+			w := newRoutesLogging(t, gh.URL, slog.New(slog.NewTextHandler(&logs, nil)))
+			rec := w.do("PUT", "/api/v0/config/pat", `{"token":"`+token+`"}`)
+			if rec.Code != c.want || !strings.Contains(rec.Body.String(), c.wantBody) {
+				t.Errorf("%d %q, want %d %q", rec.Code, rec.Body, c.want, c.wantBody)
+			}
+			for _, leak := range []string{"github response code", "connect", "authentication failed"} {
+				if strings.Contains(rec.Body.String(), leak) {
+					t.Errorf("the response carries GitHub's error text %q: %q", leak, rec.Body)
+				}
+			}
+			if !strings.Contains(logs.String(), "could not validate") {
+				t.Errorf("the error is not in the log: %q", logs.String())
+			}
+			if strings.Contains(logs.String()+rec.Body.String(), token) {
+				t.Error("the token was logged or returned")
+			}
+		})
+	}
+}
+
+func TestPatPutRefusesABigBody(t *testing.T) {
+	w := newRoutes(t, "http://127.0.0.1:1")
+	rec := w.do("PUT", "/api/v0/config/pat", `{"token":"`+strings.Repeat("x", 8<<10)+`"}`)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("an 8 KiB token: %d %q", rec.Code, rec.Body)
+	}
+}
+
+// Each validation costs GitHub requests, so a second PUT while one is being
+// checked is refused rather than queued.
+func TestPatPutOneValidationAtATime(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int32
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// only the first request is held, so a second PUT that got through
+		// shows up as its 400 instead of a hang
+		if calls.Add(1) == 1 {
+			close(entered)
+			<-release
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer gh.Close()
+	w := newRoutes(t, gh.URL)
+	first := make(chan int)
+	go func() { first <- w.do("PUT", "/api/v0/config/pat", `{"token":"ghp_a"}`).Code }()
+	<-entered
+	if rec := w.do("PUT", "/api/v0/config/pat", `{"token":"ghp_b"}`); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("a second PUT during validation: %d", rec.Code)
+	}
+	close(release)
+	if code := <-first; code != http.StatusBadRequest {
+		t.Errorf("the first PUT: %d", code)
+	}
+	if rec := w.do("PUT", "/api/v0/config/pat", `{"token":"ghp_c"}`); rec.Code != http.StatusBadRequest {
+		t.Errorf("a PUT after the first finished: %d", rec.Code)
 	}
 }

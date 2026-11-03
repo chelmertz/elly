@@ -4,12 +4,14 @@ import (
 	"embed"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/chelmertz/elly/internal/backoff"
@@ -38,6 +40,9 @@ func pageDegradations(ds []types.Degradation) []types.Degradation {
 	}
 	return out
 }
+
+// maxPatBody fits any GitHub token several times over.
+const maxPatBody = 4 << 10
 
 //go:embed next.html
 var index embed.FS
@@ -237,11 +242,21 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 		fmt.Fprint(w, "ok") //nolint:errcheck // best-effort response body
 	})
 
+	// One validation at a time: each costs GitHub requests, and a second
+	// PUT while one is being checked is refused rather than queued.
+	var validating sync.Mutex
 	mux.HandleFunc("PUT /api/v0/config/pat", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		var req struct {
 			Token string `json:"token"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPatBody)).Decode(&req); err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				w.WriteHeader(http.StatusRequestEntityTooLarge)
+				_ = json.NewEncoder(w).Encode(map[string]any{"error": "body over 4 KiB"})
+				return
+			}
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid JSON"})
 			return
@@ -253,11 +268,26 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 			return
 		}
 
-		// Validate the token with GitHub (checks both authentication and required scopes)
-		username, expiresAt, err := github.ValidatePAT(webConfig.githubURL(), req.Token, webConfig.Logger)
+		if !validating.TryLock() {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "a token is already being checked, try again"})
+			return
+		}
+		defer validating.Unlock()
+
+		// Validate the token with GitHub (checks both authentication and
+		// required scopes). GitHub's text goes to the log only; the token
+		// goes nowhere.
+		username, expiresAt, err := github.ValidatePAT(webConfig.githubURL(), req.Token, webConfig.logger())
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid token: " + err.Error()})
+			webConfig.logger().Warn("could not validate a pasted token", slog.Any("error", err))
+			if errors.Is(err, github.ErrInvalidToken) {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{"error": "GitHub refused the token"})
+				return
+			}
+			w.WriteHeader(http.StatusBadGateway)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "could not reach GitHub, try again"})
 			return
 		}
 
@@ -272,7 +302,6 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 		// Trigger a refresh so the new PAT is used immediately
 		webConfig.Tracker.RequestRefresh()
 
-		w.Header().Set("Content-Type", "application/json")
 		response := map[string]any{
 			"username": username,
 		}
