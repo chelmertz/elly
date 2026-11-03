@@ -1,8 +1,11 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -63,24 +66,75 @@ func TestGuard(t *testing.T) {
 	}
 }
 
-// A page that frames elly could lay a decoy over it and land the user's
-// click on an Approve link, so no response may be framed, refusals included.
-func TestGuardForbidsFraming(t *testing.T) {
+// Every response carries the base headers, refusals and 404s included: a
+// page that frames elly could lay a decoy over it and land the user's click
+// on an Approve link, and a response sniffed as another type, or read by
+// another origin as a script or image, leaks what it holds.
+func TestGuardBaseHeadersOnEveryResponse(t *testing.T) {
 	handler := guard("localhost:9876", nil, newRoutes(t, "").mux)
-	for _, c := range []struct{ path, host string }{
-		{"/", "localhost:9876"},
-		{"/next", "localhost:9876"},
-		{"/next", "attacker.example:9876"},
+	for _, c := range []struct{ method, path, host string }{
+		{"GET", "/", "localhost:9876"},
+		{"GET", "/next", "localhost:9876"},
+		{"GET", "/next", "attacker.example:9876"},
+		{"GET", "/api/v0/prs", "localhost:9876"},
+		{"GET", "/no-such-page", "localhost:9876"},
+		{"PATCH", "/api/v0/prs", "localhost:9876"},
+		{"POST", "/api/v0/prs/refresh", "localhost:9876"},
 	} {
-		r := httptest.NewRequest("GET", c.path, nil)
+		r := httptest.NewRequest(c.method, c.path, nil)
 		r.Host = c.host
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
-		if got := w.Header().Get("Content-Security-Policy"); got != "frame-ancestors 'none'" {
-			t.Errorf("GET %s from %s: Content-Security-Policy %q", c.path, c.host, got)
+		want := map[string]string{
+			"X-Frame-Options":              "DENY",
+			"X-Content-Type-Options":       "nosniff",
+			"Cross-Origin-Resource-Policy": "same-origin",
 		}
-		if got := w.Header().Get("X-Frame-Options"); got != "DENY" {
-			t.Errorf("GET %s from %s: X-Frame-Options %q", c.path, c.host, got)
+		for h, v := range want {
+			if got := w.Header().Get(h); got != v {
+				t.Errorf("%s %s from %s (%d): %s %q, want %q", c.method, c.path, c.host, w.Code, h, got, v)
+			}
+		}
+		csp := w.Header().Get("Content-Security-Policy")
+		for _, directive := range []string{"default-src 'none'", "script-src 'sha256-", "style-src 'unsafe-inline'", "connect-src 'self'", "form-action 'self'", "base-uri 'none'", "frame-ancestors 'none'"} {
+			if !strings.Contains(csp, directive) {
+				t.Errorf("%s %s from %s (%d): Content-Security-Policy %q lacks %q", c.method, c.path, c.host, w.Code, csp, directive)
+			}
+		}
+	}
+}
+
+// The page's one inline script runs only if its hash is the one in the
+// header; html/template strips JS comments, so the hash has to be of the
+// page as served, not of next.html.
+func TestThePageScriptIsTheOneTheCSPAllows(t *testing.T) {
+	handler := guard("localhost:9876", nil, newRoutes(t, "").mux)
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Host = "localhost:9876"
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	scripts := regexp.MustCompile(`(?s)<script>(.*?)</script>`).FindAllStringSubmatch(w.Body.String(), -1)
+	if len(scripts) != 1 {
+		t.Fatalf("the page has %d inline scripts, want 1", len(scripts))
+	}
+	sum := sha256.Sum256([]byte(scripts[0][1]))
+	want := "script-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+	if csp := w.Header().Get("Content-Security-Policy"); !strings.Contains(csp, want) {
+		t.Errorf("Content-Security-Policy %q does not allow the page's script (%s)", csp, want)
+	}
+}
+
+func TestInlineScriptRefusesATemplateAction(t *testing.T) {
+	if _, err := inlineScript(`<p>{{.X}}</p><script>let a = 1;</script>`); err != nil {
+		t.Errorf("an action outside the script: %v", err)
+	}
+	for _, page := range []string{
+		`<script>let a = "{{.X}}";</script>`,
+		`<p>no script</p>`,
+		`<script>a</script><script>b</script>`,
+	} {
+		if _, err := inlineScript(page); err == nil {
+			t.Errorf("%q: no error", page)
 		}
 	}
 }

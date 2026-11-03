@@ -3,9 +3,8 @@ package server
 import (
 	"context"
 	"html"
-	"os"
+	"net/http/httptest"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -372,14 +371,34 @@ func TestPageKeys(t *testing.T) {
 	if err != nil {
 		t.Skip("no chromium on PATH")
 	}
-	now := time.Now()
-	page := filepath.Join(t.TempDir(), "page.html")
-	if err := os.WriteFile(page, []byte(renderNext(t, buildNext(nextFixture(now), "me", now, nil, nil))), 0o600); err != nil {
+	// Served by the real handler behind guard, so the page runs under its
+	// CSP: a script the header does not allow fails every key check.
+	w := newRoutes(t, "")
+	if err := w.store.StorePAT("ghp_x", "me", time.Time{}); err != nil {
 		t.Fatal(err)
 	}
+	prs := nextFixture(time.Now())
+	for i := range prs {
+		prs[i].RawJsonResponse = []byte("{}")
+	}
+	if err := w.store.StoreRepoPrs(prs); err != nil {
+		t.Fatal(err)
+	}
+	for _, pr := range prs {
+		for _, a := range pr.Annotations {
+			a.Links = []types.AnnotationLink{}
+			if err := w.store.PutAnnotation(pr.Url, a, time.Now().Add(time.Hour)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	srv := httptest.NewUnstartedServer(nil)
+	srv.Config.Handler = guard(srv.Listener.Addr().String(), nil, w.mux)
+	srv.Start()
+	defer srv.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, node, "testdata/keys.mjs", browser, page).CombinedOutput()
+	out, err := exec.CommandContext(ctx, node, "testdata/keys.mjs", browser, srv.URL+"/").CombinedOutput()
 	if err != nil {
 		t.Errorf("%v\n%s", err, out)
 	}

@@ -26,14 +26,18 @@ import (
 //     cannot send without a preflight elly never answers. A request with a
 //     bearer token is exempt: a browser cannot add one cross-site without a
 //     preflight either.
-//   - No response may be framed: a site that frames a page could lay a decoy
-//     over it and land the user's click on an Approve link.
+//   - Every response, refusals and 404s included, carries the base headers:
+//     no framing (a site that frames a page could lay a decoy over it and
+//     land the user's click on an Approve link), nosniff, a same-origin
+//     resource policy, and a CSP that runs only the page's own script.
 func guard(listen string, allowedHosts []string, next http.Handler) http.Handler {
 	hosts := newHostAllowlist(listen, allowedHosts)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+		w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
 		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 		if !hosts.allows(r.Host) {
 			http.Error(w, "unexpected Host", http.StatusForbidden)
 			return

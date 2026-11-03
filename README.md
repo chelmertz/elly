@@ -122,9 +122,12 @@ it requests. It answers only these:
   cross-site form cannot send without a preflight elly never answers. A
   request with `Authorization: Bearer …` is exempt, since a browser cannot
   add that cross-site without a preflight either.
-- **No response may be framed** (`frame-ancestors 'none'`, `X-Frame-Options:
-  DENY`), so no other site can lay a decoy over a page and take the user's
-  click.
+- **Every response**, refusals and 404s included, forbids framing
+  (`frame-ancestors 'none'`, `X-Frame-Options: DENY`), so no other site can
+  lay a decoy over a page and take the user's click, and sends `nosniff`,
+  `Cross-Origin-Resource-Policy: same-origin` and a CSP of `default-src
+  'none'` that runs only the page's own script, by its hash, and connects
+  only to elly.
 
 ## The token
 
