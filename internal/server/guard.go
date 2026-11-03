@@ -1,6 +1,7 @@
 package server
 
 import (
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -21,6 +22,10 @@ import (
 //     write whose Sec-Fetch-Site says another site (or another port, which is
 //     "same-site") sent it. Clients that send neither (curl, scripts) are not
 //     browsers and pass.
+//   - A write with a body must be application/json, which a cross-site form
+//     cannot send without a preflight elly never answers. A request with a
+//     bearer token is exempt: a browser cannot add one cross-site without a
+//     preflight either.
 //   - No response may be framed: a site that frames a page could lay a decoy
 //     over it and land the user's click on an Approve link.
 func guard(listen string, allowedHosts []string, next http.Handler) http.Handler {
@@ -43,6 +48,10 @@ func guard(listen string, allowedHosts []string, next http.Handler) http.Handler
 			}
 			if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
 				http.Error(w, "cross-site write", http.StatusForbidden)
+				return
+			}
+			if r.ContentLength != 0 && !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") && !isJSON(r.Header.Get("Content-Type")) {
+				http.Error(w, "a write with a body must be application/json", http.StatusUnsupportedMediaType)
 				return
 			}
 		}
@@ -90,6 +99,11 @@ func isLoopback(h string) bool {
 	}
 	ip := net.ParseIP(h)
 	return ip != nil && ip.IsLoopback()
+}
+
+func isJSON(contentType string) bool {
+	mt, _, err := mime.ParseMediaType(contentType)
+	return err == nil && mt == "application/json"
 }
 
 func isWrite(method string) bool {

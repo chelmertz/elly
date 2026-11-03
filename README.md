@@ -118,6 +118,10 @@ it requests. It answers only these:
   `Origin` is not one of those hosts, or when its `Sec-Fetch-Site` is present
   and not `same-origin` or `none`. Another localhost port counts as another
   site. curl and scripts send neither header and pass.
+- **A write with a body** must say `Content-Type: application/json`, which a
+  cross-site form cannot send without a preflight elly never answers. A
+  request with `Authorization: Bearer …` is exempt, since a browser cannot
+  add that cross-site without a preflight either.
 - **No response may be framed** (`frame-ancestors 'none'`, `X-Frame-Options:
   DENY`), so no other site can lay a decoy over a page and take the user's
   click.

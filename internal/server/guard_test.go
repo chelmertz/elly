@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -81,5 +82,52 @@ func TestGuardForbidsFraming(t *testing.T) {
 		if got := w.Header().Get("X-Frame-Options"); got != "DENY" {
 			t.Errorf("GET %s from %s: X-Frame-Options %q", c.path, c.host, got)
 		}
+	}
+}
+
+// A cross-site form can POST text/plain or a urlencoded body without a
+// preflight, but not application/json, so a write with a body must be JSON
+// unless it carries a bearer token, which a browser cannot add cross-site
+// without a preflight either.
+func TestGuardWritesWithABodyMustBeJSON(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	cases := []struct {
+		name, method, body, contentType, auth string
+		want                                  int
+	}{
+		{"json", "PUT", `{"token":"x"}`, "application/json", "", http.StatusNoContent},
+		{"json with a charset", "PUT", `{}`, "application/json; charset=utf-8", "", http.StatusNoContent},
+		{"a form's text/plain", "PUT", `{"token":"x"}`, "text/plain", "", http.StatusUnsupportedMediaType},
+		{"a form's urlencoded body", "POST", `a=b`, "application/x-www-form-urlencoded", "", http.StatusUnsupportedMediaType},
+		{"no content type", "PUT", `{}`, "", "", http.StatusUnsupportedMediaType},
+		{"bearer token, no content type (claude-review before it sent one)", "PUT", `{}`, "", "Bearer t", http.StatusNoContent},
+		{"no body (bury, poll now, clear)", "POST", "", "", "", http.StatusNoContent},
+		{"a read is not a write", "GET", `x`, "text/plain", "", http.StatusNoContent},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := httptest.NewRequest(c.method, "/api/v0/config/pat", strings.NewReader(c.body))
+			r.Host = "localhost:9876"
+			if c.contentType != "" {
+				r.Header.Set("Content-Type", c.contentType)
+			}
+			if c.auth != "" {
+				r.Header.Set("Authorization", c.auth)
+			}
+			w := httptest.NewRecorder()
+			guard("localhost:9876", nil, ok).ServeHTTP(w, r)
+			if w.Code != c.want {
+				t.Errorf("got %d, want %d", w.Code, c.want)
+			}
+		})
+	}
+	// A chunked body has no length up front and is still a body.
+	r := httptest.NewRequest("PUT", "/api/v0/config/pat", strings.NewReader("{}"))
+	r.Host = "localhost:9876"
+	r.ContentLength = -1
+	w := httptest.NewRecorder()
+	guard("localhost:9876", nil, ok).ServeHTTP(w, r)
+	if w.Code != http.StatusUnsupportedMediaType {
+		t.Errorf("chunked body without a content type: %d", w.Code)
 	}
 }
