@@ -7,11 +7,12 @@ set -eo pipefail
 text_or_icon="$1"
 
 elly_url=http://localhost:9876
-prs=$(curl -sf "$elly_url/api/v0/prs?minPoints=1")
+# the PRs the page puts on the user, so the count matches it
+prs=$(curl -sf "$elly_url/api/v0/prs?turn=you")
 
-# left click - open /next, the page ordered by whose turn it is
+# left click - open the page
 if [ "$BLOCK_BUTTON" = "1" ]; then
-	xdg-open "$elly_url/next" &
+	xdg-open "$elly_url/" &
 	wmctrl -a firefox
 fi
 
@@ -30,7 +31,7 @@ if [ "$count" -gt 0 ]; then
 	# nix/home.nix in the dotfiles repo); plain green without that helper
 	command -v i3blocks-color >/dev/null && i3blocks-color fg || echo "#00ff00"
 
-	# right click - open all PRs in browser, one by one
+	# right click - open each PR on the user in the browser
 	if [ "$BLOCK_BUTTON" = "3" ]; then
 		for u in $(jq -r '.[].Url' <(echo "$prs")); do
 			xdg-open "$u" &

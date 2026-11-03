@@ -26,23 +26,6 @@ func check(err error) {
 	}
 }
 
-type IndexHtmlData struct {
-	Prs                    []types.ViewPr
-	PointsPerPrUrl         map[string]*points.Points
-	CurrentUser            string
-	RefreshUrl             string
-	LastRefreshed          string
-	RefreshIntervalMinutes int
-	Version                string
-	RateLimitedUntil       string
-	// Degradations is what elly currently cannot do. Rendered in the meta bar
-	// beside the rate-limit notice, so a deficiency is visible on the page
-	// rather than only in the log or to whoever thinks to ask the API. Token
-	// limitations are left out; see pageDegradations.
-	Degradations []types.Degradation
-	SetupMode    bool
-}
-
 // pageDegradations leaves out token limitations: a warning on every page view
 // about something only a different token type fixes is noise. The API still
 // reports them, so a consumer never mistakes missing check names for none.
@@ -56,7 +39,7 @@ func pageDegradations(ds []types.Degradation) []types.Degradation {
 	return out
 }
 
-//go:embed index.html next.html
+//go:embed next.html
 var index embed.FS
 
 type HttpServerConfig struct {
@@ -117,6 +100,19 @@ func prsAtOrAbove(prs []types.ViewPr, currentUser string, minimumPoints int, now
 	return prsToReturn
 }
 
+// prsOnUser is every PR the page puts in a group on the user, in page order.
+func prsOnUser(prs []types.ViewPr, currentUser string, now time.Time) []types.ViewPr {
+	ranks := points.Rank(prs, currentUser, now)
+	out := make([]types.ViewPr, 0)
+	for _, pr := range prs {
+		if points.TurnOf(pr, currentUser, now).Group.OnYou() {
+			out = append(out, pr)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return ranks[out[i].Url] < ranks[out[j].Url] })
+	return out
+}
+
 func getCurrentUsername(store storage.Storage) string {
 	storedPat, found, _ := store.GetPAT()
 	if !found {
@@ -125,19 +121,9 @@ func getCurrentUsername(store storage.Storage) string {
 	return storedPat.Username
 }
 
-// parseIndex parses the page template. PR titles, authors and repo names are
-// written by whoever opens a PR that involves the user, so the template must
-// escape them.
-func parseIndex(annotationSchemes []string) (*template.Template, error) {
-	return template.New("index.html").Funcs(template.FuncMap{
-		"annotationHref": annotationHref(annotationSchemes),
-		"annotationVerb": annotationVerb,
-	}).ParseFS(index, "index.html")
-}
-
-// parseNext parses the /next page. Every link on it is checked in Go before
-// it reaches the template (see buildNext), and PR fields are escaped by
-// html/template like on the classic page.
+// parseNext parses the page. PR titles, authors and repo names are written by
+// whoever opens a PR that involves the user, so html/template escapes them;
+// every link is checked in Go before it reaches the template (see buildNext).
 func parseNext() (*template.Template, error) {
 	return template.New("next.html").ParseFS(index, "next.html")
 }
@@ -152,8 +138,6 @@ func ServeWeb(webConfig HttpServerConfig) {
 // routes registers every handler on a mux of its own, so tests can build it.
 func routes(webConfig HttpServerConfig) *http.ServeMux {
 	mux := http.NewServeMux()
-	temp, err := parseIndex(webConfig.AnnotationSchemes)
-	check(err)
 	nextTemp, err := parseNext()
 	check(err)
 
@@ -202,6 +186,10 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 		}
 
 		prsToReturn := prsAtOrAbove(webConfig.Store.Prs().Prs, getCurrentUsername(webConfig.Store), minimumPoints, time.Now())
+		// turn=you keeps what the page counts as on the user, in page order
+		if r.URL.Query().Get("turn") == "you" {
+			prsToReturn = prsOnUser(webConfig.Store.Prs().Prs, getCurrentUsername(webConfig.Store), time.Now())
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		err := json.NewEncoder(w).Encode(prsToReturn)
@@ -212,61 +200,28 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 		webConfig.Tracker.RequestRefresh()
 	})
 
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+	// {$}: only the root; any other path is a 404, not the page
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		storedPrs := webConfig.Store.Prs()
-		prs_ := storedPrs.Prs
-
-		// Check if PAT is configured dynamically
-		_, found, _ := webConfig.Store.GetPAT()
-		setupMode := !found
-		currentUser := getCurrentUsername(webConfig.Store)
-
-		pointsPerPrUrl := make(map[string]*points.Points)
-		for _, pr := range prs_ {
-			pointsPerPrUrl[pr.Url] = points.StandardPrPoints(pr, currentUser, time.Now())
-		}
-
-		sort.Slice(prs_, func(i, j int) bool {
-			pri := pointsPerPrUrl[prs_[i].Url].Total
-			prj := pointsPerPrUrl[prs_[j].Url].Total
-			if pri == prj {
-				lastUpdated := prs_[j].LastUpdated.Before(prs_[i].LastUpdated)
-				return lastUpdated
-			}
-			return pri > prj
-		})
-		rateLimitUntil := webConfig.Store.GetRateLimitUntil()
-		rateLimitUntilStr := ""
-		if !rateLimitUntil.IsZero() {
-			rateLimitUntilStr = rateLimitUntil.Format(time.RFC3339)
-		}
-		data := IndexHtmlData{
-			Prs:                    prs_,
-			PointsPerPrUrl:         pointsPerPrUrl,
-			CurrentUser:            currentUser,
-			LastRefreshed:          storedPrs.LastFetched.Format(time.RFC3339),
-			RefreshIntervalMinutes: webConfig.TimeoutMinutes,
-			Version:                webConfig.Version,
-			RateLimitedUntil:       rateLimitUntilStr,
-			Degradations:           pageDegradations(webConfig.Store.Degradations()),
-			SetupMode:              setupMode,
-		}
-		err := temp.Execute(w, data)
-		check(err)
-	})
-
-	mux.HandleFunc("GET /next", func(w http.ResponseWriter, r *http.Request) {
-		storedPrs := webConfig.Store.Prs()
-		_, found, _ := webConfig.Store.GetPAT()
+		pat, found, _ := webConfig.Store.GetPAT()
 		data := buildNext(storedPrs.Prs, getCurrentUsername(webConfig.Store), time.Now(), webConfig.AnnotationSchemes)
 		data.LastRefreshed = storedPrs.LastFetched.Format(time.RFC3339)
 		data.RefreshIntervalMinutes = webConfig.TimeoutMinutes
 		data.Degradations = pageDegradations(webConfig.Store.Degradations())
 		data.SetupMode = !found
+		data.Version = webConfig.Version
+		if found {
+			data.Token = tokenInfo(pat, time.Now())
+		}
 		if until := webConfig.Store.GetRateLimitUntil(); until.After(time.Now()) {
 			data.RateLimitedUntil = until.Format(time.RFC3339)
 		}
 		check(nextTemp.Execute(w, data))
+	})
+
+	// the page lived at /next beside the old one; the browser keeps the #row
+	mux.HandleFunc("GET /next", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/", http.StatusFound)
 	})
 
 	mux.Handle("GET /metrics", promhttp.Handler())

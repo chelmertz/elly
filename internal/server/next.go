@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/chelmertz/elly/internal/points"
+	"github.com/chelmertz/elly/internal/storage"
 	"github.com/chelmertz/elly/internal/types"
 )
 
@@ -26,6 +27,38 @@ type NextData struct {
 	// OldestOnYou is the longest wait among the PRs on the user, as a
 	// bucket-free duration like "6 d", or "" when nothing is on the user.
 	OldestOnYou string
+	Version     string
+	// Token is what the page says about the stored PAT, never the PAT
+	// itself; nil in setup mode.
+	Token *nextToken
+}
+
+type nextToken struct {
+	Username string
+	// Expires is "" for a token that never expires.
+	Expires     string
+	ExpiresSoon bool
+}
+
+// tokenExpiryWarning is how close to expiry the page starts warning.
+const tokenExpiryWarning = 5 * 24 * time.Hour
+
+func tokenInfo(pat storage.StoredPAT, now time.Time) *nextToken {
+	t := &nextToken{Username: pat.Username}
+	if pat.ExpiresAt.IsZero() {
+		return t
+	}
+	left := pat.ExpiresAt.Sub(now)
+	switch {
+	case left <= 0:
+		t.Expires, t.ExpiresSoon = "expired", true
+	case left <= tokenExpiryWarning:
+		// rounded up, so a token with 2 d 23 h left reads as 3 d
+		t.Expires, t.ExpiresSoon = "expires in "+duration(left.Truncate(time.Hour)+time.Hour), true
+	default:
+		t.Expires = "expires " + pat.ExpiresAt.Format("Jan 2")
+	}
+	return t
 }
 
 type nextGroup struct {
@@ -92,8 +125,8 @@ type nextLink struct {
 	Verb  string
 }
 
-// buildNext groups and orders the PRs for the /next page. Inside a group the
-// order is the points order of the classic page.
+// buildNext groups and orders the PRs for the page. Inside a group the
+// order is the points order.
 func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []string) NextData {
 	href := annotationHref(schemes)
 	ranks := points.Rank(prs, username, now)

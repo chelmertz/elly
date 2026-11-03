@@ -119,7 +119,7 @@ func escape(s string) string {
 	return html.EscapeString(s)
 }
 
-// Sender shows notifications with notify-send. Clicking one opens the /next
+// Sender shows notifications with notify-send. Clicking one opens the
 // page under PageUrl, scrolled to the PR's row.
 type Sender struct {
 	Bin     string
@@ -145,10 +145,10 @@ func (s Sender) Send(n Notification) {
 	}()
 }
 
-// openUrl is the page a click on n opens: the PR's row on /next, or /next
+// openUrl is the page a click on n opens: the PR's row, or the page
 // itself for a notification without a PR.
 func (s Sender) openUrl(n Notification) string {
-	u := strings.TrimSuffix(s.PageUrl, "/") + "/next"
+	u := strings.TrimSuffix(s.PageUrl, "/") + "/"
 	if n.PrUrl == "" {
 		return u
 	}

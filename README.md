@@ -1,18 +1,15 @@
 # elly
 
-Github pull requests presented in a prioritized order, via a keyboard driven web
-GUI & API.
+Github pull requests grouped by whose turn it is, via a web page & API.
 
-Requires a Github PAT (personal access token). Configure it through the web UI
-settings, or pass it via the `GITHUB_PAT` environment variable. elly should be hosted
+Requires a Github PAT (personal access token). Set it under the account line in
+the page's side menu, or pass it via the `GITHUB_PAT` environment variable. elly should be hosted
 locally. Every response forbids framing (`frame-ancestors 'none'`, `X-Frame-Options:
 DENY`), so no other site can lay a decoy over a page and take the user's click.
 
 ![Screenshot of GUI](gui.png)
 
 ![Screenshot of GUI, with dark mode](darkmode.png)
-
-![Screenshot of GUI's about screen](about.png)
 
 ```mermaid
 flowchart TB
@@ -31,10 +28,9 @@ flowchart TB
     I(i3blocks) -.-> E
 ```
 
-## The /next page
+## The page
 
-`/next` is a redesign of the page, beside the classic one at `/`. It groups
-PRs by whose turn it is rather than by score: one click from done, waiting for
+`/` groups PRs by whose turn it is rather than by score: one click from done, waiting for
 you, yours to unblock, then folded groups for PRs on others, nobody's turn, the
 icebox (untouched for two weeks) and buried. Points only order PRs inside a
 group, so a high score never lifts a PR into a higher group; the rule is
@@ -44,9 +40,16 @@ Each row shows one action and how long the PR has waited, counted from the
 latest activity by someone other than you, or from its last update when there
 is none. Clicking a row opens its history, why it is in its group, and its
 state. `/` focuses a filter that matches number, title, repo and author as a
-subsequence. Every row has an id, such as `/next#pr-owner-repo-123`, and a link
+subsequence. Every row has an id, such as `/#pr-owner-repo-123`, and a link
 to it highlights the row. A blue dot marks a PR that became your turn since
-your previous visit, remembered in the browser only.
+your previous visit, remembered in the browser only. The page follows the
+system's light or dark theme. `/next`, where it lived beside the old page,
+redirects to `/`.
+
+`GET /api/v0/prs?turn=you` returns exactly the PRs in the groups on you, in
+page order, so a status bar can show the same count as the page.
+`?minPoints=N` filters by score instead, which counts a PR nobody has touched
+for weeks for as long as it stays open.
 
 ## Desktop notifications
 
@@ -55,7 +58,7 @@ gains a reason to act: your PR approved or with changes requested, someone
 else commenting on your PR, a reply to your thread, or a review requested from
 you. Each reason notifies once, until it goes away and comes back. The first
 start records what is already there without notifying, and more than three in
-one fetch arrive as one summary. Clicking a notification opens `/next` at
+one fetch arrive as one summary. Clicking a notification opens the page at
 that PR's row; for a summary, at the highest-ranked PR in it.
 
 `-work-owners=org1,org2` limits those owners to the reasons above. A PR whose
@@ -71,8 +74,8 @@ and `running` both say the user handed the PR to the tool, so both drop its
 review-owed reasons from the score: `running` is a round in progress, which the
 tool replaces with another state when it finishes. `needs_you` counts the PR
 whatever it scored, and wins over `handled` and `running`. `stuck` counts like
-`needs_you` and says nothing but the user will move the PR; `/next` marks its
-row with an amber edge. On `/next`, a `handled` or `running` PR from
+`needs_you` and says nothing but the user will move the PR; the page marks its
+row with an amber edge. On the page, a `handled` or `running` PR from
 `claude-review` sits in the folded "With claude" group, and the note of a
 `needs_you` or `stuck` annotation shows under its row. No annotation sends a
 desktop notification.

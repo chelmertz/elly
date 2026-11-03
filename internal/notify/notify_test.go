@@ -206,12 +206,12 @@ func TestCoalescedNotificationKeepsTheHighestRankedPr(t *testing.T) {
 	}
 }
 
-func TestClickingANotificationOpensItsRowOnNext(t *testing.T) {
+func TestClickingANotificationOpensItsRow(t *testing.T) {
 	s := Sender{PageUrl: "http://localhost:9876"}
-	if got := s.openUrl(Notification{PrUrl: "https://github.com/Owner/repo/pull/11534"}); got != "http://localhost:9876/next#pr-owner-repo-11534" {
+	if got := s.openUrl(Notification{PrUrl: "https://github.com/Owner/repo/pull/11534"}); got != "http://localhost:9876/#pr-owner-repo-11534" {
 		t.Errorf("got %q", got)
 	}
-	if got := s.openUrl(Notification{}); got != "http://localhost:9876/next" {
+	if got := s.openUrl(Notification{}); got != "http://localhost:9876/" {
 		t.Errorf("without a PR: got %q", got)
 	}
 }

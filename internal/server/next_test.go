@@ -122,6 +122,9 @@ func TestNextVerbFollowsAnAllowedAnnotationLink(t *testing.T) {
 	if !strings.Contains(page, `href="claude-review://o/r/1/approve">Approve</a>`) {
 		t.Error("the Approve verb does not follow the annotation link")
 	}
+	if !strings.Contains(page, `<span class="scheme">claude-review · approve</span>`) {
+		t.Error("the link's verb is not shown beside its label")
+	}
 	page = renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, nil))
 	if strings.Contains(page, "claude-review://") {
 		t.Error("a link whose scheme is no longer allowed still renders")
@@ -168,17 +171,6 @@ func TestWaitCountsFromTheLastActivityBySomeoneElse(t *testing.T) {
 	}
 	if got := waitSince(types.ViewPr{LastUpdated: updated}, nil, "me"); !got.Equal(updated) {
 		t.Errorf("without events: %v, want LastUpdated", got)
-	}
-}
-
-func TestNextRoute(t *testing.T) {
-	w := newRoutes(t, "")
-	rec := w.do("GET", "/next", "")
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `id="pr-o-r-1"`) {
-		t.Errorf("GET /next: %d", rec.Code)
-	}
-	if rec := w.do("GET", "/", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "small one") {
-		t.Errorf("the classic page broke: %d", rec.Code)
 	}
 }
 

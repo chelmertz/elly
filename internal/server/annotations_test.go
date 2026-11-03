@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chelmertz/elly/internal/points"
 	"github.com/chelmertz/elly/internal/storage"
 	"github.com/chelmertz/elly/internal/types"
 )
@@ -158,68 +157,3 @@ func TestWriteAnnotationToken(t *testing.T) {
 	}
 }
 
-func TestIndexRendersAnnotationLinks(t *testing.T) {
-	render := func(schemes []string) string {
-		temp, err := parseIndex(schemes)
-		if err != nil {
-			t.Fatal(err)
-		}
-		const u = "https://github.com/o/r/pull/1"
-		data := IndexHtmlData{
-			Prs: []types.ViewPr{{Url: u, Annotations: []types.Annotation{{
-				Source: "tool", State: types.AnnotationNeedsYou, Note: "<b>safe to merge</b>",
-				Links: []types.AnnotationLink{{Label: "Open session", Url: "claude-review://o/r/1/approve?at=abc"}},
-			}}}},
-			PointsPerPrUrl: map[string]*points.Points{u: {Total: 1}},
-		}
-		var out strings.Builder
-		if err := temp.Execute(&out, data); err != nil {
-			t.Fatal(err)
-		}
-		return out.String()
-	}
-
-	page := render([]string{"claude-review"})
-	if !strings.Contains(page, `href="claude-review://o/r/1/approve?at=abc"`) {
-		t.Error("allowlisted custom-scheme link not rendered as a link")
-	}
-	if !strings.Contains(page, "claude-review · approve") {
-		t.Error("the link's verb is not shown beside its label")
-	}
-	if strings.Contains(page, "<b>safe to merge</b>") {
-		t.Error("note rendered unescaped")
-	}
-
-	if page := render(nil); strings.Contains(page, "claude-review://o/r/1/approve") && strings.Contains(page, `href="claude-review:`) {
-		t.Error("a scheme no longer allowlisted still renders as a link")
-	}
-}
-
-func TestIndexRendersEachAnnotationState(t *testing.T) {
-	temp, err := parseIndex(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for state, want := range map[string]string{
-		types.AnnotationHandled:  "<strong>claude-review</strong> handled",
-		types.AnnotationNeedsYou: "<strong>claude-review</strong> needs you",
-		types.AnnotationRunning:  "<strong>claude-review</strong> running",
-		types.AnnotationStuck:    "<strong>claude-review</strong> stuck",
-	} {
-		const u = "https://github.com/o/r/pull/1"
-		data := IndexHtmlData{
-			Prs:            []types.ViewPr{{Url: u, Annotations: []types.Annotation{{Source: "claude-review", State: state}}}},
-			PointsPerPrUrl: map[string]*points.Points{u: {Total: 1}},
-		}
-		var out strings.Builder
-		if err := temp.Execute(&out, data); err != nil {
-			t.Fatal(err)
-		}
-		if !strings.Contains(out.String(), want) {
-			t.Errorf("state %s: page lacks %q", state, want)
-		}
-		if !strings.Contains(out.String(), `class="annotation `+state+`"`) {
-			t.Errorf("state %s: no class to style it apart from the others", state)
-		}
-	}
-}

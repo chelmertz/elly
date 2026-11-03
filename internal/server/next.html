@@ -240,6 +240,30 @@ nav.side a.on-you { color: var(--fg); }
 nav.side .meta { margin-top: var(--s3); font-size: 12px; color: var(--faint); }
 nav.side .warn { color: var(--warm); }
 nav.side .meta p { margin: 0 0 var(--s1); }
+nav.side .meta button, .token button {
+    padding: 0;
+    background: none;
+    border: 0;
+    color: var(--blue);
+    font: inherit;
+    cursor: pointer;
+}
+.token { margin-top: var(--s3); }
+.token summary { cursor: pointer; color: var(--muted); }
+.token form { display: grid; gap: var(--s2); margin-top: var(--s2); }
+.token input {
+    width: 100%;
+    padding: var(--s1) var(--s2);
+    background: var(--raised);
+    border: 0;
+    border-radius: var(--s1);
+    color: var(--fg);
+    font: inherit;
+}
+.token .actions { display: flex; gap: var(--s3); }
+/* a link in running text, not a menu row */
+.token label a { display: inline; padding: 0; font-size: inherit; color: var(--blue); }
+nav.side .meta .token + p { margin-top: var(--s3); }
 
 @media (max-width: 720px) {
     :root { --num: 48px; --gap: var(--s2); --verb: 80px; }
@@ -321,11 +345,25 @@ nav.side .meta p { margin: 0 0 var(--s1); }
     {{end}}
     </ul>
     <div class="meta">
-        {{if .SetupMode}}<p class="warn">No token yet: set one on the <a href="/">classic page</a>.</p>{{end}}
-        <p>polled <time class="polled" datetime="{{.LastRefreshed}}">{{.LastRefreshed}}</time></p>
+        <p>polled <time class="polled" datetime="{{.LastRefreshed}}">{{.LastRefreshed}}</time> · <button type="button" class="poll">poll now</button></p>
         {{if .RateLimitedUntil}}<p class="warn">rate limited until <time datetime="{{.RateLimitedUntil}}">{{.RateLimitedUntil}}</time></p>{{end}}
         {{range .Degradations}}<p class="warn" title="{{.Remedy}}">{{.Message}}</p>{{end}}
-        <p><a href="/">classic page</a></p>
+        <details class="token"{{if .SetupMode}} open{{end}}>
+            <summary>{{with .Token}}@{{.Username}}{{with .Expires}} · {{if $.Token.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}}{{else}}<span class="warn">No token yet</span>{{end}}</summary>
+            <form class="pat-form">
+                <label for="pat-input">A <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
+                    with read-only commit status, contents, metadata and pull requests.
+                    It cannot name a failing Actions job; a classic token with the repo
+                    scope can, and is far broader.</label>
+                <input type="password" id="pat-input" name="token" placeholder="github_pat_..." autocomplete="off">
+                <p class="warn form-error" hidden></p>
+                <div class="actions">
+                    <button type="submit" class="save-pat">Save</button>
+                    {{if .Token}}<button type="button" class="clear-pat">Clear</button>{{end}}
+                </div>
+            </form>
+        </details>
+        {{with .Version}}<p>elly {{.}}</p>{{end}}
     </div>
 </nav>
 </div>
@@ -437,6 +475,37 @@ nav.side .meta p { margin: 0 0 var(--s1); }
         });
     });
 
+    // polling runs in the background; reload once it has had a moment
+    const poll = document.querySelector("button.poll");
+    poll.addEventListener("click", () => {
+        poll.disabled = true;
+        fetch("/api/v0/prs/refresh", {method: "POST"}).then(() => {
+            setTimeout(() => { selfReload = true; location.reload(); }, 1500);
+        });
+    });
+
+    const patForm = document.querySelector("form.pat-form");
+    const patError = patForm.querySelector(".form-error");
+    const saveBtn = patForm.querySelector(".save-pat");
+    const showError = (text) => { patError.textContent = text; patError.hidden = false; saveBtn.disabled = false; };
+    patForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const token = patForm.querySelector("#pat-input").value;
+        if (!token) { showError("Paste a token first"); return; }
+        saveBtn.disabled = true;
+        patError.hidden = true;
+        fetch("/api/v0/config/pat", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({token})})
+            .then((r) => r.ok ? location.reload() : r.json().then((d) => showError(d.error || "Could not save the token")))
+            .catch((err) => showError("Network error: " + err.message));
+    });
+    const clearBtn = patForm.querySelector(".clear-pat");
+    if (clearBtn) {
+        clearBtn.addEventListener("click", () => {
+            if (!confirm("Clear the token? elly stops polling until a new one is set.")) return;
+            fetch("/api/v0/config/pat", {method: "DELETE"}).then((r) => { if (r.ok) location.reload(); });
+        });
+    }
+
     const polled = document.querySelector("time.polled");
     const rtf = new Intl.RelativeTimeFormat("en", {numeric: "auto"});
     const tick = () => {
@@ -449,7 +518,7 @@ nav.side .meta p { margin: 0 0 var(--s1); }
     // reload after each poll, unless the user is in the middle of something
     const minutes = parseInt(document.body.dataset.refreshMinutes, 10) || 5;
     setInterval(() => {
-        if (input.value || document.querySelector(".pr.open") || document.activeElement === input) return;
+        if (input.value || document.querySelector(".pr.open") || document.activeElement === input || document.querySelector("details.token[open]")) return;
         selfReload = true;
         location.reload();
     }, minutes * 60000);
