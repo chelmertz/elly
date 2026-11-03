@@ -2,6 +2,7 @@ package server
 
 import (
 	"html"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -264,4 +265,56 @@ func TestNextFoldedGroupsAreOneToggleRowEach(t *testing.T) {
 	if strings.Contains(page, ">show ") {
 		t.Error("a folded heading still says show N")
 	}
+}
+
+// The page follows the system theme: a light palette on :root, a dark one
+// under prefers-color-scheme, each defining every colour the other does.
+func TestNextHasALightAndADarkPalette(t *testing.T) {
+	b, err := index.ReadFile("next.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(b)
+	if !strings.Contains(page, `<meta name="color-scheme" content="light dark">`) {
+		t.Error(`next.html does not declare color-scheme "light dark"`)
+	}
+	light, dark := colourTokens(page, ":root {"), colourTokens(page, "@media (prefers-color-scheme: dark) {")
+	if len(light) == 0 || len(dark) == 0 {
+		t.Fatalf("light tokens %v, dark tokens %v: want both palettes", light, dark)
+	}
+	for tok := range light {
+		if !dark[tok] {
+			t.Errorf("%s has a light colour and no dark one", tok)
+		}
+	}
+	for tok := range dark {
+		if !light[tok] {
+			t.Errorf("%s has a dark colour and no light one", tok)
+		}
+	}
+}
+
+// colourTokens are the custom properties set to a hex colour in the block
+// that starts at the first occurrence of opener.
+func colourTokens(page, opener string) map[string]bool {
+	i := strings.Index(page, opener)
+	if i < 0 {
+		return nil
+	}
+	block, depth := page[i:], 0
+	for j, c := range block {
+		if c == '{' {
+			depth++
+		} else if c == '}' {
+			if depth--; depth == 0 {
+				block = block[:j]
+				break
+			}
+		}
+	}
+	toks := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(--[a-z0-9-]+):\s*#`).FindAllStringSubmatch(block, -1) {
+		toks[m[1]] = true
+	}
+	return toks
 }

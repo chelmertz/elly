@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="light dark">
 <title>elly</title>
 <style>
 :root {
@@ -17,24 +17,46 @@
     --gap: var(--s3);
     --title-x: calc(var(--pad) + var(--dot) + var(--num) + 2 * var(--gap));
 
-    --bg: #15171c;
-    --raised: #1c2027;
-    --chip: #262b34;
-    --fg: #e6e8eb;
-    --fg2: #c9ced6;
-    --muted: #8b939e;
-    --faint: #6f7782;
-    --blue: #8ab4ff;
-    --num-fg: #7d9fd6;
-    --target: #1b2433;
-    --warm: #e8b765;
-    --hot: #ff9a7a;
-    --green: #7fe0a8;
-    --amber: #f0a33a;
-    --on-amber: #1a1206;
+    /* light by default; the dark palette below sets every colour again */
+    --bg: #fafafa;
+    --raised: #eff1f4;
+    --chip: #e2e5ea;
+    --fg: #1c1f24;
+    --fg2: #3b424c;
+    --muted: #5d6570;
+    --faint: #636b76;
+    --blue: #2a5bb5;
+    --num-fg: #3a61a6;
+    --target: #e3ecfb;
+    --warm: #8f5d00;
+    --hot: #b8400f;
+    --green: #1d7343;
+    --amber: #a35600;
+    --on-amber: #ffffff;
+    --ring: #7d9fd6;
 
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #15171c;
+        --raised: #1c2027;
+        --chip: #262b34;
+        --fg: #e6e8eb;
+        --fg2: #c9ced6;
+        --muted: #8b939e;
+        --faint: #6f7782;
+        --blue: #8ab4ff;
+        --num-fg: #7d9fd6;
+        --target: #1b2433;
+        --warm: #e8b765;
+        --hot: #ff9a7a;
+        --green: #7fe0a8;
+        --amber: #f0a33a;
+        --on-amber: #1a1206;
+        --ring: #3d5a8a;
+    }
 }
 * { box-sizing: border-box; }
 /* one background for the whole page: no wrapper sets its own */
@@ -76,7 +98,7 @@ nav.side { flex: 1 1 160px; max-width: 200px; padding-top: var(--s2); }
     color: var(--fg);
     font: inherit;
 }
-.filter:focus { outline: none; box-shadow: 0 0 0 2px #3d5a8a; }
+.filter:focus { outline: none; box-shadow: 0 0 0 2px var(--ring); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
 .group-head {
