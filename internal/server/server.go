@@ -266,6 +266,11 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 	// One validation at a time: each costs GitHub requests, and a second
 	// PUT while one is being checked is refused rather than queued.
 	var validating sync.Mutex
+	// clears counts DELETEs, under patMu, which also covers a PUT's store: a
+	// clear that lands while a PUT is checking its token wins, and the PUT
+	// stores nothing.
+	var patMu sync.Mutex
+	var clears uint64
 	mux.HandleFunc("PUT /api/v0/config/pat", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		var req struct {
@@ -298,6 +303,9 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 		// The check can outlast the server's write timeout. A recorder in
 		// tests does not support deadlines, which only loses the extension.
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(patWriteTimeout))
+		patMu.Lock()
+		clearsBefore := clears
+		patMu.Unlock()
 
 		// Validate the token with GitHub (checks both authentication and
 		// required scopes). GitHub's text goes to the log only; the token
@@ -315,8 +323,16 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 			return
 		}
 
-		// Store in SQLite
-		if err := webConfig.Store.StorePAT(req.Token, username, expiresAt); err != nil {
+		patMu.Lock()
+		if clears != clearsBefore {
+			patMu.Unlock()
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "the token was cleared while this one was checked; nothing stored"})
+			return
+		}
+		err = webConfig.Store.StorePAT(req.Token, username, expiresAt)
+		patMu.Unlock()
+		if err != nil {
 			webConfig.Logger.Error("could not store PAT", slog.Any("error", err))
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": "could not store token"})
@@ -373,7 +389,11 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 	})
 
 	mux.HandleFunc("DELETE /api/v0/config/pat", func(w http.ResponseWriter, r *http.Request) {
-		if err := webConfig.Store.ClearPAT(); err != nil {
+		patMu.Lock()
+		clears++
+		err := webConfig.Store.ClearPAT()
+		patMu.Unlock()
+		if err != nil {
 			webConfig.Logger.Error("could not clear PAT", slog.Any("error", err))
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": "could not clear token"})

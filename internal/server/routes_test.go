@@ -419,3 +419,43 @@ func TestPatPutTreatsAFailedPrQueryAsTransient(t *testing.T) {
 		gh.Close()
 	}
 }
+
+// A clear that lands while a pasted token is being checked wins: the user
+// pressed it last, and the check finishing afterwards must not bring a token
+// back.
+func TestPatClearDuringValidationWins(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var once atomic.Bool
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), "viewer { login }") {
+			if once.CompareAndSwap(false, true) {
+				close(entered)
+				<-release
+			}
+			_, _ = w.Write([]byte(`{"data":{"viewer":{"login":"me"}}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"search":{"edges":[]}}}`))
+	}))
+	defer gh.Close()
+	w := newRoutes(t, gh.URL)
+	if err := w.store.StorePAT("ghp_old", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	put := make(chan *httptest.ResponseRecorder)
+	go func() { put <- w.do("PUT", "/api/v0/config/pat", `{"token":"ghp_new"}`) }()
+	<-entered
+	if rec := w.do("DELETE", "/api/v0/config/pat", ""); rec.Code != http.StatusNoContent {
+		t.Fatalf("DELETE: %d", rec.Code)
+	}
+	close(release)
+	rec := <-put
+	if _, found, _ := w.store.GetPAT(); found {
+		t.Errorf("a token is stored after a clear that came during its check (PUT answered %d)", rec.Code)
+	}
+	if rec.Code != http.StatusConflict {
+		t.Errorf("the PUT that lost: %d %q, want 409", rec.Code, rec.Body)
+	}
+}

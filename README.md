@@ -149,6 +149,8 @@ else. GitHub's own error text goes to the log only, and the token is never
 logged.
 Clearing it (`DELETE /api/v0/config/pat`) stops polling until a new one is
 set and deletes the stored PRs, so nothing goes on being served as current.
+A clear that lands while a pasted token is being checked wins: that PUT
+stores nothing and answers 409.
 A token for another GitHub login than the previous one first deletes the
 stored PRs, buries, annotations and notification history, and a poll still
 running with the old token stores nothing.
