@@ -257,7 +257,10 @@ Or, install permanently:
 `make test` runs the unit and property tests (rapid). `make props-long` runs
 the property tests with 10000 cases each and `make mutate` runs gremlins;
 both are slow, so `.github/workflows/slow-tests.yml` runs them daily instead
-of on every push.
+of on every push. One property test drives random requests at the real
+handler with seeded PRs and holds the rules in [What elly lets in](#what-elly-lets-in):
+no 5xx, the base headers on every response, no GET that changes stored state,
+and no cross-site or rebound request that succeeds.
 
 See [dev.md](dev.md) for some useful commands during development.
 
