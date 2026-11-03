@@ -1284,3 +1284,25 @@ func Test_Request_RateLimitWaitIsCapped(t *testing.T) {
 		}
 	}
 }
+
+// A response is read only up to maxResponseBody: a poll of 100 PRs is a few
+// hundred KiB, and a body without end must not take the machine's memory.
+func Test_Request_RefusesAnEndlessBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"x":"`))
+		chunk := bytes.Repeat([]byte("x"), 1<<20)
+		for i := 0; i <= maxResponseBody>>20; i++ {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+		_, _ = w.Write([]byte(`"}}`))
+	}))
+	defer srv.Close()
+	if _, err := graphqlRequest(srv.URL, graphqlQuery{Query: "{}"}, "token", slog.New(slog.DiscardHandler)); err == nil {
+		t.Error("a body over the limit was read whole")
+	}
+	if _, _, err := UsernameFromPat(srv.URL, "tok", slog.New(slog.DiscardHandler)); err == nil || errors.Is(err, ErrInvalidToken) {
+		t.Errorf("UsernameFromPat on a body over the limit: %v", err)
+	}
+}

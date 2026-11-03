@@ -25,6 +25,28 @@ var ErrInvalidToken = errors.New("github token is invalid")
 
 const DefaultAPIURL = "https://api.github.com"
 
+// maxResponseBody caps what elly reads of one GitHub response. A poll of 100
+// PRs is a few hundred KiB; this is room for far more, and no more.
+const maxResponseBody = 32 << 20
+
+func readBody(r io.Reader) ([]byte, error) {
+	b, err := io.ReadAll(io.LimitReader(r, maxResponseBody+1))
+	if err == nil && len(b) > maxResponseBody {
+		return nil, fmt.Errorf("response over %d MiB", maxResponseBody>>20)
+	}
+	return b, err
+}
+
+// logBody is the start of an error body, for the log: enough to tell an
+// HTML page from GitHub's JSON message, and never a whole response.
+func logBody(b []byte) string {
+	const max = 512
+	if len(b) > max {
+		return string(b[:max]) + "…"
+	}
+	return string(b)
+}
+
 // maxRateLimitWait caps how long one rate-limit answer holds polling. GitHub's
 // primary limit resets hourly; a reset further out is a garbled header, and
 // stored as given it stopped polling for good.
@@ -307,9 +329,9 @@ func (a api) requestOnce(query graphqlQuery) ([]byte, error) {
 		_, _ = ghExpiration(expiration, logger)
 	}
 
-	respBody, err := io.ReadAll(response.Body)
+	respBody, err := readBody(response.Body)
 	if err != nil {
-		return nil, fmt.Errorf("could not read github username response: %w", err)
+		return nil, fmt.Errorf("could not read github response: %w", err)
 	}
 	if a.tap != nil {
 		if respBody, err = a.tap(jsonBytes, response.StatusCode, respBody); err != nil {
@@ -320,7 +342,7 @@ func (a api) requestOnce(query graphqlQuery) ([]byte, error) {
 	// 5xx bodies are not reliably json (502s come as html), so decide on
 	// the status code before trying to parse anything
 	if response.StatusCode >= 500 {
-		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", string(respBody)))
+		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", logBody(respBody)))
 		return nil, fmt.Errorf("%w: github response code %d", ErrGithubServer, response.StatusCode)
 	}
 
@@ -389,7 +411,7 @@ func (a api) requestOnce(query graphqlQuery) ([]byte, error) {
 	logger.Debug("github response", slog.String("body", string(respBody)), slog.Int("status", response.StatusCode))
 
 	if response.StatusCode >= 400 {
-		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", string(respBody)))
+		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", logBody(respBody)))
 		return nil, fmt.Errorf("%w: github response code %d", ErrClient, response.StatusCode)
 	}
 	// No data at all is no answer, whatever the status: GitHub says
@@ -475,7 +497,7 @@ func UsernameFromPat(baseURL, token string, logger *slog.Logger) (username strin
 		return "", time.Time{}, fmt.Errorf("%w: github response code %d", ErrGithubServer, response.StatusCode)
 	}
 
-	respBody, err := io.ReadAll(response.Body)
+	respBody, err := readBody(response.Body)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("could not read github username response: %w", err)
 	}
