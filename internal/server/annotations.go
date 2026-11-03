@@ -118,6 +118,11 @@ func plainText(s string, max int) error {
 	if strings.ContainsFunc(s, unicode.IsControl) {
 		return errors.New("control characters are not allowed")
 	}
+	// Format characters (bidi overrides, zero-width ones) make text read as
+	// something else than it holds.
+	if strings.ContainsFunc(s, func(r rune) bool { return unicode.Is(unicode.Cf, r) }) {
+		return errors.New("format characters (bidi overrides, zero-width) are not allowed")
+	}
 	return nil
 }
 

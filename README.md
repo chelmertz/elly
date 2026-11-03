@@ -78,7 +78,9 @@ every change by someone else: a push, a comment, a review. With no
 ## Annotations
 
 Another local tool can mark a PR as `handled`, `needs_you`, `stuck` or
-`running`, with a note of up to 300 characters and up to four links. `handled`
+`running`, with a note of up to 300 characters and up to four links; a note
+or a link label holding a control or format character (a bidi override, a
+zero-width one) is refused. `handled`
 and `running` both say the user handed the PR to the tool, so both drop its
 review-owed reasons from the score: `running` is a round in progress, which the
 tool replaces with another state when it finishes. `needs_you` counts the PR

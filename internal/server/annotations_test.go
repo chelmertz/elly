@@ -161,3 +161,17 @@ func TestWriteAnnotationToken(t *testing.T) {
 		t.Error("token did not rotate on restart")
 	}
 }
+
+// A bidi override or a zero-width character makes a note or a label read as
+// something else than it says ("approve" shown, "evorppa" stored), so format
+// characters are refused with the control characters.
+func TestPlainTextRefusesFormatCharacters(t *testing.T) {
+	for _, s := range []string{"a\u202eb", "a\u200bb", "a\u2066b", "\ufeffa", "a\u200db"} {
+		if err := plainText(s, 100); err == nil {
+			t.Errorf("%q accepted", s)
+		}
+	}
+	if err := plainText("approve · ready ✓ é", 100); err != nil {
+		t.Errorf("ordinary text refused: %v", err)
+	}
+}
