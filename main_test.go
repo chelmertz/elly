@@ -205,9 +205,34 @@ func TestInitPAT_StoredPATValidation(t *testing.T) {
 			wantSetupMode: false,
 		},
 		{
-			name:          "client error on the PR query means the token lacks scopes",
+			name:          "client error on the PR query keeps the token",
 			handler:       viewerThenStatusHandler(404, `{"message":"Not Found"}`),
-			wantSetupMode: true,
+			wantSetupMode: false,
+		},
+		{
+			name:          "secondary rate limit on the PR query keeps the token",
+			handler:       viewerThenStatusHandler(403, `{"message":"You have exceeded a secondary rate limit"}`),
+			wantSetupMode: false,
+		},
+		{
+			name:          "429 on the PR query keeps the token",
+			handler:       viewerThenStatusHandler(429, `{"message":"slow down"}`),
+			wantSetupMode: false,
+		},
+		{
+			name:          "an html page on the PR query keeps the token",
+			handler:       viewerThenStatusHandler(200, `<html>GitHub is down for maintenance</html>`),
+			wantSetupMode: false,
+		},
+		{
+			name:          "an html page on the login query keeps the token",
+			handler:       fixedStatusHandler(200, `<html>GitHub is down for maintenance</html>`),
+			wantSetupMode: false,
+		},
+		{
+			name:          "429 on the login query keeps the token",
+			handler:       fixedStatusHandler(429, `{"message":"slow down"}`),
+			wantSetupMode: false,
 		},
 		{
 			name:          "server error with html body on the PR query is transient",
@@ -220,9 +245,9 @@ func TestInitPAT_StoredPATValidation(t *testing.T) {
 			wantSetupMode: true,
 		},
 		{
-			name:          "403 forbidden",
-			handler:       fixedStatusHandler(403, `{"message":"Forbidden"}`),
-			wantSetupMode: true,
+			name:          "403 is a secondary rate limit as often as a refusal, so it keeps the token",
+			handler:       fixedStatusHandler(403, `{"message":"You have exceeded a secondary rate limit"}`),
+			wantSetupMode: false,
 		},
 	}
 

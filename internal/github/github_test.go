@@ -923,7 +923,8 @@ func Test_UsernameFromPat_ClassifiesResponses(t *testing.T) {
 		want   error
 	}{
 		{"unauthorized drops the token", 401, "", ErrInvalidToken},
-		{"forbidden drops the token", 403, "", ErrInvalidToken},
+		{"forbidden is a client error: a secondary rate limit answers 403 too", 403, "", ErrClient},
+		{"too many requests is a client error", 429, "", ErrClient},
 		{"other client error", 404, "", ErrClient},
 		{"server error", 502, "", ErrGithubServer},
 		{"500 is a server error", 500, "", ErrGithubServer},

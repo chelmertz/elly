@@ -396,24 +396,22 @@ func (a api) requestOnce(query graphqlQuery) ([]byte, error) {
 	return respBody, nil
 }
 
-// ValidatePAT validates a PAT by checking authentication and required scopes.
-// Returns username, expiration time, and error if invalid.
+// ValidatePAT checks a PAT against GitHub: the login query, then one poll.
+// Returns username, expiration time, and an error; the error is
+// ErrInvalidToken only when GitHub answered 401 (bad credentials), and
+// anything else is transient.
 func ValidatePAT(baseURL, token string, logger *slog.Logger) (username string, expiresAt time.Time, err error) {
 	username, expiresAt, err = UsernameFromPat(baseURL, token, logger)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("token authentication failed: %w", err)
 	}
 
-	// Validate scopes by attempting a PR query
+	// Then the query elly polls with. The token already authenticated, so
+	// whatever goes wrong here is not ErrInvalidToken: a secondary rate
+	// limit answers 403 or 429, a maintenance page answers 200 with HTML,
+	// and treating either as a refusal deleted a working token on startup.
 	_, _, err = QueryGithub(baseURL, token, username, logger)
 	if err != nil {
-		// Client errors (except rate limiting) indicate the token lacks
-		// required permissions — treat as invalid token.
-		var rl *ErrRateLimited
-		if errors.Is(err, ErrClient) && !errors.As(err, &rl) {
-			return "", time.Time{}, fmt.Errorf("%w: token lacks required permissions: %w", ErrInvalidToken, err)
-		}
-		// Transient errors (rate limit, server error, network) — propagate as-is.
 		return "", time.Time{}, fmt.Errorf("token validation failed: %w", err)
 	}
 
@@ -456,7 +454,10 @@ func UsernameFromPat(baseURL, token string, logger *slog.Logger) (username strin
 		}
 	}
 
-	if response.StatusCode == 401 || response.StatusCode == 403 {
+	// Only 401 means bad credentials. GitHub answers 403 (and 429) to a
+	// secondary rate limit too, so 403 is a client error the caller retries
+	// later, never a reason to forget the token.
+	if response.StatusCode == http.StatusUnauthorized {
 		return "", time.Time{}, fmt.Errorf("%w: github response code %d", ErrInvalidToken, response.StatusCode)
 	}
 	if response.StatusCode >= 400 {

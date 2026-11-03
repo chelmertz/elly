@@ -186,7 +186,8 @@ func initPAT(store storage.Storage, githubBaseURL string, logger *slog.Logger) (
 			}
 			return true, nil
 		}
-		// Transient error (rate limit, server error, network issue) — keep the PAT
+		// Anything but a 401 (rate limit, 403, 429, 5xx, a page that is not
+		// JSON, the network) is transient: keep the PAT and poll as usual.
 		logger.Warn("could not validate stored PAT due to transient error, assuming it is still valid", slog.Any("error", err))
 		return false, nil
 	}

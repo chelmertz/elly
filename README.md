@@ -141,8 +141,12 @@ it requests. It answers only these:
 Set it on the page (`PUT /api/v0/config/pat`, `{"token":"…"}`) or through
 `GITHUB_PAT`. elly checks a pasted token with GitHub before storing it, one
 at a time (a second PUT meanwhile gets 429), and answers 400 "GitHub refused
-the token" apart from 502 "could not reach GitHub, try again"; GitHub's own
-error text goes to the log only, and the token is never logged.
+the token" only when GitHub answers 401 (bad credentials). Anything else, a
+403 or 429 rate limit, a 5xx or a page that is not JSON included, is 502
+"could not reach GitHub, try again". The same holds on start: a stored token
+is deleted only on a 401, and kept, with a warning in the log, on anything
+else. GitHub's own error text goes to the log only, and the token is never
+logged.
 Clearing it (`DELETE /api/v0/config/pat`) stops polling until a new one is
 set and deletes the stored PRs, so nothing goes on being served as current.
 A token for another GitHub login than the previous one first deletes the

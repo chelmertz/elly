@@ -314,7 +314,9 @@ func TestPatPutTellsARefusedTokenFromAnUnreachableGitHub(t *testing.T) {
 		wantBody string
 	}{
 		{"refused", http.StatusUnauthorized, http.StatusBadRequest, "GitHub refused the token"},
-		{"forbidden", http.StatusForbidden, http.StatusBadRequest, "GitHub refused the token"},
+		{"forbidden is often a secondary rate limit", http.StatusForbidden, http.StatusBadGateway, "could not reach GitHub, try again"},
+		{"too many requests", http.StatusTooManyRequests, http.StatusBadGateway, "could not reach GitHub, try again"},
+		{"html page", http.StatusOK, http.StatusBadGateway, "could not reach GitHub, try again"},
 		{"server error", http.StatusBadGateway, http.StatusBadGateway, "could not reach GitHub, try again"},
 		{"down", 0, http.StatusBadGateway, "could not reach GitHub, try again"},
 	} {
@@ -385,5 +387,35 @@ func TestPatPutOneValidationAtATime(t *testing.T) {
 	}
 	if rec := w.do("PUT", "/api/v0/config/pat", `{"token":"ghp_c"}`); rec.Code != http.StatusBadRequest {
 		t.Errorf("a PUT after the first finished: %d", rec.Code)
+	}
+}
+
+// A token that logs in and then meets a secondary rate limit (403 with
+// Retry-After) or a maintenance page on the PR query is GitHub being busy,
+// not GitHub refusing the token.
+func TestPatPutTreatsAFailedPrQueryAsTransient(t *testing.T) {
+	for _, c := range []struct {
+		name, body string
+		status     int
+	}{
+		{"secondary rate limit", `{"message":"You have exceeded a secondary rate limit"}`, http.StatusForbidden},
+		{"too many requests", `{"message":"slow down"}`, http.StatusTooManyRequests},
+		{"maintenance page", `<html>GitHub is down for maintenance</html>`, http.StatusOK},
+	} {
+		gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			if strings.Contains(string(body), "viewer { login }") {
+				_, _ = w.Write([]byte(`{"data":{"viewer":{"login":"me"}}}`))
+				return
+			}
+			w.Header().Set("Retry-After", "60")
+			w.WriteHeader(c.status)
+			_, _ = w.Write([]byte(c.body))
+		}))
+		w := newRoutes(t, gh.URL)
+		if rec := w.do("PUT", "/api/v0/config/pat", `{"token":"ghp_x"}`); rec.Code != http.StatusBadGateway {
+			t.Errorf("%s: %d %q, want 502", c.name, rec.Code, rec.Body)
+		}
+		gh.Close()
 	}
 }
