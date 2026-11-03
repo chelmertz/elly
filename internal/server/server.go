@@ -56,7 +56,7 @@ func pageDegradations(ds []types.Degradation) []types.Degradation {
 	return out
 }
 
-//go:embed index.html
+//go:embed index.html next.html
 var index embed.FS
 
 type HttpServerConfig struct {
@@ -135,6 +135,13 @@ func parseIndex(annotationSchemes []string) (*template.Template, error) {
 	}).ParseFS(index, "index.html")
 }
 
+// parseNext parses the /next page. Every link on it is checked in Go before
+// it reaches the template (see buildNext), and PR fields are escaped by
+// html/template like on the classic page.
+func parseNext() (*template.Template, error) {
+	return template.New("next.html").ParseFS(index, "next.html")
+}
+
 func ServeWeb(webConfig HttpServerConfig) {
 	mux := routes(webConfig)
 	webConfig.Logger.Info("starting web server at", slog.String("url", "http://"+webConfig.Url))
@@ -146,6 +153,8 @@ func ServeWeb(webConfig HttpServerConfig) {
 func routes(webConfig HttpServerConfig) *http.ServeMux {
 	mux := http.NewServeMux()
 	temp, err := parseIndex(webConfig.AnnotationSchemes)
+	check(err)
+	nextTemp, err := parseNext()
 	check(err)
 
 	registerAnnotationRoutes(mux, webConfig)
@@ -244,6 +253,20 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 		}
 		err := temp.Execute(w, data)
 		check(err)
+	})
+
+	mux.HandleFunc("GET /next", func(w http.ResponseWriter, r *http.Request) {
+		storedPrs := webConfig.Store.Prs()
+		_, found, _ := webConfig.Store.GetPAT()
+		data := buildNext(storedPrs.Prs, getCurrentUsername(webConfig.Store), time.Now(), webConfig.AnnotationSchemes)
+		data.LastRefreshed = storedPrs.LastFetched.Format(time.RFC3339)
+		data.RefreshIntervalMinutes = webConfig.TimeoutMinutes
+		data.Degradations = pageDegradations(webConfig.Store.Degradations())
+		data.SetupMode = !found
+		if until := webConfig.Store.GetRateLimitUntil(); until.After(time.Now()) {
+			data.RateLimitedUntil = until.Format(time.RFC3339)
+		}
+		check(nextTemp.Execute(w, data))
 	})
 
 	mux.Handle("GET /metrics", promhttp.Handler())

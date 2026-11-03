@@ -181,13 +181,38 @@ func TestGonePrsAreForgotten(t *testing.T) {
 
 func TestCoalesce(t *testing.T) {
 	ns := []Notification{{Title: "1"}, {Title: "2"}, {Title: "3"}}
-	if got := Coalesce(ns); len(got) != 3 {
+	rank := func(string) int { return 0 }
+	if got := Coalesce(ns, rank); len(got) != 3 {
 		t.Errorf("three notifications coalesced: %v", got)
 	}
 	ns = append(ns, Notification{Title: "4"})
-	got := Coalesce(ns)
+	got := Coalesce(ns, rank)
 	if len(got) != 1 || !strings.Contains(got[0].Body, "4") {
 		t.Errorf("four notifications: got %v, want one summary naming 4", got)
+	}
+}
+
+func TestCoalescedNotificationKeepsTheHighestRankedPr(t *testing.T) {
+	ns := []Notification{
+		{PrUrl: "https://github.com/o/r/pull/1"},
+		{PrUrl: "https://github.com/o/r/pull/2"},
+		{PrUrl: "https://github.com/o/r/pull/3"},
+		{PrUrl: "https://github.com/o/r/pull/4"},
+	}
+	pos := map[string]int{ns[0].PrUrl: 3, ns[1].PrUrl: 1, ns[2].PrUrl: 0, ns[3].PrUrl: 2}
+	got := Coalesce(ns, func(u string) int { return pos[u] })
+	if len(got) != 1 || got[0].PrUrl != "https://github.com/o/r/pull/3" {
+		t.Errorf("got %v, want one summary pointing at pull/3", got)
+	}
+}
+
+func TestClickingANotificationOpensItsRowOnNext(t *testing.T) {
+	s := Sender{PageUrl: "http://localhost:9876"}
+	if got := s.openUrl(Notification{PrUrl: "https://github.com/Owner/repo/pull/11534"}); got != "http://localhost:9876/next#pr-owner-repo-11534" {
+		t.Errorf("got %q", got)
+	}
+	if got := s.openUrl(Notification{}); got != "http://localhost:9876/next" {
+		t.Errorf("without a PR: got %q", got)
 	}
 }
 

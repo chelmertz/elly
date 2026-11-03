@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>elly</title>
+<style>
+:root {
+    /* one spacing scale; every margin, padding and gap below is one of these */
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+    /* row geometry: everything that aligns with the PR title uses --title-x */
+    --pad: var(--s3);
+    --dot: 8px;
+    --num: 56px;
+    --verb: 104px;
+    --gap: var(--s3);
+    --title-x: calc(var(--pad) + var(--dot) + var(--num) + 2 * var(--gap));
+
+    --bg: #15171c;
+    --raised: #1c2027;
+    --chip: #262b34;
+    --fg: #e6e8eb;
+    --fg2: #c9ced6;
+    --muted: #8b939e;
+    --faint: #6f7782;
+    --blue: #8ab4ff;
+    --num-fg: #7d9fd6;
+    --target: #1b2433;
+    --warm: #e8b765;
+    --hot: #ff9a7a;
+    --green: #7fe0a8;
+    --amber: #f0a33a;
+    --on-amber: #1a1206;
+
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.4 var(--sans);
+}
+a { color: var(--fg2); text-decoration: none; }
+a:hover { color: var(--fg); }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+.page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: var(--s5) var(--s4) var(--s6);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--s6);
+}
+main { flex: 999 1 560px; min-width: 0; }
+nav.side { flex: 1 1 160px; max-width: 200px; padding-top: var(--s2); }
+
+/* the typed text lines up with the titles below it */
+.filter {
+    display: block;
+    width: calc(100% - var(--title-x) + var(--s3));
+    margin-left: calc(var(--title-x) - var(--s3));
+    padding: var(--s2) var(--s3);
+    background: var(--raised);
+    border: 0;
+    border-radius: var(--s2);
+    color: var(--fg);
+    font: inherit;
+}
+.filter:focus { outline: none; box-shadow: 0 0 0 2px #3d5a8a; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+.group-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s3);
+    margin: var(--s5) 0 var(--s1);
+    padding-left: var(--title-x);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.group-gap { height: var(--s3); }
+.fold {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--blue);
+    font: 500 12px var(--sans);
+    white-space: nowrap;
+    cursor: pointer;
+}
+.group ol { list-style: none; margin: 0; padding: 0; }
+
+.pr { border-radius: var(--s2); }
+.row { display: flex; align-items: center; gap: var(--gap); padding-right: var(--pad); border-radius: var(--s2); }
+.row:hover, .pr.open .row { background: var(--raised); }
+.pr.open .row { border-radius: var(--s2) var(--s2) 0 0; }
+.toggle {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--gap);
+    padding: var(--s2) 0 var(--s2) var(--pad);
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.dot { flex: none; width: var(--dot); height: var(--dot); border-radius: 50%; }
+.pr.new .dot { background: var(--blue); }
+.num { flex: none; width: var(--num); text-align: right; font: 500 13px var(--mono); color: var(--num-fg); }
+.title { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
+.tag { flex: none; font-size: 12px; white-space: nowrap; color: var(--muted); }
+.tag.running { color: var(--blue); }
+.tag.handled { color: var(--green); }
+.tag.needs-you { color: var(--warm); }
+.who { flex: 0 0 auto; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); }
+.wait { flex: none; width: 48px; text-align: right; font: 500 12px var(--mono); }
+.wait.new { color: var(--blue); }
+.wait.today { color: var(--muted); }
+.wait.days { color: var(--warm); }
+.wait.week { color: var(--hot); }
+.verb {
+    flex: none;
+    width: var(--verb);
+    padding: var(--s1) var(--s2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-radius: 6px;
+    background: var(--chip);
+    color: var(--fg);
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+}
+.verb.primary { background: var(--amber); color: var(--on-amber); }
+.verb.primary:hover { color: var(--on-amber); filter: brightness(1.1); }
+
+.pr:target .row { animation: target 6s ease-out forwards; }
+@keyframes target {
+    0%, 50% { background: var(--target); box-shadow: inset 3px 0 0 var(--blue); }
+    100% { background: transparent; box-shadow: inset 3px 0 0 transparent; }
+}
+
+.panel {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--s5);
+    padding: var(--s2) var(--pad) var(--s4) var(--title-x);
+    background: var(--raised);
+    border-radius: 0 0 var(--s2) var(--s2);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--fg2);
+}
+.panel h3 { margin: 0 0 var(--s1); font-size: 12px; font-weight: 400; color: var(--muted); }
+.panel ul { list-style: none; margin: 0; padding: 0; }
+.panel time { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-right: var(--s2); }
+.panel .why li:first-child { color: var(--fg); font-weight: 600; }
+.panel .empty { color: var(--faint); }
+.links { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3); margin-top: var(--s2); }
+.links a, .links button { color: var(--blue); }
+.links button { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.links .scheme { color: var(--faint); }
+
+.done { padding: var(--s6) 0 0 var(--title-x); color: var(--muted); }
+.stats { margin-top: var(--s6); padding-left: var(--title-x); font-size: 12px; color: var(--faint); }
+
+nav.side .brand { font-weight: 600; color: var(--fg); padding-bottom: var(--s2); }
+nav.side ul { list-style: none; margin: 0; padding: 0; }
+nav.side a { display: flex; justify-content: space-between; gap: var(--s2); padding: var(--s1) 0; font-size: 14px; color: var(--muted); }
+nav.side a:hover { color: var(--fg); }
+nav.side a.on-you { color: var(--fg); }
+nav.side .meta { margin-top: var(--s3); font-size: 12px; color: var(--faint); }
+nav.side .warn { color: var(--warm); }
+nav.side .meta p { margin: 0 0 var(--s1); }
+
+@media (max-width: 720px) {
+    :root { --num: 48px; --gap: var(--s2); --verb: 80px; }
+    .who, .tag { display: none; }
+    .panel { grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
+    nav.side { max-width: none; }
+}
+</style>
+</head>
+<body data-refresh-minutes="{{.RefreshIntervalMinutes}}">
+<div class="page">
+<main>
+    <label class="visually-hidden" for="filter">Filter pull requests</label>
+    <input id="filter" class="filter" type="search" autocomplete="off" placeholder="Filter: number, title, repo, author  ( / )">
+
+    {{range $g := .Groups}}
+    <section class="group" id="{{$g.Slug}}" data-folded="{{$g.Folded}}"{{if and (not $g.Rows) (not $g.Folded)}} hidden{{end}}>
+        {{if $g.Heading}}
+        <h2 class="group-head">{{$g.Name}}{{if $g.Folded}} <button type="button" class="fold" aria-expanded="false" aria-controls="{{$g.Slug}}-list">show {{len $g.Rows}}</button>{{end}}</h2>
+        {{else}}
+        <div class="group-gap"></div>
+        {{end}}
+        <ol id="{{$g.Slug}}-list"{{if $g.Folded}} hidden{{end}}>
+        {{range $r := $g.Rows}}
+            <li class="pr" id="{{$r.Anchor}}" data-search="{{$r.Search}}"{{if $r.OnYou}} data-turn-at="{{$r.TurnAt}}"{{end}}>
+                <div class="row">
+                    <button type="button" class="toggle" aria-expanded="false" aria-controls="{{$r.Anchor}}-panel">
+                        <span class="dot" aria-hidden="true"></span>
+                        <span class="num">#{{$r.Number}}</span>
+                        <span class="title">{{$r.Title}}</span>
+                        {{with $r.Tag}}<span class="tag {{.Class}}">claude {{.Symbol}} {{.Word}}</span>{{end}}
+                        <span class="who">{{$r.Repo}} · {{$r.Author}}</span>
+                        <span class="wait {{if eq $r.Bucket "week+"}}week{{else}}{{$r.Bucket}}{{end}}" title="since the last activity by someone else">{{$r.Bucket}}</span>
+                    </button>
+                    <a class="verb{{if $r.VerbPrimary}} primary{{end}}" href="{{$r.VerbHref}}">{{$r.Verb}}</a>
+                </div>
+                <div class="panel" id="{{$r.Anchor}}-panel" hidden>
+                    <div>
+                        <h3>Turn history</h3>
+                        {{if $r.History}}
+                        <ul>{{range $r.History}}<li><time>{{.At}}</time>{{.What}}</li>{{end}}</ul>
+                        {{else}}
+                        <p class="empty">nothing recorded</p>
+                        {{end}}
+                    </div>
+                    <div>
+                        <h3>Why here</h3>
+                        <ul class="why">{{range $r.Why}}<li>{{.}}</li>{{end}}</ul>
+                    </div>
+                    <div>
+                        <h3>State</h3>
+                        <ul>{{range $r.State}}<li>{{.}}</li>{{end}}</ul>
+                        <div class="links">
+                            <a href="{{$r.Url}}">Open</a>
+                            <button type="button" class="bury" data-url="{{$r.BuryUrl}}">{{if $r.Buried}}Unbury{{else}}Bury{{end}}</button>
+                            {{range $r.Links}}<a href="{{.Href}}">{{.Label}}</a>{{with .Verb}}<span class="scheme">{{.}}</span>{{end}}{{end}}
+                        </div>
+                    </div>
+                </div>
+            </li>
+        {{end}}
+        </ol>
+    </section>
+    {{end}}
+
+    <p class="done" hidden>Nothing matches.</p>
+    <p class="stats">{{.OnYou}} on you{{with .OldestOnYou}}, the longest waiting {{.}}{{end}} · {{.OnOthers}} on others</p>
+</main>
+
+<nav class="side" aria-label="Groups">
+    <div class="brand">elly</div>
+    <ul>
+    {{range .Groups}}
+        <li><a href="#{{.Slug}}"{{if and (not .Folded) .Rows}} class="on-you"{{end}}><span>{{.NavName}}</span><span>{{len .Rows}}</span></a></li>
+    {{end}}
+    </ul>
+    <div class="meta">
+        {{if .SetupMode}}<p class="warn">No token yet: set one on the <a href="/">classic page</a>.</p>{{end}}
+        <p>polled <time class="polled" datetime="{{.LastRefreshed}}">{{.LastRefreshed}}</time></p>
+        {{if .RateLimitedUntil}}<p class="warn">rate limited until <time datetime="{{.RateLimitedUntil}}">{{.RateLimitedUntil}}</time></p>{{end}}
+        {{range .Degradations}}<p class="warn" title="{{.Remedy}}">{{.Message}}</p>{{end}}
+        <p><a href="/">classic page</a></p>
+    </div>
+</nav>
+</div>
+<script>
+// Everything here only toggles attributes and sets textContent on elements
+// the server rendered; no HTML is built from PR strings.
+(() => {
+    const store = {
+        get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+        set(k, v) { try { localStorage.setItem(k, v); } catch { /* private window */ } },
+    };
+
+    // "new": the PR became the user's turn after their previous visit. The
+    // baseline is written when the user leaves, not by the page's own
+    // reloads, so a reload does not clear the dots.
+    const seenKey = "elly.next.lastVisit";
+    const lastVisit = Date.parse(store.get(seenKey) || "");
+    if (!Number.isNaN(lastVisit)) {
+        document.querySelectorAll(".pr[data-turn-at]").forEach((el) => {
+            if (Date.parse(el.dataset.turnAt) > lastVisit) el.classList.add("new");
+        });
+    }
+    let selfReload = false;
+    window.addEventListener("pagehide", () => {
+        if (!selfReload) store.set(seenKey, new Date().toISOString());
+    });
+
+    const setOpen = (pr, open) => {
+        pr.classList.toggle("open", open);
+        pr.querySelector(".toggle").setAttribute("aria-expanded", String(open));
+        pr.querySelector(".panel").hidden = !open;
+    };
+    document.querySelectorAll(".pr .toggle").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const pr = btn.closest(".pr");
+            setOpen(pr, !pr.classList.contains("open"));
+        });
+    });
+
+    const groups = Array.from(document.querySelectorAll(".group"));
+    const unfold = (group, open) => {
+        const list = group.querySelector("ol");
+        const btn = group.querySelector(".fold");
+        list.hidden = !open;
+        if (btn) {
+            btn.setAttribute("aria-expanded", String(open));
+            btn.textContent = open ? "hide" : "show " + list.children.length;
+        }
+    };
+    groups.forEach((g) => {
+        const btn = g.querySelector(".fold");
+        if (btn) btn.addEventListener("click", () => unfold(g, g.querySelector("ol").hidden));
+    });
+
+    // a link to a row or group opens what holds it
+    const reveal = () => {
+        const el = location.hash && document.getElementById(location.hash.slice(1));
+        if (!el) return;
+        const group = el.closest(".group");
+        if (group && group.dataset.folded === "true") unfold(group, true);
+        if (el.classList.contains("pr")) setOpen(el, true);
+        el.scrollIntoView({block: "center"});
+    };
+    window.addEventListener("hashchange", reveal);
+    reveal();
+
+    // fuzzy filter: every typed character appears in order
+    const input = document.getElementById("filter");
+    const done = document.querySelector(".done");
+    const matches = (hay, q) => {
+        let i = 0;
+        for (const ch of hay) if (ch === q[i]) i++;
+        return i === q.length;
+    };
+    const filter = () => {
+        const q = input.value.trim().toLowerCase().replace(/^#/, "");
+        let any = false;
+        groups.forEach((g) => {
+            const list = g.querySelector("ol");
+            let shown = 0;
+            Array.from(list.children).forEach((pr) => {
+                const ok = !q || matches(pr.dataset.search, q);
+                pr.hidden = !ok;
+                if (ok) shown++;
+            });
+            any = any || shown > 0;
+            if (q) {
+                g.hidden = shown === 0;
+                list.hidden = shown === 0;
+            } else {
+                g.hidden = list.children.length === 0 && g.dataset.folded !== "true";
+                const btn = g.querySelector(".fold");
+                list.hidden = btn ? btn.getAttribute("aria-expanded") !== "true" : false;
+            }
+        });
+        done.hidden = !q || any;
+    };
+    input.addEventListener("input", filter);
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { input.value = ""; filter(); input.blur(); }
+    });
+    window.addEventListener("keydown", (e) => {
+        if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+        const t = e.target;
+        if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t.isContentEditable) return;
+        e.preventDefault();
+        input.focus();
+    });
+
+    document.querySelectorAll("button.bury").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            fetch(btn.dataset.url, {method: "POST"}).then(() => { selfReload = true; location.reload(); });
+        });
+    });
+
+    const polled = document.querySelector("time.polled");
+    const rtf = new Intl.RelativeTimeFormat("en", {numeric: "auto"});
+    const tick = () => {
+        const at = new Date(polled.dateTime);
+        polled.textContent = at.getFullYear() < 2020 ? "not yet" : rtf.format(Math.round((at - new Date()) / 60000), "minute");
+    };
+    tick();
+    setInterval(tick, 15000);
+
+    // reload after each poll, unless the user is in the middle of something
+    const minutes = parseInt(document.body.dataset.refreshMinutes, 10) || 5;
+    setInterval(() => {
+        if (input.value || document.querySelector(".pr.open") || document.activeElement === input) return;
+        selfReload = true;
+        location.reload();
+    }, minutes * 60000);
+})();
+</script>
+</body>
+</html>

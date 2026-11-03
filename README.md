@@ -30,6 +30,23 @@ flowchart TB
     I(i3blocks) -.-> E
 ```
 
+## The /next page
+
+`/next` is a redesign of the page, beside the classic one at `/`. It groups
+PRs by whose turn it is rather than by score: one click from done, waiting for
+you, yours to unblock, then folded groups for PRs on others, nobody's turn, the
+icebox (untouched for two weeks) and buried. Points only order PRs inside a
+group, so a high score never lifts a PR into a higher group; the rule is
+`TurnOf` in `internal/points/turn.go`.
+
+Each row shows one action and how long the PR has waited, counted from the
+latest activity by someone other than you, or from its last update when there
+is none. Clicking a row opens its history, why it is in its group, and its
+state. `/` focuses a filter that matches number, title, repo and author as a
+subsequence. Every row has an id, such as `/next#pr-owner-repo-123`, and a link
+to it highlights the row. A blue dot marks a PR that became your turn since
+your previous visit, remembered in the browser only.
+
 ## Desktop notifications
 
 `elly -notify` sends a desktop notification through `notify-send` when a PR
@@ -37,7 +54,8 @@ gains a reason to act: your PR approved or with changes requested, someone
 else commenting on your PR, a reply to your thread, or a review requested from
 you. Each reason notifies once, until it goes away and comes back. The first
 start records what is already there without notifying, and more than three in
-one fetch arrive as one summary. Clicking a notification opens elly.
+one fetch arrive as one summary. Clicking a notification opens `/next` at
+that PR's row; for a summary, at the highest-ranked PR in it.
 
 `-work-owners=org1,org2` limits those owners to the reasons above. A PR whose
 repo owner is not listed, such as an open-source contribution, notifies on

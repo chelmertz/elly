@@ -109,7 +109,7 @@ func TestPropCoalesceNeverSendsMoreThanTheLimit(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		n := rapid.IntRange(0, 20).Draw(t, "n")
 		ns := make([]Notification, n)
-		got := Coalesce(ns)
+		got := Coalesce(ns, func(string) int { return 0 })
 		if len(got) > maxPerFetch || (n > 0 && len(got) == 0) {
 			t.Fatalf("%d notifications became %d", n, len(got))
 		}

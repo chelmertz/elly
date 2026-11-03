@@ -4,6 +4,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -160,4 +163,42 @@ func (pr ViewPr) String() string {
 		return fmt.Sprintf("error marshaling view pr: %v", err)
 	}
 	return string(b)
+}
+
+// Anchor is the PR's element id on the /next page, derived from its URL alone
+// so a desktop notification, which carries only the URL, can link straight to
+// the row: https://github.com/Owner/repo.name/pull/7 is pr-owner-repo-name-7.
+// Anything outside [a-z0-9-] becomes a dash, so a hostile URL cannot break
+// out of the id or the fragment.
+func Anchor(prUrl string) string {
+	u, err := url.Parse(prUrl)
+	path := prUrl
+	if err == nil {
+		path = u.Path
+	}
+	parts := strings.FieldsFunc(path, func(r rune) bool { return r == '/' })
+	parts = slices.DeleteFunc(parts, func(s string) bool { return s == "pull" })
+	var b strings.Builder
+	b.WriteString("pr")
+	for _, p := range parts {
+		b.WriteByte('-')
+		for _, r := range strings.ToLower(p) {
+			if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' {
+				b.WriteRune(r)
+			} else {
+				b.WriteByte('-')
+			}
+		}
+	}
+	return b.String()
+}
+
+// Number is the PR number from its URL, or "" when the URL does not end in
+// one.
+func Number(prUrl string) string {
+	n := prUrl[strings.LastIndexByte(prUrl, '/')+1:]
+	if n == "" || strings.Trim(n, "0123456789") != "" {
+		return ""
+	}
+	return n
 }

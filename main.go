@@ -16,6 +16,7 @@ import (
 	"github.com/chelmertz/elly/internal/backoff"
 	"github.com/chelmertz/elly/internal/github"
 	"github.com/chelmertz/elly/internal/notify"
+	"github.com/chelmertz/elly/internal/points"
 	"github.com/chelmertz/elly/internal/server"
 	"github.com/chelmertz/elly/internal/storage"
 	"github.com/chelmertz/elly/internal/types"
@@ -260,7 +261,8 @@ func notifyChanges(store storage.Storage, username string, workOwners []string, 
 		logger.Warn("could not store notify state, sending nothing", slog.Any("error", err))
 		return
 	}
-	for _, n := range notify.Coalesce(ns) {
+	pos := points.Rank(store.Prs().Prs, username, time.Now())
+	for _, n := range notify.Coalesce(ns, func(prUrl string) int { return pos[prUrl] }) {
 		send(n)
 	}
 }

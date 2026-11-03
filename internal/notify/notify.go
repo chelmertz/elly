@@ -97,12 +97,20 @@ func Diff(seen map[string][]string, prs []types.ViewPr, username string, workOwn
 	return out, next
 }
 
-// Coalesce folds more than maxPerFetch notifications into one summary.
-func Coalesce(ns []Notification) []Notification {
+// Coalesce folds more than maxPerFetch notifications into one summary. The
+// summary keeps the URL of the PR that rank puts first (lowest position), so
+// clicking it opens the page at the PR most worth acting on.
+func Coalesce(ns []Notification, rank func(prUrl string) int) []Notification {
 	if len(ns) <= maxPerFetch {
 		return ns
 	}
-	return []Notification{{Title: "elly", Body: fmt.Sprintf("%d PRs changed", len(ns))}}
+	first := ns[0].PrUrl
+	for _, n := range ns[1:] {
+		if rank(n.PrUrl) < rank(first) {
+			first = n.PrUrl
+		}
+	}
+	return []Notification{{PrUrl: first, Title: "elly", Body: fmt.Sprintf("%d PRs changed", len(ns))}}
 }
 
 // escape makes text safe for a notification daemon that renders markup, such
@@ -111,7 +119,8 @@ func escape(s string) string {
 	return html.EscapeString(s)
 }
 
-// Sender shows notifications with notify-send. Clicking one opens PageUrl.
+// Sender shows notifications with notify-send. Clicking one opens the /next
+// page under PageUrl, scrolled to the PR's row.
 type Sender struct {
 	Bin     string
 	PageUrl string
@@ -129,9 +138,19 @@ func (s Sender) Send(n Notification) {
 			return
 		}
 		if strings.TrimSpace(string(out)) == "default" {
-			if err := exec.Command("xdg-open", s.PageUrl).Start(); err != nil {
+			if err := exec.Command("xdg-open", s.openUrl(n)).Start(); err != nil {
 				s.Logger.Warn("could not open elly page", slog.Any("error", err))
 			}
 		}
 	}()
+}
+
+// openUrl is the page a click on n opens: the PR's row on /next, or /next
+// itself for a notification without a PR.
+func (s Sender) openUrl(n Notification) string {
+	u := strings.TrimSuffix(s.PageUrl, "/") + "/next"
+	if n.PrUrl == "" {
+		return u
+	}
+	return u + "#" + types.Anchor(n.PrUrl)
 }
