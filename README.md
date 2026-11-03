@@ -122,6 +122,10 @@ it requests. It answers only these:
   cross-site form cannot send without a preflight elly never answers. A
   request with `Authorization: Bearer …` is exempt, since a browser cannot
   add that cross-site without a preflight either.
+- **A slow client** cannot hold a connection: headers must arrive within 5
+  s, the request within 15 s, the answer is written within 30 s (5 minutes
+  for checking a pasted token), and an idle connection closes after a
+  minute. No body is read past 1 MiB.
 - **Every response**, refusals and 404s included, forbids framing
   (`frame-ancestors 'none'`, `X-Frame-Options: DENY`), so no other site can
   lay a decoy over a page and take the user's click, and sends `nosniff`,

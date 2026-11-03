@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+// maxBody caps every request body; routes that take one cap theirs lower.
+const maxBody = 1 << 20
+
 // guard stops web pages from talking to elly. It listens on localhost, where
 // a browser lets any site send it requests: a cross-site POST arrives without
 // a CORS preflight, and DNS rebinding lets a site read responses by pointing
@@ -26,6 +29,7 @@ import (
 //     cannot send without a preflight elly never answers. A request with a
 //     bearer token is exempt: a browser cannot add one cross-site without a
 //     preflight either.
+//   - No body is read past maxBody.
 //   - Every response, refusals and 404s included, carries the base headers:
 //     no framing (a site that frames a page could lay a decoy over it and
 //     land the user's click on an Approve link), nosniff, a same-origin
@@ -59,6 +63,7 @@ func guard(listen string, allowedHosts []string, next http.Handler) http.Handler
 				return
 			}
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 		next.ServeHTTP(w, r)
 	})
 }

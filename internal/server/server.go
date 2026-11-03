@@ -41,6 +41,10 @@ func pageDegradations(ds []types.Degradation) []types.Degradation {
 	return out
 }
 
+// patWriteTimeout is how long checking a pasted token may take: one
+// minute per GitHub request, and validation makes several.
+const patWriteTimeout = 5 * time.Minute
+
 // maxPatBody fits any GitHub token several times over.
 const maxPatBody = 4 << 10
 
@@ -142,8 +146,25 @@ func parseNext() (*template.Template, error) {
 func ServeWeb(webConfig HttpServerConfig) {
 	mux := routes(webConfig)
 	webConfig.Logger.Info("starting web server at", slog.String("url", "http://"+webConfig.Url))
-	serverErr := http.ListenAndServe(webConfig.Url, guard(webConfig.Url, webConfig.AllowedHosts, mux))
-	check(serverErr)
+	check(newHTTPServer(webConfig.Url, guard(webConfig.Url, webConfig.AllowedHosts, mux), defaultTimeouts).ListenAndServe())
+}
+
+type serverTimeouts struct{ header, read, write, idle time.Duration }
+
+// defaultTimeouts keep a slow or silent client from holding a connection.
+// Checking a pasted token takes longer than write; its route extends its
+// own deadline (patWriteTimeout).
+var defaultTimeouts = serverTimeouts{header: 5 * time.Second, read: 15 * time.Second, write: 30 * time.Second, idle: time.Minute}
+
+func newHTTPServer(addr string, handler http.Handler, t serverTimeouts) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: t.header,
+		ReadTimeout:       t.read,
+		WriteTimeout:      t.write,
+		IdleTimeout:       t.idle,
+	}
 }
 
 // routes registers every handler on a mux of its own, so tests can build it.
@@ -274,6 +295,9 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 			return
 		}
 		defer validating.Unlock()
+		// The check can outlast the server's write timeout. A recorder in
+		// tests does not support deadlines, which only loses the extension.
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(patWriteTimeout))
 
 		// Validate the token with GitHub (checks both authentication and
 		// required scopes). GitHub's text goes to the log only; the token
