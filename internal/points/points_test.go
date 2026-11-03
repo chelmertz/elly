@@ -93,6 +93,17 @@ func Test_ReviewedPr_DoesNotAskForReviewers(t *testing.T) {
 	}
 }
 
+// A draft is not asking for review yet, so it is not missing reviewers.
+func Test_Draft_DoesNotAskForReviewers(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{Author: "me", LastUpdated: now, IsDraft: true}
+	for _, r := range StandardPrPoints(pr, "me", now).Reasons {
+		if strings.Contains(r, "add reviewers") {
+			t.Fatalf("a draft was told to add reviewers: %q", r)
+		}
+	}
+}
+
 func Test_RereviewPending_AddsPointsOnOwnPr(t *testing.T) {
 	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
 	pr := types.ViewPr{Author: "me", Url: "https://github.com/o/r/pull/1", LastUpdated: now, ReviewRequestedFromUsers: []string{"adam"}, RereviewFrom: []string{"adam"}}

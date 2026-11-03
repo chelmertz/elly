@@ -304,9 +304,8 @@
         "Annotations": null
       },
       "Points": {
-        "Total": 11,
+        "Total": 1,
         "Reasons": [
-          "+10: You should add reviewers",
           "+11: Your PR has not been updated in a while, you should take actions",
           "-10: PR is my draft"
         ]
@@ -535,9 +534,8 @@
         "Annotations": null
       },
       "Points": {
-        "Total": 11,
+        "Total": 1,
         "Reasons": [
-          "+10: You should add reviewers",
           "+11: Your PR has not been updated in a while, you should take actions",
           "-10: PR is my draft"
         ]
@@ -573,9 +571,8 @@
         "Annotations": null
       },
       "Points": {
-        "Total": 11,
+        "Total": 1,
         "Reasons": [
-          "+10: You should add reviewers",
           "+11: Your PR has not been updated in a while, you should take actions",
           "-10: PR is my draft"
         ]
@@ -689,9 +686,8 @@
         "Annotations": null
       },
       "Points": {
-        "Total": 61,
+        "Total": 51,
         "Reasons": [
-          "+10: You should add reviewers",
           "+11: Your PR has not been updated in a while, you should take actions",
           "+50: Merge conflict with the base branch - rebase before asking anyone to review",
           "-10: PR is my draft"
@@ -728,10 +724,9 @@
         "Annotations": null
       },
       "Points": {
-        "Total": 21,
+        "Total": 11,
         "Reasons": [
           "+10: Someone else commented last (user9)",
-          "+10: You should add reviewers",
           "+11: Your PR has not been updated in a while, you should take actions",
           "-10: PR is my draft"
         ]
@@ -767,9 +762,8 @@
         "Annotations": null
       },
       "Points": {
-        "Total": 61,
+        "Total": 51,
         "Reasons": [
-          "+10: You should add reviewers",
           "+11: Your PR has not been updated in a while, you should take actions",
           "+50: CI is failing - fix it before asking anyone to review",
           "-10: PR is my draft"
@@ -990,9 +984,8 @@
         "Annotations": null
       },
       "Points": {
-        "Total": 91,
+        "Total": 81,
         "Reasons": [
-          "+10: You should add reviewers",
           "+11: Your PR has not been updated in a while, you should take actions",
           "+80: Someone asked us something, or reacted to our comment (2 comments)",
           "-10: PR is my draft"
