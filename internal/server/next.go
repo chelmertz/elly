@@ -36,7 +36,10 @@ type nextGroup struct {
 	Folded  bool
 	// Heading is false for the first group, which the page shows without one.
 	Heading bool
-	Rows    []nextRow
+	// FirstFolded opens the block of folded groups, set apart from the rows
+	// on the user.
+	FirstFolded bool
+	Rows        []nextRow
 }
 
 type nextRow struct {
@@ -167,8 +170,13 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 		}
 		byGroup[turn.Group] = append(byGroup[turn.Group], row)
 	}
+	folded := false
 	for i, g := range points.Groups {
-		data.Groups = append(data.Groups, nextGroup{Name: g.Name(), NavName: strings.SplitN(g.Name(), " · ", 2)[0], Slug: g.Slug(), Folded: g.Folded(), Heading: i > 0, Rows: byGroup[g]})
+		ng := nextGroup{Name: g.Name(), NavName: strings.SplitN(g.Name(), " · ", 2)[0], Slug: g.Slug(), Folded: g.Folded(), Heading: i > 0, Rows: byGroup[g]}
+		if ng.Folded && len(ng.Rows) > 0 && !folded {
+			ng.FirstFolded, folded = true, true
+		}
+		data.Groups = append(data.Groups, ng)
 	}
 	if data.OnYou > 0 {
 		data.OldestOnYou = duration(oldest)

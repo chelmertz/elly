@@ -58,8 +58,12 @@ func TestNextRendersEachGroupAndRowAnchor(t *testing.T) {
 	}
 	page := renderNext(t, data)
 	for _, g := range points.Groups {
-		if g != points.GroupOneClick && !strings.Contains(html.UnescapeString(page), `<h2 class="group-head">`+g.Name()) {
-			t.Errorf("page lacks the heading %q", g.Name())
+		heading := `<h2 class="group-head">` + g.Name()
+		if g.Folded() {
+			heading = `<span class="fold-name">` + g.Name() + `</span><span class="fold-count">1</span>`
+		}
+		if g != points.GroupOneClick && !strings.Contains(html.UnescapeString(page), heading) {
+			t.Errorf("page lacks the heading %q", heading)
 		}
 		if !strings.Contains(page, `id="`+g.Slug()+`"`) {
 			t.Errorf("page lacks the group anchor %q", g.Slug())
@@ -200,7 +204,7 @@ func TestNextShowsWhatNeedsTheUserUnderTheRow(t *testing.T) {
 	for _, want := range []string{
 		`<div class="ask">the round has a question for you: &lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt; &amp; &#34;quotes&#34;</div>`,
 		`<div class="ask">a post was refused over the limit</div>`,
-		`<div class="row stuck">`,
+		`<li class="pr stuck" id="pr-o-r-2"`,
 		`<span class="tag stuck">claude ! stuck</span>`,
 		`<div class="note">started by a click</div>`,
 		`<div class="note">round posted its review</div>`,
@@ -209,7 +213,7 @@ func TestNextShowsWhatNeedsTheUserUnderTheRow(t *testing.T) {
 			t.Errorf("page lacks %s", want)
 		}
 	}
-	if strings.Count(page, `class="row stuck"`) != 1 {
+	if strings.Count(page, `class="pr stuck"`) != 1 {
 		t.Error("only the stuck row has the stuck edge")
 	}
 }
@@ -225,5 +229,39 @@ func TestNextAttachVerbFollowsTheAnnotationLink(t *testing.T) {
 	}
 	if page := renderNext(t, data); !strings.Contains(page, `href="claude-review://o/r/1/attach">Attach</a>`) {
 		t.Error("the Attach verb does not follow the annotation link")
+	}
+}
+
+// An empty group takes no room in the list; the menu keeps its name with a
+// dimmed zero that links nowhere.
+func TestNextLeavesEmptyGroupsOut(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	prs := nextFixture(now)[1:] // without the buried PR
+	page := renderNext(t, buildNext(prs, "me", now, nil))
+	if strings.Contains(page, `id="buried"`) || strings.Contains(page, `id="buried-list"`) {
+		t.Error("the empty Buried group rendered in the list")
+	}
+	if !strings.Contains(page, `<span class="zero"><span>Buried</span><span>0</span></span>`) {
+		t.Error("the menu lacks a dimmed Buried 0")
+	}
+	if strings.Contains(page, `href="#buried"`) {
+		t.Error("the menu links to a group that is not on the page")
+	}
+}
+
+// Each folded group is one full-width toggle, and the first of them opens
+// the folded block apart from the rows on the user.
+func TestNextFoldedGroupsAreOneToggleRowEach(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	page := renderNext(t, buildNext(nextFixture(now), "me", now, nil))
+	want := `<button type="button" class="fold" aria-expanded="false" aria-controls="with-claude-list"><span class="fold-name">With claude · handed over, nothing for you</span><span class="fold-count">1</span></button>`
+	if !strings.Contains(page, want) {
+		t.Errorf("page lacks %s", want)
+	}
+	if strings.Count(page, `class="group folded first-folded"`) != 1 || !strings.Contains(page, `<section class="group folded first-folded" id="with-claude"`) {
+		t.Error("With claude does not open the folded block, or more than one group does")
+	}
+	if strings.Contains(page, ">show ") {
+		t.Error("a folded heading still says show N")
 	}
 }
