@@ -145,9 +145,12 @@ func (pr ViewPr) ChecksRed() bool {
 	return pr.ChecksState == "FAILURE" || pr.ChecksState == "ERROR"
 }
 
-// URL- and filesystem friendly ID of a PR.
+// Id is the PR's URL in URL-safe base64, for paths: the standard alphabet
+// holds "/", which would split the path segment. elly's routes decode both
+// alphabets (decodePrId in internal/server), since claude-review sends the
+// standard one (annotationURL in its elly.go).
 func (pr ViewPr) Id() string {
-	return base64.StdEncoding.EncodeToString([]byte(pr.Url))
+	return base64.URLEncoding.EncodeToString([]byte(pr.Url))
 }
 
 // ToggleBuryUrl() introduces the concept of base64-encoded-PR-URL as an "ID", in the

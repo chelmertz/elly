@@ -167,6 +167,17 @@ func newHTTPServer(addr string, handler http.Handler, t serverTimeouts) *http.Se
 	}
 }
 
+// decodePrId reads a PR id from a path: base64 of the PR URL, in the URL-safe
+// alphabet the page's links use (types.ViewPr.Id) or the standard one
+// claude-review sends (annotationURL in its elly.go).
+func decodePrId(id string) (string, error) {
+	b, err := base64.URLEncoding.DecodeString(id)
+	if err != nil {
+		b, err = base64.StdEncoding.DecodeString(id)
+	}
+	return string(b), err
+}
+
 // routes registers every handler on a mux of its own, so tests can build it.
 func routes(webConfig HttpServerConfig) *http.ServeMux {
 	mux := http.NewServeMux()
@@ -176,13 +187,12 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 	registerAnnotationRoutes(mux, webConfig)
 
 	mux.HandleFunc("POST /api/v0/prs/{prUrl}/{action}", func(w http.ResponseWriter, r *http.Request) {
-		prUrlBytes, err := base64.StdEncoding.DecodeString(r.PathValue("prUrl"))
+		ghPrUrl, err := decodePrId(r.PathValue("prUrl"))
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprint(w, "invalid PR ID") //nolint:errcheck // best-effort response body
 			return
 		}
-		ghPrUrl := string(prUrlBytes)
 
 		action := r.PathValue("action")
 

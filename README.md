@@ -97,7 +97,9 @@ PUT    /api/v0/prs/{base64 PR url}/annotations/{source}
 DELETE /api/v0/prs/{base64 PR url}/annotations/{source}
 ```
 
-Writes need `Authorization: Bearer <token>`, where the token is in
+The id is the PR URL in base64, padded, in either the standard or the
+URL-safe alphabet; the page's own links use URL-safe, since a standard id can
+hold `/`. Writes need `Authorization: Bearer <token>`, where the token is in
 `$XDG_RUNTIME_DIR/elly/annotation-token` (or `-annotation-token-file`),
 readable only by the user and new on every start. Links must be https, or use
 a scheme named in `-annotation-schemes`; elly shows a custom-scheme link's

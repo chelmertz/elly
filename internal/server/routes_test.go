@@ -459,3 +459,35 @@ func TestPatClearDuringValidationWins(t *testing.T) {
 		t.Errorf("the PUT that lost: %d %q, want 409", rec.Code, rec.Body)
 	}
 }
+
+// A PR id is base64 of its URL. The page's bury links use the URL-safe
+// alphabet, since a standard id can hold "/" and then names another route;
+// the routes accept both alphabets, so claude-review's standard ids
+// (annotationURL in its elly.go) keep working.
+func TestPrIdsInPathsTakeBothBase64Alphabets(t *testing.T) {
+	w := newRoutes(t, "")
+	const odd = "https://github.com/o/r/pull/1?" // its standard base64 ends in "/"
+	if err := w.store.StoreRepoPrs([]types.ViewPr{{Url: odd, Author: "a", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+		t.Fatal(err)
+	}
+	bury := types.ViewPr{Url: odd}.ToggleBuryUrl()
+	if bury != "/api/v0/prs/aHR0cHM6Ly9naXRodWIuY29tL28vci9wdWxsLzE_/bury" {
+		t.Errorf("bury link %q, want the URL-safe id", bury)
+	}
+	if rec := w.do("POST", bury, ""); rec.Code != http.StatusNoContent || !w.store.Prs().Prs[0].Buried {
+		t.Errorf("the page's bury link: %d", rec.Code)
+	}
+	// claude-review's standard id for an ordinary PR URL
+	if rec := w.do("POST", "/api/v0/prs/aHR0cHM6Ly9naXRodWIuY29tL28vci9wdWxsLzE=/unbury", ""); rec.Code != http.StatusNoContent {
+		t.Errorf("a standard id: %d", rec.Code)
+	}
+	// the annotation routes decode with the same function
+	for _, id := range []string{"aHR0cHM6Ly9naXRodWIuY29tL28vci9wdWxsLzE_", "aHR0cHM6Ly9naXRodWIuY29tL28vci9wdWxsLzE/"} {
+		if got, err := decodePrId(id); err != nil || got != odd {
+			t.Errorf("decodePrId(%q) = %q, %v", id, got, err)
+		}
+	}
+	if _, err := decodePrId("@@@"); err == nil {
+		t.Error("an id in neither alphabet decoded")
+	}
+}

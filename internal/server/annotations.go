@@ -3,7 +3,6 @@ package server
 import (
 	"crypto/rand"
 	"crypto/subtle"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -176,12 +175,12 @@ func registerAnnotationRoutes(mux *http.ServeMux, cfg HttpServerConfig) {
 		return true
 	}
 	prUrl := func(w http.ResponseWriter, r *http.Request) (string, bool) {
-		b, err := base64.StdEncoding.DecodeString(r.PathValue("prUrl"))
+		u, err := decodePrId(r.PathValue("prUrl"))
 		if err != nil {
 			http.Error(w, "invalid PR ID", http.StatusBadRequest)
 			return "", false
 		}
-		return string(b), true
+		return u, true
 	}
 
 	mux.HandleFunc("PUT /api/v0/prs/{prUrl}/annotations/{source}", func(w http.ResponseWriter, r *http.Request) {
