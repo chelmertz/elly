@@ -65,14 +65,14 @@ type nextRow struct {
 	Stuck bool
 	// Ask is the note of an annotation that needs the user, shown under the
 	// row; Note is claude-review's note on a PR handed over to it.
-	Ask         string
-	Note        string
-	Why         []string
-	History     []nextEvent
-	State       []string
-	Links       []nextLink
-	BuryUrl     string
-	Buried      bool
+	Ask     string
+	Note    string
+	Why     []string
+	History []nextEvent
+	State   []string
+	Links   []nextLink
+	BuryUrl string
+	Buried  bool
 }
 
 type nextTag struct {

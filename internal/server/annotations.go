@@ -26,7 +26,7 @@ import (
 
 // Limits on what another tool may write; elly renders all of it, escaped.
 const (
-	maxAnnotationBody  = 4 << 10
+	maxAnnotationBody = 4 << 10
 	// maxAnnotationNote fits claude-review's longest note, a question of up
 	// to 200 characters behind its prefix (maxQuestionNote in its outcome.go).
 	maxAnnotationNote  = 300

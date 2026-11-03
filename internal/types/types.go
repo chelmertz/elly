@@ -117,9 +117,10 @@ type AnnotationLink struct {
 const (
 	AnnotationHandled  = "handled"
 	AnnotationNeedsYou = "needs_you"
-	// AnnotationRunning says the tool is working on the PR right now. It is
-	// shown and scores nothing; the tool replaces it with handled or
-	// needs_you when it finishes, or it expires.
+	// AnnotationRunning says the tool is working on the PR right now. Like
+	// handled, it drops the PR's review-owed reasons: the user handed the PR
+	// over. The tool replaces it with another state when it finishes, or it
+	// expires.
 	AnnotationRunning = "running"
 	// AnnotationStuck says nothing will move the PR until the user acts: the
 	// tool stopped working on it. It counts like needs_you, and the page

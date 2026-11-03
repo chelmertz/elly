@@ -200,8 +200,8 @@ func HandedOver(pr types.ViewPr, source string) bool {
 	return false
 }
 
-// needsYouPoints is where a needs_you or stuck annotation lifts a PR: as high as an own
-// approved PR, since both are one action away from done.
+// needsYouPoints is where a needs_you or stuck annotation lifts a PR: as
+// high as an own approved PR, since both are one action away from done.
 const needsYouPoints = 100
 
 // annotationNotes returns "source: note" for each annotation in that state.

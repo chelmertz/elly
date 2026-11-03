@@ -68,7 +68,7 @@ const icebox = 14 * 24 * time.Hour
 //   - An annotation link labelled Approve (or ending in /approve) makes it one
 //     click from done, unless CI is red: a tool's verdict does not outrank a
 //     red build, which is the author's to fix.
-//   - A needs_you annotation, or an approve link, keeps a PR out of the
+//   - A needs_you or stuck annotation, or an approve link, keeps a PR out of the
 //     icebox: an annotation lives at most 24 hours, so a tool looked at it
 //     recently even when github shows no activity.
 //   - The icebox is checked before everything else on purpose, own PRs and
