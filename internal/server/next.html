@@ -305,7 +305,7 @@ nav.side .meta .token + p { margin-top: var(--s3); }
         {{end}}
         <ol id="{{$g.Slug}}-list"{{if $g.Folded}} hidden{{end}}>
         {{range $r := $g.Rows}}
-            <li class="pr{{if $r.Stuck}} stuck{{end}}" id="{{$r.Anchor}}" data-search="{{$r.Search}}" data-url="{{$r.Url}}"{{if $r.OnYou}} data-turn-at="{{$r.TurnAt}}"{{end}}>
+            <li class="pr{{if $r.Stuck}} stuck{{end}}" id="{{$r.Anchor}}" data-search="{{$r.Search}}" {{with $r.PrHref}} data-url="{{.}}"{{end}}{{if $r.OnYou}} data-turn-at="{{$r.TurnAt}}"{{end}}>
                 <div class="row">
                     <button type="button" class="toggle" aria-expanded="false" aria-controls="{{$r.Anchor}}-panel">
                         <span class="dot" aria-hidden="true"></span>
@@ -315,7 +315,7 @@ nav.side .meta .token + p { margin-top: var(--s3); }
                         <span class="who">{{$r.Repo}} · {{$r.Author}}</span>
                         <span class="wait {{if eq $r.Bucket "week+"}}week{{else}}{{$r.Bucket}}{{end}}" title="since the last activity by someone else">{{$r.Bucket}}</span>
                     </button>
-                    <a class="verb{{if $r.VerbPrimary}} primary{{end}}" href="{{$r.VerbHref}}"{{with $r.VerbTitle}} title="{{.}}"{{end}}>{{$r.Verb}}</a>
+                    <a class="verb{{if $r.VerbPrimary}} primary{{end}}"{{with $r.VerbHref}} href="{{.}}"{{end}}{{with $r.VerbTitle}} title="{{.}}"{{end}}>{{$r.Verb}}</a>
                 </div>
                 {{with $r.Ask}}<div class="ask">{{.}}</div>{{end}}
                 {{with $r.Note}}<div class="note">{{.}}</div>{{end}}
@@ -336,7 +336,7 @@ nav.side .meta .token + p { margin-top: var(--s3); }
                         <h3>State</h3>
                         <ul>{{range $r.State}}<li>{{.}}</li>{{end}}</ul>
                         <div class="links">
-                            <a href="{{$r.Url}}">Open</a>
+                            {{with $r.PrHref}}<a href="{{.}}">Open</a>{{end}}
                             <button type="button" class="bury" data-url="{{$r.BuryUrl}}">{{if $r.Buried}}Unbury{{else}}Bury{{end}}</button>
                             {{range $r.Links}}<a href="{{.Href}}">{{.Label}}</a>{{with .Verb}}<span class="scheme">{{.}}</span>{{end}}{{end}}
                         </div>
@@ -514,7 +514,7 @@ nav.side .meta .token + p { margin-top: var(--s3); }
         case "Enter":
             // on the row itself; Enter on a link or button in its panel stays theirs
             if (!pr || !document.activeElement.classList.contains("toggle")) return;
-            window.open(pr.dataset.url, "_blank", "noopener");
+            if (pr.dataset.url) window.open(pr.dataset.url, "_blank", "noopener");
             break;
         case "o": if (!pr) return; setOpen(pr, !pr.classList.contains("open")); break;
         case "b": if (!pr) return; pr.querySelector("button.bury").click(); break;

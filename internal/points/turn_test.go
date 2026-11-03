@@ -65,6 +65,7 @@ func TestTurnOf(t *testing.T) {
 		if c.name == "no username owns nothing" {
 			user = ""
 		}
+		c.pr.Url = "https://github.com/o/r/pull/1" // the PR the annotation links name
 		got := TurnOf(c.pr, user, now)
 		if got.Group != c.want || got.Verb != c.verb {
 			t.Errorf("%s: got %s/%s, want %s/%s", c.name, got.Group.Name(), got.Verb, c.want.Name(), c.verb)
@@ -95,7 +96,7 @@ func TestRankOrdersByGroupBeforePoints(t *testing.T) {
 // Attach follows the annotation's attach link; a stuck PR says why it waits.
 func TestTurnOfVerbUrlsAndReasons(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
-	running := types.ViewPr{Author: "a", LastUpdated: now, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning,
+	running := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning,
 		Links: []types.AnnotationLink{{Label: "Round summary", Url: "https://github.com/o/r/pull/1#r"}, {Label: "Attach", Url: "claude-review://o/r/1/attach"}}}}}
 	if got := TurnOf(running, "me", now); got.VerbUrl != "claude-review://o/r/1/attach" {
 		t.Errorf("running: verb url %q", got.VerbUrl)
@@ -138,6 +139,47 @@ func TestLinkDoesMatchesThePathsLastSegment(t *testing.T) {
 	} {
 		if got := linkDoes(types.AnnotationLink{Url: c.url}, "attach"); got != c.want {
 			t.Errorf("%s: got %v, want %v", c.url, got, c.want)
+		}
+	}
+}
+
+// The verb is the row's one-click action, so it follows an annotation link
+// only when the link names the row's own PR: GitHub's page for it (or a
+// sub-path or fragment of that page), or a claude-review verb for its
+// owner/repo/number. Any other link stays in the panel, labelled.
+func TestTurnVerbFollowsOnlyALinkToThisPr(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	const prUrl = "https://github.com/acme/widget/pull/1"
+	turn := func(state string, l types.AnnotationLink) Turn {
+		return TurnOf(types.ViewPr{Url: prUrl, Author: "a", LastUpdated: now,
+			Annotations: []types.Annotation{{Source: ClaudeReviewSource, State: state, Links: []types.AnnotationLink{l}}}}, "me", now)
+	}
+	for _, c := range []struct {
+		name, state string
+		link        types.AnnotationLink
+		follows     bool
+	}{
+		{"approve on this PR", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "claude-review://acme/widget/1/approve"}, true},
+		{"approve on this PR, case folded", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "claude-review://ACME/Widget/1/approve"}, true},
+		{"approve on another PR", types.AnnotationHandled, types.AnnotationLink{Label: "details", Url: "claude-review://victim/other/99/approve"}, false},
+		{"approve on another number", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "claude-review://acme/widget/12/approve"}, false},
+		{"approve on another host", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://evil.example/login"}, false},
+		{"approve on github, another PR", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://github.com/acme/widget/pull/12"}, false},
+		{"approve on github, this PR's files", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://github.com/acme/widget/pull/1/files#diff"}, true},
+		{"github path that climbs out", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://github.com/acme/widget/pull/1/../../../evil/pull/1"}, false},
+		{"github lookalike host", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://github.com.evil.example/acme/widget/pull/1"}, false},
+		{"github with userinfo", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://x@github.com/acme/widget/pull/1"}, false},
+		{"needs_you link to this PR", types.AnnotationNeedsYou, types.AnnotationLink{Label: "diff", Url: prUrl + "/files"}, true},
+		{"needs_you link elsewhere", types.AnnotationNeedsYou, types.AnnotationLink{Label: "diff", Url: "https://evil.example/diff"}, false},
+		{"attach this PR", types.AnnotationRunning, types.AnnotationLink{Label: "Attach", Url: "claude-review://acme/widget/1/attach"}, true},
+		{"attach another PR", types.AnnotationRunning, types.AnnotationLink{Label: "Attach", Url: "claude-review://victim/other/99/approve"}, false},
+	} {
+		got := turn(c.state, c.link)
+		if (got.VerbUrl != "") != c.follows {
+			t.Errorf("%s: VerbUrl %q, follows %v", c.name, got.VerbUrl, c.follows)
+		}
+		if !c.follows && got.Group == GroupOneClick {
+			t.Errorf("%s: a link to somewhere else made the PR one click from done", c.name)
 		}
 	}
 }

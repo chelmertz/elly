@@ -100,8 +100,11 @@ Writes need `Authorization: Bearer <token>`, where the token is in
 `$XDG_RUNTIME_DIR/elly/annotation-token` (or `-annotation-token-file`),
 readable only by the user and new on every start. Links must be https, or use
 a scheme named in `-annotation-schemes`; elly shows a custom-scheme link's
-last path segment beside its label. `GET /api/v0/prs` returns each PR's live
-annotations.
+last path segment beside its label. A row's one action follows an annotation
+link only when the link names that PR: its GitHub page (or a sub-path or
+fragment of it), or a `claude-review://owner/repo/number` link. Every other
+link stays in the row's details. A PR whose URL is not a GitHub PR URL gets no
+link at all. `GET /api/v0/prs` returns each PR's live annotations.
 
 ## What elly lets in
 

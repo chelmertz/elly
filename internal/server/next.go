@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"html/template"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -81,6 +80,8 @@ type nextRow struct {
 	Number string
 	Title  string
 	Url    string
+	// PrHref is Url as a link, or "" when Url is not a GitHub PR URL.
+	PrHref template.URL
 	// Repo is the bare repository name, or owner/name when two listed PRs
 	// come from repositories with the same name.
 	Repo   string
@@ -159,7 +160,13 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes, revi
 		if len(owners[pr.RepoName]) > 1 {
 			repo = pr.RepoOwner + "/" + pr.RepoName
 		}
-		verbHref := href(pr.Url)
+		// The PR's own URL is a link only when it is a GitHub PR URL; the
+		// verb, Open and the "o" key render no link otherwise.
+		var prHref template.URL
+		if _, _, _, ok := types.PrParts(pr.Url); ok {
+			prHref = template.URL(pr.Url) //nolint:gosec // a github.com PR URL, checked just above
+		}
+		verbHref := prHref
 		if turn.VerbUrl != "" {
 			verbHref = href(turn.VerbUrl)
 		}
@@ -172,6 +179,7 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes, revi
 			Number:      types.Number(pr.Url),
 			Title:       pr.Title,
 			Url:         pr.Url,
+			PrHref:      prHref,
 			Repo:        repo,
 			Author:      pr.Author,
 			Search:      strings.ToLower(types.Number(pr.Url) + " " + pr.Title + " " + repo + " " + pr.Author),
@@ -484,23 +492,18 @@ func stateFacts(pr types.ViewPr, username string) []string {
 	return out
 }
 
-// prUrlParts takes a GitHub PR URL apart. Owner and repo are GitHub's
-// characters only, and never "." or "..", so a link built from them cannot
-// step out of its path.
-var prUrlParts = regexp.MustCompile(`^https://github\.com/([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)/pull/([1-9][0-9]*)$`)
-
 // startUrl is the claude-review link that starts a round on pr, or "" when
 // pr is outside reviewRepos. The match is claude-review's repoAllowed:
 // "owner/*" or "owner/repo", case-insensitive.
 func startUrl(pr types.ViewPr, reviewRepos []string) string {
-	m := prUrlParts.FindStringSubmatch(pr.Url)
-	if m == nil || m[1] == "." || m[1] == ".." || m[2] == "." || m[2] == ".." {
+	owner, repo, number, ok := types.PrParts(pr.Url)
+	if !ok {
 		return ""
 	}
 	for _, a := range reviewRepos {
 		o, r, _ := strings.Cut(strings.ToLower(a), "/")
-		if o == strings.ToLower(m[1]) && (r == "*" || r == strings.ToLower(m[2])) {
-			return "claude-review://" + m[1] + "/" + m[2] + "/" + m[3]
+		if o == strings.ToLower(owner) && (r == "*" || r == strings.ToLower(repo)) {
+			return "claude-review://" + owner + "/" + repo + "/" + number
 		}
 	}
 	return ""

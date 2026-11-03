@@ -509,3 +509,35 @@ func TestStateFacts(t *testing.T) {
 		}
 	}
 }
+
+// The PR's own URL is a link only when it is a GitHub PR URL: elly lists what
+// the search returns, and the verb, Open and the "o" key would otherwise
+// follow whatever a stored row says.
+func TestNextLinksThePrOnlyWhenItIsAGithubPrUrl(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		url  string
+		link bool
+	}{
+		{"https://github.com/o/r/pull/1", true},
+		{"https://evil.example/o/r/pull/1", false},
+		{"http://github.com/o/r/pull/1", false},
+		{"https://github.com/o/r/pull/1/../../x", false},
+	} {
+		pr := types.ViewPr{Url: c.url, Author: "a", LastUpdated: now}
+		data := buildNext([]types.ViewPr{pr}, "me", now, nil, nil)
+		var row nextRow
+		for _, g := range data.Groups {
+			for _, r := range g.Rows {
+				row = r
+			}
+		}
+		if got := row.VerbHref != "" && row.PrHref != ""; got != c.link {
+			t.Errorf("%s: verb %q, open %q, want a link %v", c.url, row.VerbHref, row.PrHref, c.link)
+		}
+		page := renderNext(t, data)
+		if !c.link && strings.Contains(page, `href="`+html.EscapeString(c.url)) {
+			t.Errorf("%s: the page links it", c.url)
+		}
+	}
+}

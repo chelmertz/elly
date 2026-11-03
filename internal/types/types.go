@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -207,4 +208,50 @@ func Number(prUrl string) string {
 		return ""
 	}
 	return n
+}
+
+// prUrlPattern is a GitHub PR URL. Owner and repo are GitHub's characters
+// only; PrParts also refuses "." and "..", so a link built from them cannot
+// step out of its path.
+var prUrlPattern = regexp.MustCompile(`^https://github\.com/([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)/pull/([1-9][0-9]*)$`)
+
+// PrParts takes a GitHub PR URL apart, or reports ok false for anything else.
+func PrParts(prUrl string) (owner, repo, number string, ok bool) {
+	m := prUrlPattern.FindStringSubmatch(prUrl)
+	if m == nil || dotSegment(m[1]) || dotSegment(m[2]) {
+		return "", "", "", false
+	}
+	return m[1], m[2], m[3], true
+}
+
+func dotSegment(s string) bool { return s == "." || s == ".." }
+
+// LinkNamesPr reports whether link is about the PR at prUrl and nothing else:
+// GitHub's page for it (the URL itself, or a sub-path, query or fragment of
+// it), or a claude-review:// link for its owner/repo/number with at most a
+// verb after it. A row's one-click verb follows only such a link; any other
+// annotation link stays in the panel, under its label.
+func LinkNamesPr(prUrl, link string) bool {
+	owner, repo, number, ok := PrParts(prUrl)
+	if !ok {
+		return false
+	}
+	u, err := url.Parse(link)
+	if err != nil || u.User != nil || u.Opaque != "" {
+		return false
+	}
+	segments := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
+	if slices.ContainsFunc(segments, dotSegment) {
+		return false
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return strings.EqualFold(u.Host, "github.com") && len(segments) >= 4 &&
+			strings.EqualFold(segments[0], owner) && strings.EqualFold(segments[1], repo) &&
+			segments[2] == "pull" && segments[3] == number
+	case "claude-review":
+		return strings.EqualFold(u.Host, owner) && (len(segments) == 2 || len(segments) == 3) &&
+			strings.EqualFold(segments[0], repo) && segments[1] == number && u.RawQuery == "" && u.Fragment == ""
+	}
+	return false
 }

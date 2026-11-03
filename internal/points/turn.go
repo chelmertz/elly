@@ -54,7 +54,8 @@ type Turn struct {
 	Verb   string
 	Reason string
 	// VerbUrl is an annotation link the verb follows instead of the PR, or
-	// "". The page still checks it against the link allowlist.
+	// "". It always names this PR (types.LinkNamesPr), and the page still
+	// checks it against the link allowlist.
 	VerbUrl string
 }
 
@@ -65,9 +66,9 @@ const icebox = 14 * 24 * time.Hour
 // the pr-status skill: a PR that is red or owes a reply never comes out as
 // waiting on someone else. Choices where the fields leave it open:
 //
-//   - An annotation link labelled Approve (or ending in /approve) makes it one
-//     click from done, unless CI is red: a tool's verdict does not outrank a
-//     red build, which is the author's to fix.
+//   - An annotation link to this PR labelled Approve (or ending in /approve)
+//     makes it one click from done, unless CI is red: a tool's verdict does
+//     not outrank a red build, which is the author's to fix.
 //   - A needs_you or stuck annotation, or an approve link, keeps a PR out of the
 //     icebox: an annotation lives at most 24 hours, so a tool looked at it
 //     recently even when github shows no activity.
@@ -106,8 +107,11 @@ func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
 		if needsYou.State == types.AnnotationStuck {
 			t.Reason = needsYou.Source + " is stuck: only you can move it"
 		}
-		if len(needsYou.Links) > 0 {
-			t.VerbUrl = needsYou.Links[0].Url
+		for _, l := range needsYou.Links {
+			if types.LinkNamesPr(pr.Url, l.Url) {
+				t.VerbUrl = l.Url
+				break
+			}
 		}
 		return t
 	case !asked && pr.LastUpdated.Before(now.Add(-icebox)):
@@ -156,14 +160,15 @@ func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
 const ClaudeReviewSource = "claude-review"
 
 // annotationVerdict returns the first needs_you or stuck annotation, and the
-// first link of any annotation that approves the PR.
+// first link of any annotation that approves this PR. A link that approves
+// another PR is no verdict on this one.
 func annotationVerdict(pr types.ViewPr) (needsYou *types.Annotation, approveUrl string) {
 	for i, a := range pr.Annotations {
 		if (a.State == types.AnnotationNeedsYou || a.State == types.AnnotationStuck) && needsYou == nil {
 			needsYou = &pr.Annotations[i]
 		}
 		for _, l := range a.Links {
-			if approveUrl == "" && approves(l) {
+			if approveUrl == "" && approves(l) && types.LinkNamesPr(pr.Url, l.Url) {
 				approveUrl = l.Url
 			}
 		}
@@ -181,7 +186,7 @@ func attachUrl(pr types.ViewPr) string {
 			continue
 		}
 		for _, l := range a.Links {
-			if linkDoes(l, "attach") {
+			if linkDoes(l, "attach") && types.LinkNamesPr(pr.Url, l.Url) {
 				return l.Url
 			}
 		}
