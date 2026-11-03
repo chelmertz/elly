@@ -129,6 +129,29 @@ func replay(t *testing.T, rec recording) goldenResult {
 	return out
 }
 
+// -update rewrites every want file, so a replay must give the same bytes every
+// time: anything order-dependent would churn all of them and hide the change.
+func Test_Recordings_ReplayIsDeterministic(t *testing.T) {
+	for _, path := range recordingPaths(t) {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			rec := loadRecording(t, path)
+			first, err := json.Marshal(replay(t, rec))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < 5; i++ {
+				again, err := json.Marshal(replay(t, rec))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(again) != string(first) {
+					t.Fatalf("replay %d differs from the first", i+2)
+				}
+			}
+		})
+	}
+}
+
 func Test_Recordings_ReplayToTheExpectedPrsAndPoints(t *testing.T) {
 	for _, path := range recordingPaths(t) {
 		t.Run(filepath.Base(path), func(t *testing.T) {

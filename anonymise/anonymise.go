@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math/big"
 	"regexp"
 	"slices"
@@ -277,7 +278,9 @@ func (m *Mapper) walk(r Rules, path string, v any) (any, error) {
 	switch x := v.(type) {
 	case map[string]any:
 		out := make(map[string]any, len(x))
-		for k, child := range x {
+		// sorted, so counters do not follow Go's random map iteration order
+		for _, k := range slices.Sorted(maps.Keys(x)) {
+			child := x[k]
 			mapped, err := m.walk(r, join(path, k), child)
 			if err != nil {
 				return nil, err

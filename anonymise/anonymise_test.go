@@ -81,6 +81,7 @@ func testRules() Rules {
 			"items[].repo.name":          repo,
 			"items[].repo.owner":         owner,
 			"items[].author":             login,
+			"items[].reviewer":           login,
 			"items[].state":              EnumOf("OPEN", "MERGED"),
 			"items[].sha":                sha,
 			"items[].at":                 As(Timestamp),
@@ -116,6 +117,26 @@ func items(doc map[string]any) []map[string]any {
 
 func request(doc map[string]any) map[string]any {
 	return doc["requests"].([]any)[0].(map[string]any)
+}
+
+// Two keys of one object that share a counter get their numbers in sorted key
+// order, not in Go's random map iteration order, so the same input always
+// gives the same file.
+func Test_SameInputGivesTheSameOutput(t *testing.T) {
+	doc := `{"items":[{"author":"zed","reviewer":"amy"},{"author":"bob","reviewer":"cat"}]}`
+	first, err := Anonymise(testRules(), []byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 50; i++ {
+		again, err := Anonymise(testRules(), []byte(doc))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(again) != string(first) {
+			t.Fatalf("run %d differs:\n%s\nvs\n%s", i, first, again)
+		}
+	}
 }
 
 func Test_ValuesMapConsistentlyAcrossRequestsAndResponses(t *testing.T) {
