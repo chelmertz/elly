@@ -121,15 +121,16 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 }
 
 // widenAnnotationStates rebuilds an annotations table whose check constraint
-// predates the running state. sqlite cannot alter a constraint in place, so
-// the rows move to a table created from schema.sql. A table that already
-// allows running is left alone.
+// predates the newest state (running, then stuck). sqlite cannot alter a
+// constraint in place, so the rows move to a table created from schema.sql.
+// A table that already allows stuck is left alone. A new state means a new
+// literal here, and a row for its predecessor's check in the storage test.
 func widenAnnotationStates(ctx context.Context, db *sql.DB) error {
 	var current string
 	if err := db.QueryRowContext(ctx, `select sql from sqlite_master where type = 'table' and name = 'annotations'`).Scan(&current); err != nil {
 		return fmt.Errorf("could not read the annotations schema: %w", err)
 	}
-	if strings.Contains(current, "'running'") {
+	if strings.Contains(current, "'"+types.AnnotationStuck+"'") {
 		return nil
 	}
 	tx, err := db.BeginTx(ctx, nil)

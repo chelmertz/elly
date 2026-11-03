@@ -64,12 +64,17 @@ every change by someone else: a push, a comment, a review. With no
 
 ## Annotations
 
-Another local tool can mark a PR as `handled`, `needs_you` or `running`, with
-a short note and up to four links. `handled` drops the PR's review-owed
-reasons from its score; `needs_you` counts it whatever it scored, and wins over
-`handled`. `running` says the tool is working on the PR right now: elly shows
-it and scores nothing, and the tool replaces it with one of the other two when
-it finishes. No annotation sends a desktop notification.
+Another local tool can mark a PR as `handled`, `needs_you`, `stuck` or
+`running`, with a note of up to 300 characters and up to four links. `handled`
+and `running` both say the user handed the PR to the tool, so both drop its
+review-owed reasons from the score: `running` is a round in progress, which the
+tool replaces with another state when it finishes. `needs_you` counts the PR
+whatever it scored, and wins over `handled` and `running`. `stuck` counts like
+`needs_you` and says nothing but the user will move the PR; `/next` marks its
+row with an amber edge. On `/next`, a `handled` or `running` PR from
+`claude-review` sits in the folded "With claude" group, and the note of a
+`needs_you` or `stuck` annotation shows under its row. No annotation sends a
+desktop notification.
 Annotations expire (1 minute to 24 hours after writing), so a tool that stops
 running stops hiding PRs.
 

@@ -97,7 +97,8 @@ type ViewPr struct {
 }
 
 // Annotation is a note another local tool attaches to a PR: whether the PR
-// is handled, needs the user, or has work on it running, in its own words,
+// is handled, needs the user, is stuck on the user, or has work on it
+// running, in its own words,
 // with links. elly knows
 // nothing about the tool beyond its source name.
 type Annotation struct {
@@ -120,6 +121,10 @@ const (
 	// shown and scores nothing; the tool replaces it with handled or
 	// needs_you when it finishes, or it expires.
 	AnnotationRunning = "running"
+	// AnnotationStuck says nothing will move the PR until the user acts: the
+	// tool stopped working on it. It counts like needs_you, and the page
+	// marks it apart.
+	AnnotationStuck = "stuck"
 )
 
 // HasConflict reports whether the PR no longer merges into its base. It is

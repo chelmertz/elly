@@ -58,6 +58,12 @@ type nextRow struct {
 	VerbHref    template.URL
 	VerbPrimary bool
 	Tag         *nextTag
+	// Stuck marks the row's edge: nothing but the user moves the PR.
+	Stuck bool
+	// Ask is the note of an annotation that needs the user, shown under the
+	// row; Note is claude-review's note on a PR handed over to it.
+	Ask         string
+	Note        string
 	Why         []string
 	History     []nextEvent
 	State       []string
@@ -138,6 +144,15 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 			Buried:      pr.Buried,
 		}
 		for _, a := range pr.Annotations {
+			switch {
+			case a.State == types.AnnotationNeedsYou || a.State == types.AnnotationStuck:
+				row.Stuck = row.Stuck || a.State == types.AnnotationStuck
+				if row.Ask == "" {
+					row.Ask = a.Note
+				}
+			case a.Source == points.ClaudeReviewSource && row.Note == "":
+				row.Note = a.Note
+			}
 			for _, l := range a.Links {
 				row.Links = append(row.Links, nextLink{Label: l.Label, Href: href(l.Url), Verb: annotationVerb(l.Url)})
 			}
@@ -340,12 +355,14 @@ func reasonsByWeight(reasons []string) []string {
 // reviewTag is the claude-review annotation as a short tag.
 func reviewTag(pr types.ViewPr) *nextTag {
 	for _, a := range pr.Annotations {
-		if a.Source != "claude-review" {
+		if a.Source != points.ClaudeReviewSource {
 			continue
 		}
 		switch a.State {
 		case types.AnnotationRunning:
 			return &nextTag{"●", "running", "running"}
+		case types.AnnotationStuck:
+			return &nextTag{"!", "stuck", "stuck"}
 		case types.AnnotationNeedsYou:
 			return &nextTag{"?", "needs you", "needs-you"}
 		case types.AnnotationHandled:

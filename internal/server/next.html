@@ -125,6 +125,11 @@ nav.side { flex: 1 1 160px; max-width: 200px; padding-top: var(--s2); }
 .tag.running { color: var(--blue); }
 .tag.handled { color: var(--green); }
 .tag.needs-you { color: var(--warm); }
+.tag.stuck { color: var(--amber); }
+.row.stuck { box-shadow: inset 3px 0 0 var(--amber); }
+.ask, .note { margin-top: calc(-1 * var(--s1)); padding: 0 var(--pad) var(--s2) var(--title-x); font-size: 13px; overflow-wrap: anywhere; }
+.ask { color: var(--warm); }
+.note { color: var(--muted); }
 .who { flex: 0 0 auto; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); }
 .wait { flex: none; width: 48px; text-align: right; font: 500 12px var(--mono); }
 .wait.new { color: var(--blue); }
@@ -211,7 +216,7 @@ nav.side .meta p { margin: 0 0 var(--s1); }
         <ol id="{{$g.Slug}}-list"{{if $g.Folded}} hidden{{end}}>
         {{range $r := $g.Rows}}
             <li class="pr" id="{{$r.Anchor}}" data-search="{{$r.Search}}"{{if $r.OnYou}} data-turn-at="{{$r.TurnAt}}"{{end}}>
-                <div class="row">
+                <div class="row{{if $r.Stuck}} stuck{{end}}">
                     <button type="button" class="toggle" aria-expanded="false" aria-controls="{{$r.Anchor}}-panel">
                         <span class="dot" aria-hidden="true"></span>
                         <span class="num">#{{$r.Number}}</span>
@@ -222,6 +227,8 @@ nav.side .meta p { margin: 0 0 var(--s1); }
                     </button>
                     <a class="verb{{if $r.VerbPrimary}} primary{{end}}" href="{{$r.VerbHref}}">{{$r.Verb}}</a>
                 </div>
+                {{with $r.Ask}}<div class="ask">{{.}}</div>{{end}}
+                {{with $r.Note}}<div class="note">{{.}}</div>{{end}}
                 <div class="panel" id="{{$r.Anchor}}-panel" hidden>
                     <div>
                         <h3>Turn history</h3>

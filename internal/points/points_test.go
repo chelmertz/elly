@@ -351,3 +351,23 @@ func TestBuryStillHidesANeedsYouPr(t *testing.T) {
 		t.Errorf("buried needs_you PR counts: %d", p.Total)
 	}
 }
+
+func TestRunningDropsReviewOwedReasons(t *testing.T) {
+	now := time.Now()
+	pr := types.ViewPr{Author: "author", Additions: 10, ThreadsActionable: 2, ReviewRequestedFromUsers: []string{"me"}, LastUpdated: now}
+	if p := StandardPrPoints(annotated(pr, types.AnnotationRunning), "me", now); p.Total > 0 {
+		t.Errorf("a PR with a round running still counts: %d %v", p.Total, p.Reasons)
+	}
+}
+
+func TestStuckCountsLikeNeedsYou(t *testing.T) {
+	now := time.Now()
+	pr := types.ViewPr{Author: "author", ReviewStatus: "APPROVED", LastUpdated: now}
+	p := StandardPrPoints(annotated(pr, types.AnnotationStuck, types.AnnotationHandled), "me", now)
+	if p.Total < needsYouPoints {
+		t.Errorf("stuck on an approved PR scores %d, want at least %d", p.Total, needsYouPoints)
+	}
+	if !strings.Contains(strings.Join(p.Reasons, "|"), "note for stuck") {
+		t.Errorf("the note is not among the reasons: %v", p.Reasons)
+	}
+}

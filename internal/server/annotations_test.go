@@ -41,10 +41,12 @@ func TestValidateAnnotation(t *testing.T) {
 		{"source with capitals", "Tool", body(in15, ""), schemes, false},
 		{"source too long", strings.Repeat("a", 41), body(in15, ""), schemes, false},
 		{"running", "claude-review", strings.Replace(body(in15, ""), "needs_you", "running", 1), schemes, true},
+		{"stuck", "claude-review", strings.Replace(body(in15, ""), "needs_you", "stuck", 1), schemes, true},
+		{"note at the limit", "t", strings.Replace(body(in15, ""), `"look"`, `"`+strings.Repeat("ö", 300)+`"`, 1), schemes, true},
 		{"unknown state", "t", strings.Replace(body(in15, ""), "needs_you", "done", 1), schemes, false},
 		{"unknown field", "t", body(in15, `,"extra":1`), schemes, false},
 		{"unknown link field", "t", strings.Replace(body(in15, ""), `"label"`, `"title":"x","label"`, 1), schemes, false},
-		{"note too long", "t", strings.Replace(body(in15, ""), `"look"`, `"`+strings.Repeat("n", 201)+`"`, 1), schemes, false},
+		{"note too long", "t", strings.Replace(body(in15, ""), `"look"`, `"`+strings.Repeat("n", 301)+`"`, 1), schemes, false},
 		{"note with a control character", "t", strings.Replace(body(in15, ""), `"look"`, `"a\u0007b"`, 1), schemes, false},
 		{"label too long", "t", strings.Replace(body(in15, ""), `"Approve"`, `"`+strings.Repeat("l", 41)+`"`, 1), schemes, false},
 		{"five links", "t", `{"state":"handled","links":[` + strings.Repeat(`{"label":"x","url":"https://a.example"},`, 4) + `{"label":"x","url":"https://a.example"}],"expiresAt":"` + in15 + `"}`, schemes, false},
@@ -202,6 +204,7 @@ func TestIndexRendersEachAnnotationState(t *testing.T) {
 		types.AnnotationHandled:  "<strong>claude-review</strong> handled",
 		types.AnnotationNeedsYou: "<strong>claude-review</strong> needs you",
 		types.AnnotationRunning:  "<strong>claude-review</strong> running",
+		types.AnnotationStuck:    "<strong>claude-review</strong> stuck",
 	} {
 		const u = "https://github.com/o/r/pull/1"
 		data := IndexHtmlData{

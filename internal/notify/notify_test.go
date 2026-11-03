@@ -250,7 +250,7 @@ func TestSenderPassesEscapedText(t *testing.T) {
 func TestAnnotationsNeverNotify(t *testing.T) {
 	p := pr("a", "other", "someone")
 	_, seen := Diff(map[string][]string{}, []types.ViewPr{p}, me, work)
-	for _, state := range []string{types.AnnotationRunning, types.AnnotationNeedsYou, types.AnnotationHandled} {
+	for _, state := range []string{types.AnnotationRunning, types.AnnotationNeedsYou, types.AnnotationStuck, types.AnnotationHandled} {
 		annotated := p
 		annotated.Annotations = []types.Annotation{{Source: "claude-review", State: state, Note: "started by tick"}}
 		if got, _ := Diff(seen, []types.ViewPr{annotated}, me, work); len(got) != 0 {

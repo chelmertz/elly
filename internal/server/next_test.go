@@ -29,7 +29,10 @@ func nextFixture(now time.Time) []types.ViewPr {
 	iced.LastUpdated = now.Add(-30 * 24 * time.Hour)
 	buried := pr("7", "a")
 	buried.Buried = true
-	return []types.ViewPr{buried, iced, involved, waiting, red, review, merge}
+	handedOver := pr("8", "a")
+	handedOver.ReviewRequestedFromUsers = []string{"me"}
+	handedOver.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning, Note: "started by tick"}}
+	return []types.ViewPr{buried, iced, involved, waiting, red, review, merge, handedOver}
 }
 
 func renderNext(t *testing.T, data NextData) string {
@@ -62,7 +65,7 @@ func TestNextRendersEachGroupAndRowAnchor(t *testing.T) {
 			t.Errorf("page lacks the group anchor %q", g.Slug())
 		}
 	}
-	for n := 1; n <= 7; n++ {
+	for n := 1; n <= 8; n++ {
 		id := types.Anchor("https://github.com/o/r/pull/" + string(rune('0'+n)))
 		if !strings.Contains(page, `<li class="pr" id="`+id+`"`) {
 			t.Errorf("page lacks the row anchor %q", id)
@@ -171,5 +174,56 @@ func TestNextRoute(t *testing.T) {
 	}
 	if rec := w.do("GET", "/", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "small one") {
 		t.Errorf("the classic page broke: %d", rec.Code)
+	}
+}
+
+// A note that needs the user is readable without opening the row, and a
+// stuck PR stands out by its edge and its tag. The note is the session's own
+// text, which may echo the PR, so it is escaped like any PR field.
+func TestNextShowsWhatNeedsTheUserUnderTheRow(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	hostile := `the round has a question for you: <script>alert("x")</script> & "quotes"`
+	row := func(n, state, note string) types.ViewPr {
+		return types.ViewPr{Url: "https://github.com/o/r/pull/" + n, Author: "a", LastUpdated: now,
+			Annotations: []types.Annotation{{Source: "claude-review", State: state, Note: note}}}
+	}
+	prs := []types.ViewPr{
+		row("1", types.AnnotationNeedsYou, hostile),
+		row("2", types.AnnotationStuck, "a post was refused over the limit"),
+		row("3", types.AnnotationRunning, "started by a click"),
+		row("4", types.AnnotationHandled, "round posted its review"),
+	}
+	page := renderNext(t, buildNext(prs, "me", now, nil))
+	if strings.Contains(page, "<script>alert") {
+		t.Fatal("an annotation note reached the page unescaped")
+	}
+	for _, want := range []string{
+		`<div class="ask">the round has a question for you: &lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt; &amp; &#34;quotes&#34;</div>`,
+		`<div class="ask">a post was refused over the limit</div>`,
+		`<div class="row stuck">`,
+		`<span class="tag stuck">claude ! stuck</span>`,
+		`<div class="note">started by a click</div>`,
+		`<div class="note">round posted its review</div>`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page lacks %s", want)
+		}
+	}
+	if strings.Count(page, `class="row stuck"`) != 1 {
+		t.Error("only the stuck row has the stuck edge")
+	}
+}
+
+func TestNextAttachVerbFollowsTheAnnotationLink(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now, ReviewRequestedFromUsers: []string{"me"},
+		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning,
+			Links: []types.AnnotationLink{{Label: "Attach", Url: "claude-review://o/r/1/attach"}}}}}
+	data := buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"})
+	if data.OnYou != 0 {
+		t.Errorf("a handed-over PR counts as on the user: %d", data.OnYou)
+	}
+	if page := renderNext(t, data); !strings.Contains(page, `href="claude-review://o/r/1/attach">Attach</a>`) {
+		t.Error("the Attach verb does not follow the annotation link")
 	}
 }

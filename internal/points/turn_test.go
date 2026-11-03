@@ -13,6 +13,7 @@ func TestTurnOf(t *testing.T) {
 	fresh := now.Add(-time.Hour)
 	old := now.Add(-15 * 24 * time.Hour)
 	approveLink := []types.AnnotationLink{{Label: "Approve", Url: "claude-review://o/r/1/approve"}}
+	attachLink := []types.AnnotationLink{{Label: "Attach", Url: "claude-review://o/r/1/attach"}}
 
 	cases := []struct {
 		name string
@@ -42,7 +43,16 @@ func TestTurnOf(t *testing.T) {
 		{"needs_you annotation waits for me", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou}}, LastUpdated: fresh}, GroupWaiting, "Check"},
 		{"approve link is one click", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupOneClick, "Approve"},
 		{"approve link on a red PR is not one click", types.ViewPr{Author: "a", ChecksState: "FAILURE", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupWaiting, "Check"},
-		{"handled drops the review request", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationHandled}}, LastUpdated: fresh}, GroupOnOthers, "Open"},
+		{"another tool's handled drops the review request", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Annotations: []types.Annotation{{Source: "x", State: types.AnnotationHandled}}, LastUpdated: fresh}, GroupOnOthers, "Open"},
+		{"another tool's running drops replies owed", types.ViewPr{Author: "a", ThreadsActionable: 2, Annotations: []types.Annotation{{Source: "x", State: types.AnnotationRunning}}, LastUpdated: fresh}, GroupOnOthers, "Open"},
+		{"handed over and handled is with claude", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, ThreadsActionable: 1, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationHandled}}, LastUpdated: fresh}, GroupWithClaude, "Open"},
+		{"handed over and running is with claude", types.ViewPr{Author: "a", RereviewFrom: []string{me}, ThreadsActionable: 3, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning, Links: attachLink}}, LastUpdated: fresh}, GroupWithClaude, "Attach"},
+		{"handed over while CI runs is with claude", types.ViewPr{Author: "a", ChecksState: "PENDING", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning}}, LastUpdated: fresh}, GroupWithClaude, "Open"},
+		{"handed over and red is the author's", types.ViewPr{Author: "a", ChecksState: "FAILURE", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationHandled}}, LastUpdated: fresh}, GroupOnOthers, "Open"},
+		{"own approved PR with a round running is still a merge", types.ViewPr{Author: me, ReviewStatus: "APPROVED", ReviewedBy: []string{"a"}, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning}}, LastUpdated: fresh}, GroupOneClick, "Merge"},
+		{"needs_you beats running", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning}, {Source: "x", State: types.AnnotationNeedsYou}}, LastUpdated: fresh}, GroupWaiting, "Check"},
+		{"stuck waits for me", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationStuck}}, LastUpdated: fresh}, GroupWaiting, "Check"},
+		{"stuck is never iced", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationStuck}}, LastUpdated: old}, GroupWaiting, "Check"},
 		{"untouched two weeks is iced", types.ViewPr{Author: "a", ThreadsWaiting: 1, LastUpdated: old}, GroupIcebox, "Open"},
 		{"own approved untouched two weeks is iced", types.ViewPr{Author: me, ReviewStatus: "APPROVED", LastUpdated: old}, GroupIcebox, "Open"},
 		{"asked is never iced", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, LastUpdated: old}, GroupWaiting, "Review"},
@@ -79,5 +89,28 @@ func TestRankOrdersByGroupBeforePoints(t *testing.T) {
 	pos := Rank(prs, "me", now)
 	if pos["asked"] != 0 || pos["small"] != 1 {
 		t.Errorf("got %v, want asked first", pos)
+	}
+}
+
+// Attach follows the annotation's attach link; a stuck PR says why it waits.
+func TestTurnOfVerbUrlsAndReasons(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	running := types.ViewPr{Author: "a", LastUpdated: now, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning,
+		Links: []types.AnnotationLink{{Label: "Round summary", Url: "https://github.com/o/r/pull/1#r"}, {Label: "Attach", Url: "claude-review://o/r/1/attach"}}}}}
+	if got := TurnOf(running, "me", now); got.VerbUrl != "claude-review://o/r/1/attach" {
+		t.Errorf("running: verb url %q", got.VerbUrl)
+	}
+	stuck := types.ViewPr{Author: "a", LastUpdated: now, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationStuck}}}
+	if got := TurnOf(stuck, "me", now); got.Reason != "claude-review is stuck: only you can move it" {
+		t.Errorf("stuck: reason %q", got.Reason)
+	}
+}
+
+func TestWithClaudeIsFoldedAfterUnblock(t *testing.T) {
+	if GroupWithClaude != GroupUnblock+1 || GroupWithClaude.OnYou() || !GroupWithClaude.Folded() {
+		t.Error("With claude must follow Yours to unblock, folded and not on the user")
+	}
+	if GroupWithClaude.Name() != "With claude · handed over, nothing for you" || GroupWithClaude.Slug() != "with-claude" {
+		t.Errorf("got %q %q", GroupWithClaude.Name(), GroupWithClaude.Slug())
 	}
 }

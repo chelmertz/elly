@@ -37,11 +37,12 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 	points.Reasons = make([]string, 0)
 
 	// An annotation from another local tool overrides the review-owed
-	// reasons: handled drops them, needs_you counts the PR whatever it scored.
-	// needs_you wins when two tools disagree. running only shows that a tool
-	// is at work and scores nothing, so it is never read here.
-	needsYou := annotationNotes(pr, types.AnnotationNeedsYou)
-	handled := len(needsYou) == 0 && len(annotationNotes(pr, types.AnnotationHandled)) > 0
+	// reasons. handled and running both mean the user handed the PR to the
+	// tool, so both drop them: without that, every round in progress would
+	// bring back the replies it is busy answering. needs_you and stuck count
+	// the PR whatever it scored, and win when two tools disagree.
+	needsYou := append(annotationNotes(pr, types.AnnotationNeedsYou), annotationNotes(pr, types.AnnotationStuck)...)
+	handled := len(needsYou) == 0 && HandedOver(pr, "")
 
 	if pr.ThreadsActionable > 0 && !handled {
 		points.Add(80, fmt.Sprintf("Someone asked us something, or reacted to our comment (%d comments)", pr.ThreadsActionable))
@@ -188,7 +189,18 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 	return points
 }
 
-// needsYouPoints is where a needs_you annotation lifts a PR: as high as an own
+// HandedOver reports whether a handled or running annotation is on pr, from
+// source, or from any source when source is "".
+func HandedOver(pr types.ViewPr, source string) bool {
+	for _, a := range pr.Annotations {
+		if (source == "" || a.Source == source) && (a.State == types.AnnotationHandled || a.State == types.AnnotationRunning) {
+			return true
+		}
+	}
+	return false
+}
+
+// needsYouPoints is where a needs_you or stuck annotation lifts a PR: as high as an own
 // approved PR, since both are one action away from done.
 const needsYouPoints = 100
 
