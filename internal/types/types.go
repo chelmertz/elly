@@ -94,7 +94,8 @@ type ViewPr struct {
 }
 
 // Annotation is a note another local tool attaches to a PR: whether the PR
-// is handled or needs the user, in its own words, with links. elly knows
+// is handled, needs the user, or has work on it running, in its own words,
+// with links. elly knows
 // nothing about the tool beyond its source name.
 type Annotation struct {
 	Source    string           `json:"source"`
@@ -112,6 +113,10 @@ type AnnotationLink struct {
 const (
 	AnnotationHandled  = "handled"
 	AnnotationNeedsYou = "needs_you"
+	// AnnotationRunning says the tool is working on the PR right now. It is
+	// shown and scores nothing; the tool replaces it with handled or
+	// needs_you when it finishes, or it expires.
+	AnnotationRunning = "running"
 )
 
 // HasConflict reports whether the PR no longer merges into its base. It is

@@ -529,3 +529,42 @@ func TestReadPAT_ReadsWithoutWriting(t *testing.T) {
 		t.Error("reading must not create a database")
 	}
 }
+
+func TestNewStorage_AcceptsRunningOnAnOldAnnotationsTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "elly.db")
+	oldDdl := strings.Replace(ddl, "check (state in ('handled', 'needs_you', 'running'))", "check (state in ('handled', 'needs_you'))", 1)
+	if oldDdl == ddl {
+		t.Fatal("precondition: schema.sql no longer has the check this test rewrites")
+	}
+	old, err := sql.Open("sqlite", "file:"+path+"?mode=rwc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(oldDdl); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(`insert into annotations (pr_url, source, state, note, links, expires_at, expires_unix)
+		values ('u', 'other', 'handled', 'kept', '[]', '2099-01-01T00:00:00Z', 4070908800)`); err != nil {
+		t.Fatal(err)
+	}
+	_ = old.Close()
+
+	store := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
+	pr := types.ViewPr{Url: "u", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}
+	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+		t.Fatal(err)
+	}
+	running := types.Annotation{Source: "tool", State: types.AnnotationRunning, ExpiresAt: "2099-01-01T00:00:00Z"}
+	if err := store.PutAnnotation("u", running, time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("an upgraded database rejects running: %v", err)
+	}
+	got := store.Prs().Prs[0].Annotations
+	if len(got) != 2 {
+		t.Fatalf("got %+v, want the old handled annotation kept beside running", got)
+	}
+	// a second start must leave the rebuilt table alone
+	again := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
+	if got := again.Prs().Prs[0].Annotations; len(got) != 2 {
+		t.Fatalf("second start: got %+v", got)
+	}
+}

@@ -40,6 +40,7 @@ func TestValidateAnnotation(t *testing.T) {
 		{"http link", "t", `{"state":"handled","links":[{"label":"x","url":"http://example.com"}],"expiresAt":"` + in15 + `"}`, schemes, false},
 		{"source with capitals", "Tool", body(in15, ""), schemes, false},
 		{"source too long", strings.Repeat("a", 41), body(in15, ""), schemes, false},
+		{"running", "claude-review", strings.Replace(body(in15, ""), "needs_you", "running", 1), schemes, true},
 		{"unknown state", "t", strings.Replace(body(in15, ""), "needs_you", "done", 1), schemes, false},
 		{"unknown field", "t", body(in15, `,"extra":1`), schemes, false},
 		{"unknown link field", "t", strings.Replace(body(in15, ""), `"label"`, `"title":"x","label"`, 1), schemes, false},
@@ -189,5 +190,33 @@ func TestIndexRendersAnnotationLinks(t *testing.T) {
 
 	if page := render(nil); strings.Contains(page, "claude-review://o/r/1/approve") && strings.Contains(page, `href="claude-review:`) {
 		t.Error("a scheme no longer allowlisted still renders as a link")
+	}
+}
+
+func TestIndexRendersEachAnnotationState(t *testing.T) {
+	temp, err := parseIndex(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for state, want := range map[string]string{
+		types.AnnotationHandled:  "<strong>claude-review</strong> handled",
+		types.AnnotationNeedsYou: "<strong>claude-review</strong> needs you",
+		types.AnnotationRunning:  "<strong>claude-review</strong> running",
+	} {
+		const u = "https://github.com/o/r/pull/1"
+		data := IndexHtmlData{
+			Prs:            []types.ViewPr{{Url: u, Annotations: []types.Annotation{{Source: "claude-review", State: state}}}},
+			PointsPerPrUrl: map[string]*points.Points{u: {Total: 1}},
+		}
+		var out strings.Builder
+		if err := temp.Execute(&out, data); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("state %s: page lacks %q", state, want)
+		}
+		if !strings.Contains(out.String(), `class="annotation `+state+`"`) {
+			t.Errorf("state %s: no class to style it apart from the others", state)
+		}
 	}
 }

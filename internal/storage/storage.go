@@ -111,12 +111,43 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 			check(err)
 		}
 	}
+	check(widenAnnotationStates(ctx, db))
 
 	return &DbStorage{
 		db:     New(db),
 		rawDb:  db,
 		logger: logger,
 	}
+}
+
+// widenAnnotationStates rebuilds an annotations table whose check constraint
+// predates the running state. sqlite cannot alter a constraint in place, so
+// the rows move to a table created from schema.sql. A table that already
+// allows running is left alone.
+func widenAnnotationStates(ctx context.Context, db *sql.DB) error {
+	var current string
+	if err := db.QueryRowContext(ctx, `select sql from sqlite_master where type = 'table' and name = 'annotations'`).Scan(&current); err != nil {
+		return fmt.Errorf("could not read the annotations schema: %w", err)
+	}
+	if strings.Contains(current, "'running'") {
+		return nil
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, stmt := range []string{
+		`alter table annotations rename to annotations_old`,
+		ddl,
+		`insert into annotations select * from annotations_old`,
+		`drop table annotations_old`,
+	} {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("could not widen annotation states: %w", err)
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *DbStorage) Prs() StoredState {

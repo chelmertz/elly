@@ -46,9 +46,12 @@ every change by someone else: a push, a comment, a review. With no
 
 ## Annotations
 
-Another local tool can mark a PR as `handled` or `needs_you`, with a short
-note and up to four links. `handled` drops the PR's review-owed reasons from
-its score; `needs_you` counts it whatever it scored, and wins over `handled`.
+Another local tool can mark a PR as `handled`, `needs_you` or `running`, with
+a short note and up to four links. `handled` drops the PR's review-owed
+reasons from its score; `needs_you` counts it whatever it scored, and wins over
+`handled`. `running` says the tool is working on the PR right now: elly shows
+it and scores nothing, and the tool replaces it with one of the other two when
+it finishes. No annotation sends a desktop notification.
 Annotations expire (1 minute to 24 hours after writing), so a tool that stops
 running stops hiding PRs.
 

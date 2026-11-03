@@ -1,6 +1,7 @@
 package points
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +51,27 @@ func TestPropHandledNeverRaisesTheScore(t *testing.T) {
 		pr.Annotations = []types.Annotation{{Source: "t", State: types.AnnotationHandled}}
 		if handled := StandardPrPoints(pr, "me", propNow).Total; handled > plain {
 			t.Fatalf("handled raised the score from %d to %d", plain, handled)
+		}
+	})
+}
+
+// running only says a round is in progress: the PR scores exactly as it would
+// without it, whatever else is annotated.
+func TestPropRunningScoresNothing(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		pr := genScoredPr(t)
+		pr.Buried = rapid.Bool().Draw(t, "buried")
+		pr.Annotations = rapid.SliceOfN(rapid.Custom(func(t *rapid.T) types.Annotation {
+			return types.Annotation{
+				Source: rapid.SampledFrom([]string{"t", "u"}).Draw(t, "source"),
+				State:  rapid.SampledFrom([]string{types.AnnotationHandled, types.AnnotationNeedsYou}).Draw(t, "state"),
+			}
+		}), 0, 2).Draw(t, "others")
+		plain := StandardPrPoints(pr, "me", propNow)
+		pr.Annotations = append(pr.Annotations, types.Annotation{Source: "r", State: types.AnnotationRunning, Note: "started by tick"})
+		running := StandardPrPoints(pr, "me", propNow)
+		if running.Total != plain.Total || strings.Join(running.Reasons, "|") != strings.Join(plain.Reasons, "|") {
+			t.Fatalf("running changed the score: %d %v -> %d %v", plain.Total, plain.Reasons, running.Total, running.Reasons)
 		}
 	})
 }

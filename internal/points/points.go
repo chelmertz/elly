@@ -38,7 +38,8 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 
 	// An annotation from another local tool overrides the review-owed
 	// reasons: handled drops them, needs_you counts the PR whatever it scored.
-	// needs_you wins when two tools disagree.
+	// needs_you wins when two tools disagree. running only shows that a tool
+	// is at work and scores nothing, so it is never read here.
 	needsYou := annotationNotes(pr, types.AnnotationNeedsYou)
 	handled := len(needsYou) == 0 && len(annotationNotes(pr, types.AnnotationHandled)) > 0
 
