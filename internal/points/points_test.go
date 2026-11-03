@@ -371,3 +371,73 @@ func TestStuckCountsLikeNeedsYou(t *testing.T) {
 		t.Errorf("the note is not among the reasons: %v", p.Reasons)
 	}
 }
+
+// A red build with no names readable says so without an empty list.
+func Test_RedChecks_WithoutNamesSaysNoList(t *testing.T) {
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{Author: "me", ChecksState: "FAILURE", ReviewedBy: []string{"x"}, LastUpdated: now}
+	want := "+50: CI is failing - fix it before asking anyone to review"
+	if got := StandardPrPoints(pr, "me", now).Reasons; strings.Join(got, "|") != want {
+		t.Errorf("reasons %q, want %q", got, want)
+	}
+}
+
+// Someone else's draft costs 10 while it is fresh and 70 once it is five
+// days old.
+func Test_OthersDraft_AgesAfterFiveDays(t *testing.T) {
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		age  time.Duration
+		want string
+	}{
+		{time.Hour, "-10: PR is someone else's draft"},
+		{4 * 24 * time.Hour, "-10: PR is someone else's draft"},
+		{6 * 24 * time.Hour, "-70: PR is someone else's old draft"},
+	} {
+		pr := types.ViewPr{Author: "a", IsDraft: true, LastUpdated: now.Add(-c.age)}
+		if got := StandardPrPoints(pr, "me", now).Reasons; strings.Join(got, "|") != c.want {
+			t.Errorf("draft %v old: reasons %q, want %q", c.age, got, c.want)
+		}
+	}
+}
+
+// Size is additions plus deletions: 40 of each is 80 lines, smallish.
+func Test_SizeCountsAdditionsAndDeletions(t *testing.T) {
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{Author: "a", Additions: 40, Deletions: 40, LastUpdated: now}
+	want := "+30: PR is smallish, 80 loc changed is <150"
+	if got := StandardPrPoints(pr, "me", now).Reasons; strings.Join(got, "|") != want {
+		t.Errorf("reasons %q, want %q", got, want)
+	}
+}
+
+// Reasons come sorted, so the + reasons render before the - ones.
+func Test_ReasonsAreSorted(t *testing.T) {
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{Author: "me", IsDraft: true, ThreadsActionable: 1, ThreadsWaiting: 1, LastUpdated: now}
+	want := []string{
+		"+80: Someone asked us something, or reacted to our comment (1 comments)",
+		"-10: PR is my draft",
+		"-10: Someone should respond to our comments (1 comments)",
+	}
+	if got := StandardPrPoints(pr, "me", now).Reasons; strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("reasons %q, want %q", got, want)
+	}
+}
+
+// needs_you lifts a PR to its floor, and adds no "+0" reason to one already
+// there.
+func Test_NeedsYouAtTheFloorAddsNothing(t *testing.T) {
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{Author: "me", ReviewStatus: "APPROVED", ReviewedBy: []string{"x"}, LastUpdated: now,
+		Annotations: []types.Annotation{{Source: "t", State: types.AnnotationNeedsYou, Note: "look"}}}
+	p := StandardPrPoints(pr, "me", now)
+	if p.Total != needsYouPoints {
+		t.Fatalf("fixture scores %d, want exactly %d", p.Total, needsYouPoints)
+	}
+	for _, r := range p.Reasons {
+		if strings.HasPrefix(r, "+0:") {
+			t.Errorf("a zero-point reason: %q", r)
+		}
+	}
+}

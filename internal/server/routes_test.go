@@ -80,6 +80,7 @@ func TestGetPrsMinPoints(t *testing.T) {
 		"/api/v0/prs?minPoints=-100": "small one,approved one",
 		"/api/v0/prs?minPoints=x":    "small one,approved one",
 		"/api/v0/prs?minPoints=1000": "small one,approved one",
+		"/api/v0/prs?minPoints=999":  "",
 	}
 	for url, want := range cases {
 		if got := titles(url); got != want {

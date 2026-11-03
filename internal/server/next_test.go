@@ -403,3 +403,109 @@ func TestPageKeys(t *testing.T) {
 		t.Errorf("%v\n%s", err, out)
 	}
 }
+
+func TestStartUrlMatchesOwnerAndRepo(t *testing.T) {
+	for _, c := range []struct {
+		repos []string
+		url   string
+		want  string
+	}{
+		{[]string{"o/*"}, "https://github.com/o/r/pull/1", "claude-review://o/r/1"},
+		{[]string{"o/*"}, "https://github.com/other/r/pull/1", ""},
+		{[]string{"o/r"}, "https://github.com/o/r/pull/1", "claude-review://o/r/1"},
+		{[]string{"o/r"}, "https://github.com/o/x/pull/1", ""},
+		{[]string{"O/R"}, "https://github.com/o/r/pull/1", "claude-review://o/r/1"},
+		{nil, "https://github.com/o/r/pull/1", ""},
+	} {
+		if got := startUrl(types.ViewPr{Url: c.url}, c.repos); got != c.want {
+			t.Errorf("%v %s: got %q, want %q", c.repos, c.url, got, c.want)
+		}
+	}
+}
+
+// Inside a group the rows follow the points order, whatever order the PRs
+// came in.
+func TestNextOrdersRowsByPointsInsideAGroup(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	asked := func(n string, loc int) types.ViewPr {
+		return types.ViewPr{Url: "https://github.com/o/r/pull/" + n, Author: "a", Additions: loc, LastUpdated: now, ReviewRequestedFromUsers: []string{"me"}}
+	}
+	data := buildNext([]types.ViewPr{asked("1", 400), asked("2", 200), asked("3", 100), asked("4", 10)}, "me", now, nil, nil)
+	var got []string
+	for _, g := range data.Groups {
+		for _, r := range g.Rows {
+			got = append(got, r.Number)
+		}
+	}
+	if strings.Join(got, ",") != "4,3,2,1" {
+		t.Errorf("rows %v, want smallest first: 4,3,2,1", got)
+	}
+}
+
+// The verb opens the PR unless an annotation names another link, and only the
+// one-click group's verb is the primary button.
+func TestNextVerbHrefAndPrimary(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	for _, g := range buildNext(nextFixture(now), "me", now, nil, nil).Groups {
+		for _, r := range g.Rows {
+			if string(r.VerbHref) != r.Url {
+				t.Errorf("%s: verb opens %q, want the PR", r.Url, r.VerbHref)
+			}
+			if r.VerbPrimary != (g.Slug == points.GroupOneClick.Slug()) {
+				t.Errorf("%s in %s: VerbPrimary %v", r.Url, g.Slug, r.VerbPrimary)
+			}
+		}
+	}
+}
+
+// The header counts what is on the user and on others, and how long the
+// oldest wait on the user is; nothing on the user shows no wait at all.
+func TestNextCountsAndOldestWait(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	prs := nextFixture(now)
+	prs[5].LastUpdated = now.Add(-3 * 24 * time.Hour) // a review asked of the user
+	data := buildNext(prs, "me", now, nil, nil)
+	if data.OnYou != 3 || data.OnOthers != 1 || data.OldestOnYou != "3 d" {
+		t.Errorf("OnYou %d OnOthers %d OldestOnYou %q, want 3, 1, \"3 d\"", data.OnYou, data.OnOthers, data.OldestOnYou)
+	}
+	data = buildNext([]types.ViewPr{prs[3]}, "me", now, nil, nil) // the user's PR, waiting on a reviewer
+	if data.OnYou != 0 || data.OnOthers != 1 || data.OldestOnYou != "" {
+		t.Errorf("nothing on the user: OnYou %d OnOthers %d OldestOnYou %q", data.OnYou, data.OnOthers, data.OldestOnYou)
+	}
+}
+
+// The fold toggle opens on the first folded group that has rows.
+func TestNextFirstFoldedSkipsEmptyGroups(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	waiting := nextFixture(now)[3]
+	var first []string
+	for _, g := range buildNext([]types.ViewPr{waiting}, "me", now, nil, nil).Groups {
+		if g.FirstFolded {
+			first = append(first, g.Slug)
+		}
+	}
+	if strings.Join(first, ",") != points.GroupOnOthers.Slug() {
+		t.Errorf("FirstFolded on %v, want only %s", first, points.GroupOnOthers.Slug())
+	}
+}
+
+func TestStateFacts(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		pr   types.ViewPr
+		want string
+	}{
+		{"bare PR of someone else", types.ViewPr{Author: "a"}, "no checks"},
+		{"everything at once", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{"me"}, RereviewFrom: []string{"b"}, ReviewedBy: []string{"c"},
+			ChecksState: "SUCCESS", MergeStateStatus: "BEHIND", ThreadsActionable: 2, ThreadsWaiting: 1, IsDraft: true, LastPrCommenter: "d",
+			Annotations: []types.Annotation{{Source: "t", State: types.AnnotationNeedsYou, Note: "look"}, {Source: "u", State: types.AnnotationHandled}}},
+			"review requested: me|reviewed before the latest change: b|reviewed by c|CI green|behind the base branch|" +
+				"2 threads waiting on you|1 threads waiting on others|draft|last comment by d|t: needs you, look|u: handled"},
+		{"conflict wins over behind", types.ViewPr{Author: "me", ChecksState: "PENDING", Mergeable: "CONFLICTING", MergeStateStatus: "BEHIND"},
+			"no reviewer requested|CI running|conflicts with the base branch"},
+	} {
+		if got := strings.Join(stateFacts(c.pr, "me"), "|"); got != c.want {
+			t.Errorf("%s:\n got %q\nwant %q", c.name, got, c.want)
+		}
+	}
+}

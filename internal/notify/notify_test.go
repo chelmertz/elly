@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -257,4 +258,102 @@ func TestAnnotationsNeverNotify(t *testing.T) {
 			t.Errorf("a %s annotation notified: %v", state, got)
 		}
 	}
+}
+
+// A PR that is new to elly but asks nothing of the user, on a work owner,
+// stays quiet; a question on it notifies.
+func TestNewWorkPrNotifiesOnlyForAReason(t *testing.T) {
+	_, seen := Diff(map[string][]string{}, nil, me, work)
+	quiet := pr("a", "work", "someone")
+	got, seen := Diff(seen, []types.ViewPr{quiet}, me, work)
+	if len(got) != 0 {
+		t.Fatalf("a PR with no reason notified: %v", got)
+	}
+	quiet.ThreadsActionable = 1
+	got, _ = Diff(seen, []types.ViewPr{quiet}, me, work)
+	if len(got) != 1 || !strings.Contains(got[0].Body, "asked us something") {
+		t.Errorf("a question: got %v, want one notification", got)
+	}
+}
+
+// On an open-source PR a review decision by someone else notifies; no
+// decision is no reason.
+func TestOtherOwnersNotifyOnAReviewDecision(t *testing.T) {
+	p := pr("a", "oss", "someone")
+	_, seen := Diff(map[string][]string{}, []types.ViewPr{p}, me, work)
+	if len(seen["a"]) != 0 {
+		t.Fatalf("an open-source PR with nothing on it has reasons %v", seen["a"])
+	}
+	p.ReviewStatus = "CHANGES_REQUESTED"
+	got, _ := Diff(seen, []types.ViewPr{p}, me, work)
+	if len(got) != 1 || got[0].Body != "Review status: changes requested" {
+		t.Errorf("got %v, want one review-status notification", got)
+	}
+}
+
+// PRs rank cannot place all share one rank; the summary then keeps the first.
+func TestCoalescedNotificationKeepsTheFirstOnATie(t *testing.T) {
+	ns := []Notification{{PrUrl: "1"}, {PrUrl: "2"}, {PrUrl: "3"}, {PrUrl: "4"}}
+	if got := Coalesce(ns, func(string) int { return 0 }); got[0].PrUrl != "1" {
+		t.Errorf("got %v, want the summary to point at the first", got)
+	}
+}
+
+// A click (notify-send printing the action name) opens the PR's row; a
+// dismissal opens nothing.
+func TestSenderOpensThePageOnlyOnAClick(t *testing.T) {
+	for _, c := range []struct {
+		printed string
+		opened  bool
+	}{{"default", true}, {"", false}} {
+		dir := t.TempDir()
+		opened := filepath.Join(dir, "opened")
+		write := func(name, script string) string {
+			p := filepath.Join(dir, name)
+			if err := os.WriteFile(p, []byte("#!/bin/sh\n"+script), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			return p
+		}
+		bin := write("notify-send", "echo '"+c.printed+"'\n")
+		write("xdg-open", "printf '%s' \"$1\" > "+opened+"\n")
+		t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+		var logs lockedBuffer
+		Sender{Bin: bin, PageUrl: "http://localhost:9876", Logger: slog.New(slog.NewTextHandler(&logs, nil))}.Send(Notification{PrUrl: "https://github.com/o/r/pull/1"})
+		var got []byte
+		for range 100 {
+			if b, err := os.ReadFile(opened); err == nil && len(b) > 0 {
+				got = b
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		if c.opened && string(got) != "http://localhost:9876/#pr-o-r-1" {
+			t.Errorf("a click opened %q", got)
+		}
+		if !c.opened && got != nil {
+			t.Errorf("a dismissal opened %q", got)
+		}
+		time.Sleep(50 * time.Millisecond) // Send logs right after starting xdg-open
+		if l := logs.String(); strings.Contains(l, "level=WARN") {
+			t.Errorf("a working notify-send and xdg-open warned:\n%s", l)
+		}
+	}
+}
+
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }

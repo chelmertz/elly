@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chelmertz/elly/anonymise"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"time"
@@ -242,12 +243,16 @@ func Test_QueryGithub_PaginatesReviewThreadsPerPR(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	logger, logs := bufferLogger()
+	prs, _, err := queryGithub(srv.URL, "token", "me", logger)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(prs) != 1 || prs[0].ThreadsActionable != 1 {
 		t.Fatalf("expected the second page's unresolved thread to count as actionable, got %+v", prs)
+	}
+	if strings.Contains(logs.String(), "could not fetch all review threads") {
+		t.Errorf("a page that was fetched was logged as missing:\n%s", logs)
 	}
 	if pageRequests != 1 {
 		t.Fatalf("expected exactly one follow-up page request, got %d", pageRequests)
@@ -505,9 +510,13 @@ func Test_QueryGithub_ThreadPageFailureKeepsThePoll(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	t.Cleanup(srv.Close)
-	prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	logger, logs := bufferLogger()
+	prs, _, err := queryGithub(srv.URL, "token", "me", logger)
 	if err != nil {
 		t.Fatalf("a failed thread page must not fail the poll: %v", err)
+	}
+	if !strings.Contains(logs.String(), "could not fetch all review threads") {
+		t.Errorf("the lower-bound count must be logged:\n%s", logs)
 	}
 	if len(prs) != 1 || prs[0].ThreadsActionable != 1 {
 		t.Fatalf("expected the first page's thread to still count, got %+v", prs)
@@ -951,5 +960,287 @@ func Test_UsernameFromPat_ReadsLoginAndExpiry(t *testing.T) {
 	}
 	if auth != "bearer tok" {
 		t.Errorf("Authorization %q", auth)
+	}
+}
+
+func bufferLogger() (*slog.Logger, *bytes.Buffer) {
+	var buf bytes.Buffer
+	return slog.New(slog.NewTextHandler(&buf, nil)), &buf
+}
+
+// The expiry warning is the only notice a user gets before a PAT stops
+// working: it fires inside ten days and not before.
+func Test_GhExpiration_WarnsOnlyInsideTenDays(t *testing.T) {
+	layout := "2006-01-02 15:04:05 -0700"
+	for _, c := range []struct {
+		in   time.Duration
+		warn bool
+	}{{5 * 24 * time.Hour, true}, {9 * 24 * time.Hour, true}, {11 * 24 * time.Hour, false}, {30 * 24 * time.Hour, false}} {
+		logger, logs := bufferLogger()
+		if _, ok := ghExpiration(time.Now().Add(c.in).Format(layout), logger); !ok {
+			t.Fatalf("%v: not parsed", c.in)
+		}
+		if got := strings.Contains(logs.String(), "github token expires soon"); got != c.warn {
+			t.Errorf("expiring in %v: warned = %v, want %v", c.in, got, c.warn)
+		}
+		// a day short of five is four whole days left
+		if want := "days_left=4\n"; c.in == 5*24*time.Hour && !strings.Contains(logs.String(), want) {
+			t.Errorf("expiring in %v: logs lack %q:\n%s", c.in, want, logs)
+		}
+	}
+}
+
+// A response without the expiry header is a token that never expires, not
+// an expiry that could not be parsed.
+func Test_Request_NoExpiryHeaderLogsNoParseError(t *testing.T) {
+	srv := fixedResponseServer(t, 200, `{"data":{}}`)
+	logger, logs := bufferLogger()
+	if _, err := graphqlRequest(srv.URL, graphqlQuery{Query: "{}"}, "token", logger); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(logs.String(), "could not parse github token expiration") {
+		t.Errorf("a missing header was logged as unparseable:\n%s", logs)
+	}
+}
+
+// Each retry is logged with its own number, counting from 1.
+func Test_graphqlRequest_LogsEachRetryByNumber(t *testing.T) {
+	noRetryPause(t)
+	srv := fixedResponseServer(t, http.StatusBadGateway, "")
+	logger, logs := bufferLogger()
+	_, _ = graphqlRequest(srv.URL, graphqlQuery{Query: "{}"}, "token", logger)
+	for _, want := range []string{"attempt=1 ", "attempt=2 "} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("logs lack %q:\n%s", want, logs)
+		}
+	}
+	if strings.Contains(logs.String(), "attempt=3 ") {
+		t.Errorf("two retries logged as three:\n%s", logs)
+	}
+}
+
+// The status code decides the class at both ends of each range: a 500 is
+// github's fault even with a json body, a 400 is the caller's even when the
+// body parses.
+func Test_Request_ClassifiesBoundaryStatusCodes(t *testing.T) {
+	noRetryPause(t)
+	for _, c := range []struct {
+		status int
+		want   error
+	}{{500, ErrGithubServer}, {400, ErrClient}} {
+		srv := fixedResponseServer(t, c.status, `{}`)
+		if _, err := graphqlRequest(srv.URL, graphqlQuery{Query: "{}"}, "token", slog.New(slog.DiscardHandler)); !errors.Is(err, c.want) {
+			t.Errorf("%d: got %v, want %v", c.status, err, c.want)
+		}
+	}
+	srv := fixedResponseServer(t, 400, "")
+	if _, _, err := UsernameFromPat(srv.URL, "tok", slog.New(slog.DiscardHandler)); !errors.Is(err, ErrClient) {
+		t.Errorf("UsernameFromPat 400: got %v, want ErrClient", err)
+	}
+}
+
+// Either rate-limit header alone says when to come back.
+func Test_Request_RateLimitReadsEachHeader(t *testing.T) {
+	rateLimited := func(header, value string) *ErrRateLimited {
+		t.Helper()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set(header, value)
+			_, _ = w.Write([]byte(`{"errors":[{"type":"RATE_LIMITED","message":"slow down"}]}`))
+		}))
+		t.Cleanup(srv.Close)
+		_, err := graphqlRequest(srv.URL, graphqlQuery{Query: "{}"}, "token", slog.New(slog.DiscardHandler))
+		var rl *ErrRateLimited
+		if !errors.As(err, &rl) {
+			t.Fatalf("%s: got %v, want a rate limit", header, err)
+		}
+		return rl
+	}
+	reset := time.Now().Add(time.Hour).Truncate(time.Second)
+	if got := rateLimited("x-ratelimit-reset", fmt.Sprint(reset.Unix())); !got.UnblockedAt.Equal(reset) {
+		t.Errorf("x-ratelimit-reset: unblocked at %v, want %v", got.UnblockedAt, reset)
+	}
+	before := time.Now()
+	got := rateLimited("retry-after", "60")
+	if d := got.UnblockedAt.Sub(before); d < 59*time.Second || d > 61*time.Second {
+		t.Errorf("retry-after 60: unblocked %v from now, want 60s", d)
+	}
+}
+
+func searchPrNode(extra string) string {
+	return `{"id":"PR_1","url":"https://github.com/o/r/pull/1","title":"t","author":{"login":"me"},
+		"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
+		"reviewThreads":{"totalCount":0,"pageInfo":{"hasNextPage":false},"edges":[]}` + extra + `}`
+}
+
+// A red PR whose failing checks were all named is complete; two different
+// refusals in one poll come back once each, in kind order.
+func Test_QueryGithub_RedPrNamesAndDegradationOrder(t *testing.T) {
+	noRetryPause(t)
+	red := `,"commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"FAILURE"}}}]}`
+	for _, c := range []struct {
+		name     string
+		checks   string
+		complete bool
+		kinds    string
+	}{
+		{"named", `{"data":{"node":{"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":1,"pageInfo":{"hasNextPage":false},
+			"nodes":[{"__typename":"CheckRun","name":"build","conclusion":"FAILURE","status":"COMPLETED"}]}}}}]}}}}`, true, "review_requests_unreadable"},
+		{"refused", `{"data":{"node":{"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":1,"pageInfo":{"hasNextPage":false},
+			"nodes":[null]}}}}]}}},"errors":[{"type":"FORBIDDEN","message":"no"}]}`, false, "checks_unreadable,review_requests_unreadable"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				switch q := string(body); {
+				case strings.Contains(q, "review-requested:"):
+					w.WriteHeader(http.StatusInternalServerError)
+				case strings.Contains(q, "contexts(first"):
+					_, _ = w.Write([]byte(c.checks))
+				case strings.Contains(q, "nodes(ids:"):
+					_, _ = w.Write([]byte(`{"data":{"nodes":[]}}`))
+				default:
+					_, _ = w.Write([]byte(`{"data":{"search":{"edges":[{"node":` + searchPrNode(red) + `}]}}}`))
+				}
+			}))
+			t.Cleanup(srv.Close)
+			prs, degradations, err := queryGithub(srv.URL, "token", "me", slog.New(slog.DiscardHandler))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(prs) != 1 || prs[0].ChecksComplete != c.complete {
+				t.Fatalf("ChecksComplete: got %+v, want %v", prs, c.complete)
+			}
+			var kinds []string
+			for _, d := range degradations {
+				kinds = append(kinds, d.Kind)
+			}
+			if strings.Join(kinds, ",") != c.kinds {
+				t.Errorf("degradations %v, want %s", kinds, c.kinds)
+			}
+		})
+	}
+}
+
+// Someone else's PR comment is not the user answering, so it does not hand
+// the PR back to the reviewer.
+func Test_RereviewFrom_OnlyTheUsersCommentsCount(t *testing.T) {
+	var pr prSearchResultGraphQl
+	pr.Author.Login = "me"
+	pr.Commits.Nodes = append(pr.Commits.Nodes, prCommitNodeGraphQl{})
+	pr.Commits.Nodes[0].Commit.Author.Date = "2026-09-01T09:00:00Z"
+	var review struct {
+		Node struct {
+			Author                  struct{ Login string }
+			Url, State, SubmittedAt string
+		}
+	}
+	review.Node.Author.Login, review.Node.State, review.Node.SubmittedAt = "adam", "COMMENTED", "2026-09-01T10:00:00Z"
+	pr.Reviews.Edges = append(pr.Reviews.Edges, review)
+	comment := func(login, at string) {
+		var c struct {
+			Node struct {
+				UpdatedAt string
+				Author    struct{ Login string }
+				Url       string
+			}
+		}
+		c.Node.Author.Login, c.Node.UpdatedAt = login, at
+		pr.Comments.Edges = append(pr.Comments.Edges, c)
+	}
+	comment("eve", "2026-09-02T10:00:00Z")
+	if got := rereviewFrom(pr, "me", 0); len(got) != 0 {
+		t.Errorf("eve's comment asked adam to re-review: %v", got)
+	}
+	comment("me", "2026-09-02T11:00:00Z")
+	if got := rereviewFrom(pr, "me", 0); strings.Join(got, ",") != "adam" {
+		t.Errorf("the user's own reply: got %v, want [adam]", got)
+	}
+}
+
+// A full batch is one request, not a full one and an empty one; a failed
+// batch is logged with its size.
+func Test_fetchMergeability_BatchesExactly(t *testing.T) {
+	noRetryPause(t)
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	ids := map[string]string{}
+	for i := range mergeabilityBatchSize {
+		ids[fmt.Sprintf("https://github.com/o/r/pull/%d", i)] = fmt.Sprintf("PR_%03d", i)
+	}
+	api{baseURL: srv.URL, logger: slog.New(slog.DiscardHandler)}.fetchMergeability(ids)
+	if requests != serverErrorRetries+1 {
+		t.Errorf("one batch of %d took %d requests, want %d", mergeabilityBatchSize, requests, serverErrorRetries+1)
+	}
+
+	ids["https://github.com/o/r/pull/extra"] = "PR_999"
+	logger, logs := bufferLogger()
+	api{baseURL: srv.URL, logger: logger}.fetchMergeability(ids)
+	for _, want := range []string{fmt.Sprintf("batch_size=%d ", mergeabilityBatchSize), "batch_size=1 "} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("logs lack %q:\n%s", want, logs)
+		}
+	}
+}
+
+// Both follow-up loops are bounded: a server that always claims another page
+// gets exactly the page budget and no more.
+func Test_FollowUpPagesAreBounded(t *testing.T) {
+	requests := 0
+	more := func(body string) *httptest.Server {
+		requests = 0
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests++
+			// stop a runaway loop after one page over the budget
+			_, _ = w.Write([]byte(strings.ReplaceAll(body, "HAS_NEXT", fmt.Sprint(requests <= 10))))
+		}))
+		t.Cleanup(srv.Close)
+		return srv
+	}
+	srv := more(`{"data":{"node":{"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"totalCount":9999,
+		"pageInfo":{"hasNextPage":HAS_NEXT,"endCursor":"c"},"nodes":[{"__typename":"CheckRun","name":"x","conclusion":"FAILURE","status":"COMPLETED"}]}}}}]}}}}`)
+	_, complete, _ := api{baseURL: srv.URL, logger: slog.New(slog.DiscardHandler)}.fetchFailingChecks("PR_1", "u")
+	if requests != maxCheckContextPages || complete {
+		t.Errorf("checks: %d requests, complete %v; want %d, false", requests, complete, maxCheckContextPages)
+	}
+
+	srv = more(`{"data":{"node":{"reviewThreads":{"totalCount":9999,"pageInfo":{"hasNextPage":HAS_NEXT,"endCursor":"c"},"edges":[]}}}}`)
+	var pr prSearchResultGraphQl
+	pr.ReviewThreads.PageInfo.HasNextPage = true
+	if err := (api{baseURL: srv.URL, logger: slog.New(slog.DiscardHandler)}).fetchRemainingReviewThreads(&pr); err != nil {
+		t.Fatal(err)
+	}
+	if requests != maxReviewThreadPages {
+		t.Errorf("review threads: %d requests, want %d", requests, maxReviewThreadPages)
+	}
+}
+
+// The search returned page 1, so the first follow-up is page 2.
+func Test_fetchRemainingReviewThreads_NamesTheFailedPage(t *testing.T) {
+	srv := fixedResponseServer(t, 200, `not json`)
+	var pr prSearchResultGraphQl
+	pr.ReviewThreads.PageInfo.HasNextPage = true
+	err := api{baseURL: srv.URL, logger: slog.New(slog.DiscardHandler)}.fetchRemainingReviewThreads(&pr)
+	if err == nil || !strings.Contains(err.Error(), "review threads page 2 ") {
+		t.Errorf("got %v, want an error naming page 2", err)
+	}
+}
+
+// Each part of a github URL is mapped, never dropped.
+func Test_RecordingURL_MapsEveryPart(t *testing.T) {
+	rules := anonymise.Rules{Paths: map[string]anonymise.Rule{"url": recordingURL(recordingLogin("me"))}}
+	out, err := anonymise.Anonymise(rules, []byte(`{"url":"https://github.com/acme/rocket/pull/7#issuecomment-123"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct{ Url string }
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatal(err)
+	}
+	if want := "https://github.com/owner1/repo1/pull/1#issuecomment-1"; got.Url != want {
+		t.Errorf("got %q, want %q", got.Url, want)
 	}
 }

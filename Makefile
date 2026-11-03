@@ -34,13 +34,12 @@ models:
 	go tool sqlc generate
 
 # Slow checks, run daily by .github/workflows/slow-tests.yml instead of on
-# every push. One worker keeps a mutation run's memory bounded. Thresholds
-# are the measured baseline (2026-10-31: 361 killed, 0 lived, 84.5% of
-# mutants covered), so a surviving mutant or a coverage drop fails the run.
-MUTATION_EFFICACY ?= 100
-MUTATION_COVERAGE ?= 84
+# every push. One worker keeps a mutation run's memory bounded. The
+# thresholds live in .gremlins.yaml, because gremlins v0.6.0 silently drops
+# --threshold-efficacy and --threshold-mcover (each reads as 0, which
+# disables the check); that file says what they are and why.
 mutate:
-	CGO_ENABLED=0 go tool gremlins unleash --workers 1 --threshold-efficacy $(MUTATION_EFFICACY) --threshold-mcover $(MUTATION_COVERAGE) .
+	CGO_ENABLED=0 go tool gremlins unleash --workers 1 .
 
 # The property tests with 10000 cases each instead of rapid's default 100.
 PROP_PACKAGES = ./anonymise ./internal/github ./internal/notify ./internal/points ./internal/server

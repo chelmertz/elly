@@ -36,3 +36,10 @@ func TestNumber(t *testing.T) {
 		}
 	}
 }
+
+// The ends of each kept range survive as themselves.
+func TestAnchorKeepsRangeEnds(t *testing.T) {
+	if got := Anchor("https://github.com/az09-/r/pull/1"); got != "pr-az09--r-1" {
+		t.Errorf("got %q", got)
+	}
+}

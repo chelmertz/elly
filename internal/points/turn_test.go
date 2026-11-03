@@ -114,3 +114,30 @@ func TestWithClaudeIsFoldedAfterUnblock(t *testing.T) {
 		t.Errorf("got %q %q", GroupWithClaude.Name(), GroupWithClaude.Slug())
 	}
 }
+
+// The first three groups are on the user and open; the rest are folded.
+func TestOnYouAndFoldedSplitAfterUnblock(t *testing.T) {
+	for _, g := range Groups {
+		on := g == GroupOneClick || g == GroupWaiting || g == GroupUnblock
+		if g.OnYou() != on || g.Folded() == on {
+			t.Errorf("%s: OnYou %v Folded %v, want OnYou %v", g.Name(), g.OnYou(), g.Folded(), on)
+		}
+	}
+}
+
+// An unlabelled link is still the attach link when its path ends in /attach.
+func TestLinkDoesMatchesThePathsLastSegment(t *testing.T) {
+	for _, c := range []struct {
+		url  string
+		want bool
+	}{
+		{"claude-review://o/r/1/attach", true},
+		{"https://example.com/rounds/ATTACH", true},
+		{"claude-review://o/r/1/attachment", false},
+		{"claude-review://o/r/attach/1", false},
+	} {
+		if got := linkDoes(types.AnnotationLink{Url: c.url}, "attach"); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.url, got, c.want)
+		}
+	}
+}

@@ -672,3 +672,43 @@ func TestStorePAT_AnotherAccountStartsEmpty(t *testing.T) {
 		})
 	}
 }
+
+// Burying one PR leaves its neighbours alone across polls.
+func TestStoreRepoPrs_BuryIsPerPr(t *testing.T) {
+	store := setupTestStorage(t)
+	at := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	pr := func(url string) types.ViewPr {
+		return types.ViewPr{Url: url, Title: "t", Author: "me", RepoName: "r", RepoOwner: "o", LastUpdated: at, RawJsonResponse: []byte("{}")}
+	}
+	buried, other := "https://github.com/o/r/pull/1", "https://github.com/o/r/pull/2"
+	if err := store.StoreRepoPrs([]types.ViewPr{pr(buried), pr(other)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Bury(buried); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.StoreRepoPrs([]types.ViewPr{pr(buried), pr(other)}); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range store.Prs().Prs {
+		if p.Buried != (p.Url == buried) {
+			t.Errorf("%s: buried = %v", p.Url, p.Buried)
+		}
+	}
+}
+
+// Prs reports when the PRs were stored, which is what the refresh loop and
+// the page's "last refreshed" read.
+func TestPrsReportsWhenTheyWereFetched(t *testing.T) {
+	store := setupTestStorage(t)
+	if got := store.Prs().LastFetched; !got.IsZero() {
+		t.Errorf("before any fetch: LastFetched %v", got)
+	}
+	before := time.Now().Truncate(time.Second)
+	if err := store.StoreRepoPrs(nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Prs().LastFetched; got.Before(before) || got.After(time.Now()) {
+		t.Errorf("LastFetched %v, want between %v and now", got, before)
+	}
+}

@@ -169,15 +169,24 @@ func decode(doc []byte) (any, error) {
 	return v, nil
 }
 
+// offsetSeconds is how many distinct offsets randomOffset draws from.
+const offsetSeconds = int64(700 * 24 * time.Hour / time.Second)
+
 // randomOffset is how far every timestamp moves back: between 30 days and two
 // years, plus a random time of day, so neither the date nor the hour of the
 // recording survives.
 func randomOffset() (time.Duration, error) {
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(700*24*time.Hour/time.Second)))
+	n, err := rand.Int(rand.Reader, big.NewInt(offsetSeconds))
 	if err != nil {
 		return 0, fmt.Errorf("anonymise: no randomness for the time offset: %w", err)
 	}
-	return -(30*24*time.Hour + time.Duration(n.Int64()+1)*time.Second), nil
+	return offsetFor(n.Int64()), nil
+}
+
+// offsetFor maps a draw in [0, offsetSeconds) to an offset strictly more than
+// 30 days and at most 730 days back.
+func offsetFor(n int64) time.Duration {
+	return -(30*24*time.Hour + time.Duration(n+1)*time.Second)
 }
 
 type secret struct {

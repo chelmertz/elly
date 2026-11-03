@@ -433,3 +433,52 @@ func Test_CounterPatternCoversFixedValuesAndSuffixes(t *testing.T) {
 		t.Error("a raw login passed as published")
 	}
 }
+
+// The draw's two ends pin the documented range: never 30 days or less, never
+// more than two years (730 days).
+func Test_OffsetRangeIsMoreThan30DaysToTwoYears(t *testing.T) {
+	if got, want := offsetFor(0), -(30*24*time.Hour + time.Second); got != want {
+		t.Errorf("smallest offset = %v, want %v", got, want)
+	}
+	if got, want := offsetFor(offsetSeconds-1), -730*24*time.Hour; got != want {
+		t.Errorf("largest offset = %v, want %v", got, want)
+	}
+	for range 200 {
+		d, err := randomOffset()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d >= -30*24*time.Hour || d < -730*24*time.Hour {
+			t.Fatalf("offset %v is outside (30 days, 730 days] back", d)
+		}
+	}
+}
+
+// A fixed value that maps to itself is published as it is, so it must not
+// count as a secret; one that maps to something else must.
+func Test_FixedValuesAreSecretsOnlyWhenReplaced(t *testing.T) {
+	got := run(t, `{"items": [{"author": "ci-bot"}, {"author": "realme"}]}`)
+	if a := items(got)[0]["author"]; a != "ci-bot" {
+		t.Errorf("ci-bot published as %v", a)
+	}
+	m := &Mapper{table: map[string]string{}, counters: map[string]int{}}
+	m.count(login, "realme")
+	m.count(login, "ci-bot")
+	var secrets []string
+	for _, s := range m.secrets {
+		secrets = append(secrets, s.value)
+	}
+	if diff := cmp.Diff([]string{"realme"}, secrets); diff != "" {
+		t.Errorf("secrets (-want +got):\n%s", diff)
+	}
+}
+
+// Published text is stripped longest word first: stripping "fo" before "fox"
+// would leave an "x" behind and report a one-letter login inside a published
+// word as a leak.
+func Test_LeakCheckStripsTheLongestPublishedWordFirst(t *testing.T) {
+	rules := Rules{Paths: map[string]Rule{"field": As(Redact)}, Vocabulary: []string{"fo", "fox"}}
+	if err := checkLeaks(rules, map[string]any{"field": "fox"}, []secret{{"x", "login"}}, nil); err != nil {
+		t.Errorf("a published word was reported as a leak: %v", err)
+	}
+}
