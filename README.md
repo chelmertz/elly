@@ -139,12 +139,15 @@ it requests. It answers only these:
   s, the request within 15 s, the answer is written within 30 s (5 minutes
   for checking a pasted token), and an idle connection closes after a
   minute. No body is read past 1 MiB.
-- **Every response**, refusals and 404s included, forbids framing
+- **Every response elly's handlers write**, refusals and 404s included,
+  forbids framing
   (`frame-ancestors 'none'`, `X-Frame-Options: DENY`), so no other site can
   lay a decoy over a page and take the user's click, and sends `nosniff`,
   `Cross-Origin-Resource-Policy: same-origin` and a CSP of `default-src
   'none'` that runs only the page's own script, by its hash, and connects
-  only to elly.
+  only to elly. Go's HTTP server answers a few requests before any handler
+  sees them (`OPTIONS *`, and requests it cannot parse), and those carry
+  none.
 
 ## The token
 
