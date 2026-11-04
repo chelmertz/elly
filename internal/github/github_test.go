@@ -1306,3 +1306,26 @@ func Test_Request_RefusesAnEndlessBody(t *testing.T) {
 		t.Errorf("UsernameFromPat on a body over the limit: %v", err)
 	}
 }
+
+type zeros struct{}
+
+func (zeros) Read(p []byte) (int, error) { clear(p); return len(p), nil }
+
+func Test_ReadBodyTakesExactlyTheLimit(t *testing.T) {
+	if b, err := readBody(io.LimitReader(zeros{}, maxResponseBody)); err != nil || len(b) != maxResponseBody {
+		t.Errorf("a body at the limit: %d bytes, %v", len(b), err)
+	}
+	if b, err := readBody(io.LimitReader(zeros{}, maxResponseBody+1)); err == nil || b != nil {
+		t.Errorf("a body one byte over the limit: %d bytes, %v", len(b), err)
+	}
+}
+
+func Test_LogBodyKeepsTheStart(t *testing.T) {
+	at := strings.Repeat("a", 512)
+	if got := logBody([]byte(at)); got != at {
+		t.Errorf("512 bytes cut: %q", got)
+	}
+	if got := logBody([]byte(at + "b")); got != at+"…" {
+		t.Errorf("513 bytes: %q", got)
+	}
+}

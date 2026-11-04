@@ -71,3 +71,56 @@ func TestAnchorKeepsDistinctReposApart(t *testing.T) {
 		}
 	}
 }
+
+func TestPrParts(t *testing.T) {
+	if o, r, n, ok := PrParts("https://github.com/o.x/r-y/pull/7"); !ok || o != "o.x" || r != "r-y" || n != "7" {
+		t.Errorf("a PR URL: %q %q %q %v", o, r, n, ok)
+	}
+	for _, bad := range []string{
+		"https://github.com/o/r/issues/7",
+		"https://github.com/./r/pull/7",
+		"https://github.com/o/../pull/7",
+		"https://github.com/o/r/pull/07",
+	} {
+		if _, _, _, ok := PrParts(bad); ok {
+			t.Errorf("%s taken apart", bad)
+		}
+	}
+}
+
+func TestLinkNamesPr(t *testing.T) {
+	const pr = "https://github.com/Owner/repo/pull/7"
+	for link, want := range map[string]bool{
+		"https://github.com/owner/REPO/pull/7":         true,
+		"HTTPS://github.com/Owner/repo/pull/7":         true,
+		"https://github.com/Owner/repo/pull/7/files#x": true,
+		"https://GitHub.com/Owner/repo/pull/7?w=1":     true,
+		"https://github.com/Owner/repo/pull":           false,
+		"https://github.com/Owner/repo/pull/8":         false,
+		"https://github.com/Owner/repo/issues/7":       false,
+		"https://github.com/Owner/other/pull/7":        false,
+		"https://github.com/Other/repo/pull/7":         false,
+		"https://evil.test/Owner/repo/pull/7":          false,
+		"https://user@github.com/Owner/repo/pull/7":    false,
+		"https://github.com/Owner/repo/pull/7/../../8": false,
+		"https:Owner/repo/pull/7":                      false,
+		"https://github.com/%zz":                       false,
+		"claude-review://owner/Repo/7":                 true,
+		"claude-review://Owner/repo/7/approve":         true,
+		"claude-review://Owner/repo/7/approve/x":       false,
+		"claude-review://Owner/repo":                   false,
+		"claude-review://Owner/repo/8":                 false,
+		"claude-review://Owner/other/7":                false,
+		"claude-review://Other/repo/7":                 false,
+		"claude-review://Owner/repo/7/approve?token=t": false,
+		"claude-review://Owner/repo/7#x":               false,
+		"prr://Owner/repo/7":                           false,
+	} {
+		if got := LinkNamesPr(pr, link); got != want {
+			t.Errorf("LinkNamesPr(%s) = %v, want %v", link, got, want)
+		}
+	}
+	if LinkNamesPr("https://github.com/Owner/repo/issues/7", pr) {
+		t.Error("a link matched a URL that is not a PR")
+	}
+}

@@ -4,11 +4,11 @@
 # disables the check. The run fails when a value is at or below its
 # threshold, so each sits just under the last measured run.
 #
-# Efficacy is below 100 because 18 surviving mutants are equivalent: the
+# Efficacy is below 100 because 19 surviving mutants are equivalent: the
 # mutated code behaves the same on every input (a clamp to a value it already
 # has, a sort over keys that are never equal). One new survivor takes
 # efficacy under the threshold.
 unleash:
   threshold:
     efficacy: 97.2
-    mutant-coverage: 82.8
+    mutant-coverage: 83.6
