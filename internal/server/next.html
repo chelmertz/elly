@@ -364,9 +364,9 @@ nav.side .meta .token + p { margin-top: var(--s3); }
         {{if .RateLimitedUntil}}<p class="warn">rate limited until <time datetime="{{.RateLimitedUntil}}">{{.RateLimitedUntil}}</time></p>{{end}}
         {{range .Degradations}}<p class="warn" title="{{.Remedy}}">{{.Message}}</p>{{end}}
         <details class="token"{{if .SetupMode}} open{{end}}>
-            <summary>{{with .Token}}@{{.Username}}{{with .Expires}} · {{if $.Token.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}}{{else}}<span class="warn">No token yet</span>{{end}}</summary>
+            <summary>{{with .Token}}Tokens · @{{.Username}}{{with .Expires}} · {{if $.Token.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}} · {{with $.OwnerTokens}}{{len .}} org token{{if gt (len .) 1}}s{{end}}{{else}}no org tokens{{end}}{{else}}<span class="warn">No token yet</span>{{end}}</summary>
             <form class="pat-form">
-                <label for="pat-input">A <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
+                <label for="pat-input">{{if .Token}}<strong>Main token</strong>, for every org without its own: a{{else}}A{{end}} <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
                     with read-only commit status, contents, metadata and pull requests.
                     It cannot name a failing Actions job; a classic token with the repo
                     scope can, and is far broader.</label>
@@ -379,7 +379,7 @@ nav.side .meta .token + p { margin-top: var(--s3); }
             </form>
             {{if .Token}}
             <form class="owner-form">
-                <label for="owner-token-input">Orgs that take only their own
+                <label for="owner-token-input"><strong>Org tokens</strong>{{if not .OwnerTokens}}: none yet{{end}}. Orgs that take only their own
                     <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
                     (resource owner: the org) need one each, made by @{{.Token.Username}}, with the same permissions.</label>
                 {{range .OwnerTokens}}{{$t := .}}<p>{{.Owner}}{{if .Refused}} · <span class="warn">refused</span>{{else}}{{with .Expires}} · {{if $t.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}}{{end}}

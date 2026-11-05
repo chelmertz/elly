@@ -177,6 +177,29 @@ func TestThePageListsOwnerTokens(t *testing.T) {
 	}
 }
 
+// The two forms read as two slots: the main token says it covers every
+// other org, and an empty org list says so rather than showing nothing.
+func TestThePageNamesBothTokenSlots(t *testing.T) {
+	w := newRoutes(t, "")
+	if err := w.store.StorePAT("github_pat_main", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	page := w.do("GET", "/", "").Body.String()
+	for _, want := range []string{"<summary>Tokens · @me · no org tokens</summary>",
+		"<strong>Main token</strong>, for every org without its own", "<strong>Org tokens</strong>: none yet"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page lacks %s", want)
+		}
+	}
+	if err := w.store.PutOwnerPAT("acme", "github_pat_acmesecret", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	page = w.do("GET", "/", "").Body.String()
+	if !strings.Contains(page, "<summary>Tokens · @me · 1 org token</summary>") || strings.Contains(page, "none yet") {
+		t.Error("the page does not count the stored org token")
+	}
+}
+
 func storageOwner(owner, token, refused string) storage.OwnerPAT {
 	return storage.OwnerPAT{Owner: owner, Token: token, Refused: refused}
 }
