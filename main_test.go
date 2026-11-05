@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -532,4 +534,21 @@ func TestRefreshLoop_ManualRefreshPollsWithinTheInterval(t *testing.T) {
 	}
 	tracker.RequestRefresh()
 	waitFor(t, "a poll on request", func() bool { return calls.Load() > 0 })
+}
+
+func TestRestrictDBFilesLeavesOnlyTheOwnerAccess(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "elly.db")
+	for _, f := range []string{db, db + "-wal"} {
+		if err := os.WriteFile(f, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := restrictDBFiles(db); err != nil {
+		t.Fatalf("a missing -shm is not an error: %v", err)
+	}
+	for _, f := range []string{db, db + "-wal"} {
+		if fi, err := os.Stat(f); err != nil || fi.Mode().Perm() != 0o600 {
+			t.Errorf("%s: %v %v", filepath.Base(f), fi.Mode().Perm(), err)
+		}
+	}
 }

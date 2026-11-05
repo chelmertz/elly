@@ -50,15 +50,6 @@ func (q *Queries) Bury(ctx context.Context, url string) error {
 	return err
 }
 
-const clearActivePAT = `-- name: ClearActivePAT :exec
-update pat set active = 0 where active = 1
-`
-
-func (q *Queries) ClearActivePAT(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, clearActivePAT)
-	return err
-}
-
 const clearLastFetched = `-- name: ClearLastFetched :exec
 delete from meta where key = 'last_fetched'
 `
@@ -205,21 +196,21 @@ func (q *Queries) CreatePr(ctx context.Context, arg CreatePrParams) (Pr, error) 
 	return i, err
 }
 
-const deactivateAllPATs = `-- name: DeactivateAllPATs :exec
-update pat set active = 0 where active = 1
-`
-
-func (q *Queries) DeactivateAllPATs(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, deactivateAllPATs)
-	return err
-}
-
 const deleteAllAnnotations = `-- name: DeleteAllAnnotations :exec
 delete from annotations
 `
 
 func (q *Queries) DeleteAllAnnotations(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, deleteAllAnnotations)
+	return err
+}
+
+const deleteAllPATs = `-- name: DeleteAllPATs :exec
+delete from pat
+`
+
+func (q *Queries) DeleteAllPATs(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllPATs)
 	return err
 }
 
@@ -365,15 +356,15 @@ func (q *Queries) InsertPAT(ctx context.Context, arg InsertPATParams) error {
 	return err
 }
 
-const lastPATUsername = `-- name: LastPATUsername :one
-select username from pat order by rowid desc limit 1
+const lastLogin = `-- name: LastLogin :one
+select value from meta where key = 'last_login' limit 1
 `
 
-func (q *Queries) LastPATUsername(ctx context.Context) (string, error) {
-	row := q.db.QueryRowContext(ctx, lastPATUsername)
-	var username string
-	err := row.Scan(&username)
-	return username, err
+func (q *Queries) LastLogin(ctx context.Context) (string, error) {
+	row := q.db.QueryRowContext(ctx, lastLogin)
+	var value string
+	err := row.Scan(&value)
+	return value, err
 }
 
 const listPrs = `-- name: ListPrs :many
@@ -507,6 +498,15 @@ func (q *Queries) PutAnnotation(ctx context.Context, arg PutAnnotationParams) er
 		arg.ExpiresAt,
 		arg.ExpiresUnix,
 	)
+	return err
+}
+
+const setLastLogin = `-- name: SetLastLogin :exec
+replace into meta (key, value) values ('last_login', ?)
+`
+
+func (q *Queries) SetLastLogin(ctx context.Context, value string) error {
+	_, err := q.db.ExecContext(ctx, setLastLogin, value)
 	return err
 }
 

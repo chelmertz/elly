@@ -65,14 +65,12 @@ delete from meta where key = 'rate_limit_until';
 -- name: GetActivePAT :one
 select pat, set_at, expires_at, username from pat where active = 1 limit 1;
 
--- name: DeactivateAllPATs :exec
-update pat set active = 0 where active = 1;
+-- name: DeleteAllPATs :exec
+delete from pat;
 
 -- name: InsertPAT :exec
 insert or replace into pat (pat, expires_at, username, active) values (?, ?, ?, 1);
 
--- name: ClearActivePAT :exec
-update pat set active = 0 where active = 1;
 
 -- name: StoreDegradations :exec
 replace into meta (key, value) values ('degradations', ?);
@@ -100,8 +98,11 @@ delete from annotations where expires_unix <= ?;
 select pr_url, source, state, note, links, expires_at from annotations
 where expires_unix > ? order by pr_url, source;
 
--- name: LastPATUsername :one
-select username from pat order by rowid desc limit 1;
+-- name: LastLogin :one
+select value from meta where key = 'last_login' limit 1;
+
+-- name: SetLastLogin :exec
+replace into meta (key, value) values ('last_login', ?);
 
 -- name: ClearLastFetched :exec
 delete from meta where key = 'last_fetched';

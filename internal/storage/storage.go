@@ -42,7 +42,7 @@ type Storage interface {
 	IsRateLimitActive(now time.Time) bool
 	// GetRateLimitUntil returns the rate limit expiry time, or zero time if not rate limited.
 	GetRateLimitUntil() time.Time
-	// StorePAT stores a new PAT, deactivating any existing active PAT. A
+	// StorePAT stores a new PAT, deleting the previous one. A
 	// PAT for another login than the previous one first deletes the stored
 	// PRs, buries, annotations and notification history. It clears any
 	// stored rate limit: a new token is a new quota.
@@ -50,7 +50,7 @@ type Storage interface {
 	// GetPAT returns the active PAT. Returns (pat, true, nil) if found,
 	// (zero, false, nil) if not configured, or (zero, false, err) on error.
 	GetPAT() (StoredPAT, bool, error)
-	// ClearPAT deactivates the active PAT and deletes the stored PRs.
+	// ClearPAT deletes the PAT and deletes the stored PRs.
 	ClearPAT() error
 	// StoreDegradations records what the last poll could not do. An empty
 	// slice clears the record.
@@ -86,7 +86,9 @@ type StoredState struct {
 var ddl string
 
 func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
-	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=rwc&_journal_mode=WAL&_synchronous=NORMAL", dbPath))
+	// secure_delete: a deleted token's bytes are overwritten, not left in a
+	// free page.
+	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=rwc&_journal_mode=WAL&_synchronous=NORMAL&_pragma=secure_delete(1)", dbPath))
 	check(err)
 
 	// create tables
@@ -115,12 +117,27 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 		}
 	}
 	check(widenAnnotationStates(ctx, db))
+	check(dropInactivePATs(ctx, db))
 
 	return &DbStorage{
 		db:     New(db),
 		rawDb:  db,
 		logger: logger,
 	}
+}
+
+// dropInactivePATs deletes the tokens that elly before this version only
+// deactivated, after recording the newest one's login, which the login-change
+// check in StorePAT reads.
+func dropInactivePATs(ctx context.Context, db *sql.DB) error {
+	if _, err := db.ExecContext(ctx, `insert or ignore into meta (key, value)
+		select 'last_login', username from pat order by rowid desc limit 1`); err != nil {
+		return fmt.Errorf("could not record the last login: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `delete from pat where active = 0`); err != nil {
+		return fmt.Errorf("could not delete inactive PATs: %w", err)
+	}
+	return nil
 }
 
 // widenAnnotationStates rebuilds an annotations table whose check constraint
@@ -371,7 +388,7 @@ func (s *DbStorage) StorePAT(token, username string, expiresAt time.Time) error 
 	// Another account must not inherit this one's PRs, buries, annotations
 	// or notification history: tick, the bar and the page would read them as
 	// the new login's. GitHub logins are case-insensitive.
-	previous, err := qtx.LastPATUsername(ctx)
+	previous, err := qtx.LastLogin(ctx)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("could not read the previous PAT's login: %w", err)
 	}
@@ -391,8 +408,13 @@ func (s *DbStorage) StorePAT(token, username string, expiresAt time.Time) error 
 	if err := qtx.ClearRateLimitUntil(ctx); err != nil {
 		return fmt.Errorf("could not clear the rate limit: %w", err)
 	}
-	if err := qtx.DeactivateAllPATs(ctx); err != nil {
-		return fmt.Errorf("could not deactivate existing PATs: %w", err)
+	// Deleted, not deactivated: a replaced token is still a live credential
+	// until it expires, and secure_delete overwrites its bytes.
+	if err := qtx.DeleteAllPATs(ctx); err != nil {
+		return fmt.Errorf("could not delete the previous PAT: %w", err)
+	}
+	if err := qtx.SetLastLogin(ctx, username); err != nil {
+		return fmt.Errorf("could not record the login: %w", err)
 	}
 
 	expiresAtStr := ""
@@ -457,7 +479,7 @@ func ReadPAT(dbPath string) (StoredPAT, bool, error) {
 	return (&DbStorage{db: New(db), rawDb: db}).GetPAT()
 }
 
-// ClearPAT deactivates the active PAT and deletes the PRs it fetched, so
+// ClearPAT deletes the PAT and deletes the PRs it fetched, so
 // nothing goes on being served as current, and clears the last poll time, so
 // the next token is polled at once.
 func (s *DbStorage) ClearPAT() error {
@@ -468,7 +490,7 @@ func (s *DbStorage) ClearPAT() error {
 	}
 	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
 	q := s.db.WithTx(tx)
-	if err := q.ClearActivePAT(ctx); err != nil {
+	if err := q.DeleteAllPATs(ctx); err != nil {
 		return fmt.Errorf("could not clear PAT: %w", err)
 	}
 	if err := forgetPrs(ctx, q); err != nil {

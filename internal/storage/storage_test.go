@@ -726,3 +726,80 @@ func TestStorePATClearsTheRateLimit(t *testing.T) {
 		t.Error("a new token is still held by the old one's rate limit")
 	}
 }
+
+// A replaced or cleared token is gone from every file sqlite writes, not
+// merely marked inactive: an old copy of a token is a live credential until
+// it expires.
+func TestReplacedAndClearedTokensLeaveNoCopyOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), filepath.Join(dir, "elly.db"))
+	for _, tok := range []string{"github_pat_first", "github_pat_second"} {
+		if err := store.StorePAT(tok, "me", time.Time{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.ClearPAT(); err != nil {
+		t.Fatal(err)
+	}
+	assertGone := func(when string) {
+		t.Helper()
+		if _, err := store.rawDb.Exec(`pragma wal_checkpoint(truncate)`); err != nil {
+			t.Fatal(err)
+		}
+		files, _ := filepath.Glob(filepath.Join(dir, "*"))
+		for _, f := range files {
+			b, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, old := range []string{"github_pat_first", "github_pat_second"} {
+				if bytes.Contains(b, []byte(old)) {
+					t.Errorf("%s: %s still holds %s", when, filepath.Base(f), old)
+				}
+			}
+		}
+	}
+	assertGone("after a clear")
+	if err := store.StorePAT("github_pat_third", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	assertGone("after a new token")
+	got, found, err := store.GetPAT()
+	if err != nil || !found || got.Token != "github_pat_third" {
+		t.Fatalf("active token %+v %v %v", got, found, err)
+	}
+}
+
+// A database from before tokens were deleted keeps deactivated ones; opening
+// it deletes them and keeps the newest login, so a token for another login
+// still starts empty.
+func TestOpeningAnOldDatabaseDropsDeactivatedTokens(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "elly.db")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	old := NewStorage(logger, path)
+	for _, stmt := range []string{
+		`insert into pat (pat, expires_at, username, active) values ('github_pat_old', '', 'someone', 0)`,
+		`insert into pat (pat, expires_at, username, active) values ('github_pat_me', '', 'me', 1)`,
+		`delete from meta where key = 'last_login'`,
+	} {
+		if _, err := old.rawDb.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := old.StoreRepoPrs([]types.ViewPr{{Url: "https://github.com/o/r/pull/1", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+		t.Fatal(err)
+	}
+	old.rawDb.Close() //nolint:errcheck
+
+	store := NewStorage(logger, path)
+	var left string
+	if err := store.rawDb.QueryRow(`select group_concat(pat) from pat`).Scan(&left); err != nil || left != "github_pat_me" {
+		t.Fatalf("tokens left %q, %v", left, err)
+	}
+	if err := store.StorePAT("github_pat_other", "other", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Prs().Prs; len(got) != 0 {
+		t.Errorf("another login inherited %v", got)
+	}
+}

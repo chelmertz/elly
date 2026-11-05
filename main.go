@@ -95,6 +95,13 @@ func main() {
 		store = storage.NewStorageDemo()
 	} else {
 		store = storage.NewStorage(logger, *dbPath)
+		// The database holds GitHub tokens. sqlite creates it, and its WAL
+		// and shm files, under the umask, and MkdirAll leaves a directory
+		// that already existed as it was.
+		if err := restrictDBFiles(*dbPath); err != nil {
+			logger.Error("could not restrict the database files to this user", slog.Any("error", err))
+			os.Exit(1)
+		}
 	}
 
 	setupMode, err := initPAT(store, apiURL, logger)
@@ -148,6 +155,18 @@ func main() {
 		AllowedHosts:      splitOwners(*allowedHosts),
 		GithubURL:         apiURL,
 	})
+}
+
+// restrictDBFiles makes the database and the files sqlite keeps beside it
+// readable by this user only. The directory is left alone: -db may point into
+// one that is not elly's.
+func restrictDBFiles(dbPath string) error {
+	for _, f := range []string{dbPath, dbPath + "-wal", dbPath + "-shm"} {
+		if err := os.Chmod(f, 0o600); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 // initPAT initializes the PAT from env var or storage.
