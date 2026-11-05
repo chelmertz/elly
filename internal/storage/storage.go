@@ -29,6 +29,31 @@ type StoredPAT struct {
 	ExpiresAt time.Time // Zero time if non-expiring
 }
 
+// OwnerPAT is a token for one repo owner's PRs, beside the primary PAT: a
+// fine-grained token covers a single owner. Its login is the primary's.
+type OwnerPAT struct {
+	Owner     string
+	Token     string
+	Username  string
+	SetAt     time.Time
+	ExpiresAt time.Time // zero if non-expiring
+	// LastSuccess is the last poll that read this owner, zero before one.
+	LastSuccess time.Time
+	// RateLimitedUntil holds the owner's polls back; zero when not limited.
+	RateLimitedUntil time.Time
+	// Refused is "" while the token is usable, else the degradation kind
+	// that stopped it. A refused owner is not polled until a new token.
+	Refused string
+}
+
+// ErrNoPrimary refuses an owner token while there is no primary token: the
+// primary's login is what an owner token must match.
+var ErrNoPrimary = errors.New("no primary token")
+
+// ErrOtherLogin refuses an owner token for another login than the primary's:
+// its PRs would be read as the user's.
+var ErrOtherLogin = errors.New("the token is for another login than the primary token")
+
 type Storage interface {
 	Prs() StoredState
 	StoreRepoPrs(orderedPrs []types.ViewPr) error
@@ -50,8 +75,18 @@ type Storage interface {
 	// GetPAT returns the active PAT. Returns (pat, true, nil) if found,
 	// (zero, false, nil) if not configured, or (zero, false, err) on error.
 	GetPAT() (StoredPAT, bool, error)
-	// ClearPAT deletes the PAT and deletes the stored PRs.
+	// ClearPAT deletes the PAT and deletes the stored PRs. Owner tokens stay.
 	ClearPAT() error
+	// PutOwnerPAT stores or replaces the token for owner, refusing it with
+	// ErrNoPrimary or ErrOtherLogin, checked in the same transaction.
+	PutOwnerPAT(owner, token, username string, expiresAt time.Time) error
+	// OwnerPATs returns the owner tokens, ordered by owner.
+	OwnerPATs() ([]OwnerPAT, error)
+	// DeleteOwnerPAT deletes owner's token; false when there was none.
+	DeleteOwnerPAT(owner string) (bool, error)
+	// SetOwnerPollState records a poll's outcome for o.Owner, unless its
+	// token was replaced meanwhile.
+	SetOwnerPollState(o OwnerPAT) error
 	// StoreDegradations records what the last poll could not do. An empty
 	// slice clears the record.
 	StoreDegradations(ds []types.Degradation) error
@@ -396,6 +431,9 @@ func (s *DbStorage) StorePAT(token, username string, expiresAt time.Time) error 
 		if err := forgetPrs(ctx, qtx); err != nil {
 			return err
 		}
+		if err := qtx.DeleteAllOwnerPATs(ctx); err != nil {
+			return fmt.Errorf("could not delete the previous login's owner tokens: %w", err)
+		}
 		if err := qtx.ClearNotifySeen(ctx); err != nil {
 			return fmt.Errorf("could not clear the previous login's notify state: %w", err)
 		}
@@ -497,6 +535,82 @@ func (s *DbStorage) ClearPAT() error {
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *DbStorage) PutOwnerPAT(owner, token, username string, expiresAt time.Time) error {
+	ctx := context.Background()
+	tx, err := s.rawDb.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("could not begin storing the owner token: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
+	q := s.db.WithTx(tx)
+	// Read here rather than by the caller: a primary for another login can
+	// be stored while this token is being checked with GitHub.
+	primary, err := q.GetActivePAT(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNoPrimary
+	}
+	if err != nil {
+		return fmt.Errorf("could not read the primary token: %w", err)
+	}
+	if !strings.EqualFold(primary.Username, username) {
+		return ErrOtherLogin
+	}
+	if err := q.PutOwnerPAT(ctx, PutOwnerPATParams{Owner: owner, Pat: token, Username: username, ExpiresAt: formatTime(expiresAt)}); err != nil {
+		return fmt.Errorf("could not store the owner token: %w", err)
+	}
+	return tx.Commit()
+}
+
+func (s *DbStorage) OwnerPATs() ([]OwnerPAT, error) {
+	rows, err := s.db.ListOwnerPATs(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("could not list owner tokens: %w", err)
+	}
+	out := make([]OwnerPAT, 0, len(rows))
+	for _, r := range rows {
+		o := OwnerPAT{Owner: r.Owner, Token: r.Pat, Username: r.Username, Refused: r.Refused}
+		for _, f := range []struct {
+			dst *time.Time
+			src string
+		}{{&o.SetAt, r.SetAt}, {&o.ExpiresAt, r.ExpiresAt}, {&o.LastSuccess, r.LastSuccess}, {&o.RateLimitedUntil, r.RateLimitedUntil}} {
+			if f.src == "" {
+				continue
+			}
+			if *f.dst, err = time.Parse(time.RFC3339, f.src); err != nil {
+				return nil, fmt.Errorf("could not parse a time of the %s token: %w", r.Owner, err)
+			}
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func (s *DbStorage) DeleteOwnerPAT(owner string) (bool, error) {
+	n, err := s.db.DeleteOwnerPAT(context.Background(), owner)
+	if err != nil {
+		return false, fmt.Errorf("could not delete the owner token: %w", err)
+	}
+	return n > 0, nil
+}
+
+func (s *DbStorage) SetOwnerPollState(o OwnerPAT) error {
+	return s.db.SetOwnerPollState(context.Background(), SetOwnerPollStateParams{
+		LastSuccess:      formatTime(o.LastSuccess),
+		RateLimitedUntil: formatTime(o.RateLimitedUntil),
+		Refused:          o.Refused,
+		Owner:            o.Owner,
+		Pat:              o.Token,
+	})
+}
+
+// formatTime is RFC3339, or "" for the zero time.
+func formatTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
 }
 
 // forgetPrs deletes the stored PRs, buries with them, and the last poll time.

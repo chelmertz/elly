@@ -258,10 +258,31 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 			continue
 		}
 		tracker.Succeeded()
+		owners, err := store.OwnerPATs()
+		if err != nil {
+			logger.Error("could not read the owner tokens", slog.Any("error", err))
+			continue
+		}
+		prs, ownerDs, states := mergeOwners(prs, storedPat.Username, owners, store.Prs().Prs, time.Now(),
+			func(o storage.OwnerPAT) ([]types.ViewPr, []types.Degradation, error) {
+				return github.PollOwner(baseURL, o.Token, storedPat.Username, o.Owner, logger)
+			}, logger)
+		degradations = append(degradations, ownerDs...)
+		// Kept even when the result is dropped below: each state only lands
+		// on the token it was polled with.
+		for _, st := range states {
+			if err := store.SetOwnerPollState(st); err != nil {
+				logger.Warn("could not store an owner token's poll state", slog.String("owner", st.Owner), slog.Any("error", err))
+			}
+		}
 		// The token was replaced or cleared while this poll ran: its PRs
 		// belong to the old token's login, so none of them is stored.
 		if current, found, _ := store.GetPAT(); !found || current.Token != storedPat.Token {
 			logger.Info("the token changed during the poll, dropping its result")
+			continue
+		}
+		if current, err := store.OwnerPATs(); err != nil || !sameTokens(owners, current) {
+			logger.Info("an owner token changed during the poll, dropping its result")
 			continue
 		}
 		// Written on every successful poll, including when the slice is empty,
@@ -286,14 +307,14 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 func logDegradations(ds []types.Degradation, announced map[string]bool, logger *slog.Logger) {
 	for _, d := range ds {
 		if d.TokenLimitation() {
-			if !announced[d.Kind] {
-				announced[d.Kind] = true
+			if key := d.Kind + "/" + d.Owner; !announced[key] {
+				announced[key] = true
 				logger.Info("names of failing Actions jobs are unavailable with this token type",
-					slog.String("kind", d.Kind), slog.String("remedy", d.Remedy))
+					slog.String("kind", d.Kind), slog.String("owner", d.Owner), slog.String("remedy", d.Remedy))
 			}
 			continue
 		}
-		logger.Warn("degraded", slog.String("kind", d.Kind),
+		logger.Warn("degraded", slog.String("kind", d.Kind), slog.String("owner", d.Owner),
 			slog.String("message", d.Message), slog.String("remedy", d.Remedy))
 	}
 }

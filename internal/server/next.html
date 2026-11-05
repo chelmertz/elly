@@ -377,6 +377,19 @@ nav.side .meta .token + p { margin-top: var(--s3); }
                     {{if .Token}}<button type="button" class="clear-pat">Clear</button>{{end}}
                 </div>
             </form>
+            {{if .Token}}
+            <form class="owner-form">
+                <label for="owner-token-input">Orgs that take only their own
+                    <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
+                    (resource owner: the org) need one each, made by @{{.Token.Username}}, with the same permissions.</label>
+                {{range .OwnerTokens}}{{$t := .}}<p>{{.Owner}}{{if .Refused}} · <span class="warn">refused</span>{{else}}{{with .Expires}} · {{if $t.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}}{{end}}
+                    <button type="button" class="remove-owner" data-owner="{{.Owner}}">Remove</button></p>{{end}}
+                <input type="text" id="owner-input" name="owner" placeholder="org, e.g. octo-org" autocomplete="off">
+                <input type="password" id="owner-token-input" name="token" placeholder="github_pat_..." autocomplete="off">
+                <p class="warn form-error" hidden></p>
+                <div class="actions"><button type="submit" class="save-owner">Save</button></div>
+            </form>
+            {{end}}
         </details>
         <p>{{with .Version}}elly {{.}} · {{end}}<button type="button" class="keys-open">keys</button></p>
     </div>
@@ -561,6 +574,28 @@ nav.side .meta .token + p { margin-top: var(--s3); }
             if (!confirm("Clear the token? elly stops polling until a new one is set.")) return;
             fetch("/api/v0/config/pat", {method: "DELETE"}).then((r) => { if (r.ok) location.reload(); });
         });
+    }
+
+    const ownerForm = document.querySelector("form.owner-form");
+    if (ownerForm) {
+        const ownerError = ownerForm.querySelector(".form-error");
+        const saveOwner = ownerForm.querySelector(".save-owner");
+        const ownerFail = (text) => { ownerError.textContent = text; ownerError.hidden = false; saveOwner.disabled = false; };
+        ownerForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            const owner = ownerForm.querySelector("#owner-input").value.trim();
+            const token = ownerForm.querySelector("#owner-token-input").value;
+            if (!owner || !token) { ownerFail("Name the org and paste its token"); return; }
+            saveOwner.disabled = true;
+            ownerError.hidden = true;
+            fetch("/api/v0/config/pat/" + encodeURIComponent(owner), {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({token})})
+                .then((r) => r.ok ? location.reload() : r.json().then((d) => ownerFail(d.error || "Could not save the token")))
+                .catch((err) => ownerFail("Network error: " + err.message));
+        });
+        ownerForm.querySelectorAll(".remove-owner").forEach((b) => b.addEventListener("click", () => {
+            if (!confirm("Remove the token for " + b.dataset.owner + "? Its PRs leave the list.")) return;
+            fetch("/api/v0/config/pat/" + encodeURIComponent(b.dataset.owner), {method: "DELETE"}).then((r) => { if (r.ok) location.reload(); });
+        }));
     }
 
     const polled = document.querySelector("time.polled");

@@ -23,6 +23,12 @@ var ErrClient = errors.New("github returned client error")
 var ErrGithubServer = errors.New("github returned server error")
 var ErrInvalidToken = errors.New("github token is invalid")
 
+// ErrNoAccess is a token that authenticates but sees none of an owner's
+// private repositories: one still waiting for the org's approval, one whose
+// resource owner is another account, or one the org revoked. GitHub answers
+// its searches with 200 and nothing in them.
+var ErrNoAccess = errors.New("the token sees none of the owner's private repositories")
+
 const DefaultAPIURL = "https://api.github.com"
 
 // maxResponseBody caps what elly reads of one GitHub response. A poll of 100
@@ -410,6 +416,10 @@ func (a api) requestOnce(query graphqlQuery) ([]byte, error) {
 
 	logger.Debug("github response", slog.String("body", string(respBody)), slog.Int("status", response.StatusCode))
 
+	if response.StatusCode == http.StatusUnauthorized {
+		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", logBody(respBody)))
+		return nil, fmt.Errorf("%w: %w: github response code %d", ErrClient, ErrInvalidToken, response.StatusCode)
+	}
 	if response.StatusCode >= 400 {
 		logger.Warn("response", slog.Int("response_code", response.StatusCode), slog.String("body", logBody(respBody)))
 		return nil, fmt.Errorf("%w: github response code %d", ErrClient, response.StatusCode)
@@ -1403,4 +1413,4 @@ type graphqlQuery struct {
 }
 
 // queryConstants is every query text a poll sends.
-var queryConstants = []string{searchPrsQuery, reviewThreadsPageQuery, failingChecksQuery, mergeabilityQuery}
+var queryConstants = []string{searchPrsQuery, reviewThreadsPageQuery, failingChecksQuery, mergeabilityQuery, ownerReachQuery}

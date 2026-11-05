@@ -83,6 +83,12 @@ func (s *testStorage) PutAnnotation(string, types.Annotation, time.Time) error {
 	return nil
 }
 func (s *testStorage) DeleteAnnotation(string, string) error { return nil }
+func (s *testStorage) PutOwnerPAT(string, string, string, time.Time) error {
+	return nil
+}
+func (s *testStorage) OwnerPATs() ([]storage.OwnerPAT, error)     { return nil, nil }
+func (s *testStorage) DeleteOwnerPAT(string) (bool, error)        { return false, nil }
+func (s *testStorage) SetOwnerPollState(o storage.OwnerPAT) error { return nil }
 
 var _ storage.Storage = (*testStorage)(nil)
 

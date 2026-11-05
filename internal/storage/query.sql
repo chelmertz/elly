@@ -112,3 +112,23 @@ delete from meta where key = 'notify_seen';
 
 -- name: DeleteAllAnnotations :exec
 delete from annotations;
+
+-- name: ListOwnerPATs :many
+select owner, pat, username, set_at, expires_at, last_success, rate_limited_until, refused
+from owner_pat order by owner;
+
+-- name: PutOwnerPAT :exec
+insert into owner_pat (owner, pat, username, expires_at) values (?, ?, ?, ?)
+on conflict (owner) do update set owner = excluded.owner, pat = excluded.pat,
+    username = excluded.username, expires_at = excluded.expires_at,
+    set_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), rate_limited_until = '', refused = '';
+
+-- name: DeleteOwnerPAT :execrows
+delete from owner_pat where owner = ?;
+
+-- name: DeleteAllOwnerPATs :exec
+delete from owner_pat;
+
+-- name: SetOwnerPollState :exec
+update owner_pat set last_success = ?, rate_limited_until = ?, refused = ?
+where owner = ? and pat = ?;

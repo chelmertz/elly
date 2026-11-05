@@ -19,6 +19,17 @@ type Meta struct {
 	Value string
 }
 
+type OwnerPat struct {
+	Owner            string
+	Pat              string
+	Username         string
+	SetAt            string
+	ExpiresAt        string
+	LastSuccess      string
+	RateLimitedUntil string
+	Refused          string
+}
+
 type Pat struct {
 	Pat       string
 	SetAt     string

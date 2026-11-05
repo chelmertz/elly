@@ -31,6 +31,25 @@ type NextData struct {
 	// Token is what the page says about the stored PAT, never the PAT
 	// itself; nil in setup mode.
 	Token *nextToken
+	// OwnerTokens are the tokens for one repo owner each, never the tokens.
+	OwnerTokens []nextOwnerToken
+}
+
+type nextOwnerToken struct {
+	Owner string
+	nextToken
+	// Refused is set once GitHub refused the token or it lost its access;
+	// elly stops polling the owner until a new token is pasted.
+	Refused bool
+}
+
+func ownerTokenInfo(owners []storage.OwnerPAT, now time.Time) []nextOwnerToken {
+	out := make([]nextOwnerToken, 0, len(owners))
+	for _, o := range owners {
+		t := tokenInfo(storage.StoredPAT{Username: o.Username, ExpiresAt: o.ExpiresAt}, now)
+		out = append(out, nextOwnerToken{Owner: o.Owner, nextToken: *t, Refused: o.Refused != ""})
+	}
+	return out
 }
 
 type nextToken struct {

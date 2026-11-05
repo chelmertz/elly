@@ -43,6 +43,10 @@ func Test_Queries_CarryValuesAsVariables(t *testing.T) {
 			"mergeability", queryMergeability([]string{"PR_a", "PR_b"}), []string{"PR_a", "PR_b"},
 			map[string]any{"ids": []string{"PR_a", "PR_b"}},
 		},
+		{
+			"owner reach", queryOwnerReach("someOwner"), []string{"someOwner"},
+			map[string]any{"owner": "someOwner"},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

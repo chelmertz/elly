@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -801,5 +802,86 @@ func TestOpeningAnOldDatabaseDropsDeactivatedTokens(t *testing.T) {
 	}
 	if got := store.Prs().Prs; len(got) != 0 {
 		t.Errorf("another login inherited %v", got)
+	}
+}
+
+func TestOwnerPATNeedsThePrimarysLogin(t *testing.T) {
+	store := setupTestStorage(t)
+	if err := store.PutOwnerPAT("acme", "github_pat_acme", "me", time.Time{}); !errors.Is(err, ErrNoPrimary) {
+		t.Fatalf("without a primary: %v", err)
+	}
+	if err := store.StorePAT("github_pat_main", "Me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutOwnerPAT("acme", "github_pat_acme", "someone", time.Time{}); !errors.Is(err, ErrOtherLogin) {
+		t.Fatalf("another login: %v", err)
+	}
+	if err := store.PutOwnerPAT("acme", "github_pat_acme", "me", time.Time{}); err != nil {
+		t.Fatalf("logins are case-insensitive: %v", err)
+	}
+	got, err := store.OwnerPATs()
+	if err != nil || len(got) != 1 || got[0].Token != "github_pat_acme" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
+func TestOwnerPATReplacesInPlaceAndResetsItsRefusal(t *testing.T) {
+	store := setupTestStorage(t)
+	if err := store.StorePAT("github_pat_main", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutOwnerPAT("acme", "github_pat_one", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	success := time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)
+	if err := store.SetOwnerPollState(OwnerPAT{Owner: "acme", Token: "github_pat_one", LastSuccess: success, Refused: "owner_token_refused"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutOwnerPAT("Acme", "github_pat_two", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	// A poll that started with the old token reports late; it must not
+	// mark the new one refused.
+	if err := store.SetOwnerPollState(OwnerPAT{Owner: "acme", Token: "github_pat_one", Refused: "owner_token_refused"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := store.OwnerPATs()
+	if len(got) != 1 {
+		t.Fatalf("%+v", got)
+	}
+	o := got[0]
+	if o.Owner != "Acme" || o.Token != "github_pat_two" || o.Refused != "" || !o.LastSuccess.Equal(success) {
+		t.Errorf("%+v", o)
+	}
+}
+
+func TestOwnerPATsFollowThePrimarysLogin(t *testing.T) {
+	store := setupTestStorage(t)
+	if err := store.StorePAT("github_pat_main", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutOwnerPAT("acme", "github_pat_acme", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ClearPAT(); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.OwnerPATs(); len(got) != 1 {
+		t.Fatalf("a clear dropped the owner tokens: %+v", got)
+	}
+	if err := store.StorePAT("github_pat_main2", "ME", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.OwnerPATs(); len(got) != 1 {
+		t.Fatalf("the same login dropped the owner tokens: %+v", got)
+	}
+	if err := store.StorePAT("github_pat_other", "other", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.OwnerPATs(); len(got) != 0 {
+		t.Fatalf("another login kept %+v", got)
+	}
+	if ok, err := store.DeleteOwnerPAT("acme"); ok || err != nil {
+		t.Errorf("deleted a token that was gone: %v %v", ok, err)
 	}
 }

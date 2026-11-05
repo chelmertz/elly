@@ -9,8 +9,10 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +41,37 @@ func pageDegradations(ds []types.Degradation) []types.Degradation {
 		}
 	}
 	return out
+}
+
+// ownerLogin is GitHub's login syntax: up to 39 letters, digits and
+// hyphens, not starting with a hyphen.
+var ownerLogin = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,38}$`)
+
+// readToken reads {"token": "..."} from a PAT route's body, or answers the
+// request itself and returns "".
+func readToken(w http.ResponseWriter, r *http.Request) string {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPatBody)).Decode(&req); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, "body over 4 KiB")
+			return ""
+		}
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return ""
+	}
+	if req.Token == "" {
+		writeError(w, http.StatusBadRequest, "token is required")
+	}
+	return req.Token
+}
+
+func writeError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": msg})
 }
 
 // patWriteTimeout is how long checking a pasted token may take: one
@@ -254,6 +287,11 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 		data.Version = webConfig.Version
 		if found {
 			data.Token = tokenInfo(pat, time.Now())
+			owners, err := webConfig.Store.OwnerPATs()
+			if err != nil {
+				webConfig.Logger.Warn("could not list owner tokens", slog.Any("error", err))
+			}
+			data.OwnerTokens = ownerTokenInfo(owners, time.Now())
 		}
 		if until := webConfig.Store.GetRateLimitUntil(); until.After(time.Now()) {
 			data.RateLimitedUntil = until.Format(time.RFC3339)
@@ -283,24 +321,8 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 	var clears uint64
 	mux.HandleFunc("PUT /api/v0/config/pat", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		var req struct {
-			Token string `json:"token"`
-		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPatBody)).Decode(&req); err != nil {
-			var tooLarge *http.MaxBytesError
-			if errors.As(err, &tooLarge) {
-				w.WriteHeader(http.StatusRequestEntityTooLarge)
-				_ = json.NewEncoder(w).Encode(map[string]any{"error": "body over 4 KiB"})
-				return
-			}
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid JSON"})
-			return
-		}
-
-		if req.Token == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{"error": "token is required"})
+		token := readToken(w, r)
+		if token == "" {
 			return
 		}
 
@@ -320,7 +342,7 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 		// Validate the token with GitHub (checks both authentication and
 		// required scopes). GitHub's text goes to the log only; the token
 		// goes nowhere.
-		username, expiresAt, err := github.ValidatePAT(webConfig.githubURL(), req.Token, webConfig.logger())
+		username, expiresAt, err := github.ValidatePAT(webConfig.githubURL(), token, webConfig.logger())
 		if err != nil {
 			webConfig.logger().Warn("could not validate a pasted token", slog.Any("error", err))
 			if errors.Is(err, github.ErrInvalidToken) {
@@ -340,7 +362,7 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": "the token was cleared while this one was checked; nothing stored"})
 			return
 		}
-		err = webConfig.Store.StorePAT(req.Token, username, expiresAt)
+		err = webConfig.Store.StorePAT(token, username, expiresAt)
 		patMu.Unlock()
 		if err != nil {
 			webConfig.Logger.Error("could not store PAT", slog.Any("error", err))
@@ -379,23 +401,141 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 		// with nothing failing unless elly says which it is.
 		degradations := make([]map[string]string, 0)
 		for _, d := range webConfig.Store.Degradations() {
-			degradations = append(degradations, map[string]string{
+			m := map[string]string{
 				"kind":    d.Kind,
 				"message": d.Message,
 				"remedy":  d.Remedy,
 				"seen":    d.Seen.Format(time.RFC3339),
-			})
+			}
+			if d.Owner != "" {
+				m["owner"] = d.Owner
+			}
+			degradations = append(degradations, m)
+		}
+		// Never the token itself, as for the primary.
+		ownerTokens := make([]map[string]string, 0)
+		owners, err := webConfig.Store.OwnerPATs()
+		if err != nil {
+			webConfig.Logger.Warn("could not list owner tokens", slog.Any("error", err))
+		}
+		for _, o := range owners {
+			m := map[string]string{"owner": o.Owner, "username": o.Username, "stored_at": o.SetAt.Format(time.RFC3339)}
+			if !o.ExpiresAt.IsZero() {
+				m["expires_at"] = o.ExpiresAt.Format(time.RFC3339)
+			}
+			if o.Refused != "" {
+				m["refused"] = o.Refused
+			}
+			if !o.LastSuccess.IsZero() {
+				m["last_success"] = o.LastSuccess.Format(time.RFC3339)
+			}
+			ownerTokens = append(ownerTokens, m)
 		}
 		response := map[string]any{
 			"configured":   true,
 			"username":     storedPat.Username,
 			"stored_at":    storedPat.SetAt.Format(time.RFC3339),
 			"degradations": degradations,
+			"owner_tokens": ownerTokens,
 		}
 		if !storedPat.ExpiresAt.IsZero() {
 			response["expires_at"] = storedPat.ExpiresAt.Format(time.RFC3339)
 		}
 		_ = json.NewEncoder(w).Encode(response)
+	})
+
+	// ownerDeletes is to an owner token what clears is to the primary: a
+	// DELETE that lands while a PUT for the same owner is being checked wins.
+	ownerDeletes := map[string]uint64{}
+	mux.HandleFunc("PUT /api/v0/config/pat/{owner}", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		owner := r.PathValue("owner")
+		if !ownerLogin.MatchString(owner) {
+			writeError(w, http.StatusBadRequest, "not a GitHub owner name")
+			return
+		}
+		token := readToken(w, r)
+		if token == "" {
+			return
+		}
+		// A classic token is not bound to one owner and may hold write
+		// scopes; a fine-grained one is the only kind that covers exactly
+		// the owner it is stored for.
+		if !strings.HasPrefix(token, "github_pat_") {
+			writeError(w, http.StatusBadRequest, "a token for one owner must be fine-grained (github_pat_...)")
+			return
+		}
+		if !validating.TryLock() {
+			writeError(w, http.StatusTooManyRequests, "a token is already being checked, try again")
+			return
+		}
+		defer validating.Unlock()
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(patWriteTimeout))
+		key := strings.ToLower(owner)
+		patMu.Lock()
+		deletesBefore := ownerDeletes[key]
+		patMu.Unlock()
+
+		username, expiresAt, err := github.ValidatePAT(webConfig.githubURL(), token, webConfig.logger())
+		if err == nil {
+			owner, err = github.OwnerReach(webConfig.githubURL(), token, owner, webConfig.logger())
+		}
+		if err != nil {
+			webConfig.logger().Warn("could not validate a pasted owner token", slog.String("owner", key), slog.Any("error", err))
+			switch {
+			case errors.Is(err, github.ErrInvalidToken):
+				writeError(w, http.StatusBadRequest, "GitHub refused the token")
+			case errors.Is(err, github.ErrNoAccess):
+				writeError(w, http.StatusBadRequest, "the token sees none of "+r.PathValue("owner")+"'s private repositories: is the owner's approval still pending, or is its resource owner another account?")
+			default:
+				writeError(w, http.StatusBadGateway, "could not reach GitHub, try again")
+			}
+			return
+		}
+
+		patMu.Lock()
+		if ownerDeletes[key] != deletesBefore {
+			patMu.Unlock()
+			writeError(w, http.StatusConflict, "the token was removed while this one was checked; nothing stored")
+			return
+		}
+		err = webConfig.Store.PutOwnerPAT(owner, token, username, expiresAt)
+		patMu.Unlock()
+		switch {
+		case errors.Is(err, storage.ErrNoPrimary):
+			writeError(w, http.StatusConflict, "set the main token first")
+			return
+		case errors.Is(err, storage.ErrOtherLogin):
+			writeError(w, http.StatusBadRequest, "the token belongs to another login than the main token")
+			return
+		case err != nil:
+			webConfig.Logger.Error("could not store an owner token", slog.Any("error", err))
+			writeError(w, http.StatusInternalServerError, "could not store token")
+			return
+		}
+		webConfig.Tracker.RequestRefresh()
+		response := map[string]any{"owner": owner, "username": username}
+		if !expiresAt.IsZero() {
+			response["expires_at"] = expiresAt.Format(time.RFC3339)
+		}
+		_ = json.NewEncoder(w).Encode(response)
+	})
+
+	mux.HandleFunc("DELETE /api/v0/config/pat/{owner}", func(w http.ResponseWriter, r *http.Request) {
+		patMu.Lock()
+		ownerDeletes[strings.ToLower(r.PathValue("owner"))]++
+		found, err := webConfig.Store.DeleteOwnerPAT(r.PathValue("owner"))
+		patMu.Unlock()
+		switch {
+		case err != nil:
+			webConfig.Logger.Error("could not delete an owner token", slog.Any("error", err))
+			writeError(w, http.StatusInternalServerError, "could not delete token")
+		case !found:
+			writeError(w, http.StatusNotFound, "no token for that owner")
+		default:
+			webConfig.Tracker.RequestRefresh()
+			w.WriteHeader(http.StatusNoContent)
+		}
 	})
 
 	mux.HandleFunc("DELETE /api/v0/config/pat", func(w http.ResponseWriter, r *http.Request) {

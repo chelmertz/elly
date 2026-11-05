@@ -167,6 +167,8 @@ func Test_QueryGithub_WrapsSentinelErrorsSoCallersCanMatchThem(t *testing.T) {
 		{"504 with json body is a server error", 504, `{"message":"We couldn't respond to your request in time."}`, ErrGithubServer},
 		{"502 with html body is a server error", 502, `<html>Bad gateway</html>`, ErrGithubServer},
 		{"404 is a client error", 404, `{"message":"Not Found"}`, ErrClient},
+		{"401 is an invalid token", 401, `{"message":"Bad credentials"}`, ErrInvalidToken},
+		{"401 is still a client error", 401, `{"message":"Bad credentials"}`, ErrClient},
 		{"200 with unparseable body is a client error", 200, `not json`, ErrClient},
 	}
 	for _, tc := range cases {

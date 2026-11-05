@@ -39,6 +39,21 @@ create table if not exists pat (
     active integer not null check (active in (0, 1))
 );
 
+-- One token per repo owner whose PRs the primary token (pat) cannot see,
+-- such as an org that takes only fine-grained tokens. Its login must be the
+-- primary's. refused is '' while usable, else the degradation kind that
+-- stopped it; last_success and rate_limited_until are RFC3339 or ''.
+create table if not exists owner_pat (
+    owner text not null primary key collate nocase,
+    pat text not null,
+    username text not null,
+    set_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    expires_at text not null,
+    last_success text not null default '',
+    rate_limited_until text not null default '',
+    refused text not null default ''
+);
+
 -- Kept apart from prs, which is replaced on every fetch. expires_at is
 -- returned exactly as written; expires_unix is what expiry compares.
 create table if not exists annotations (

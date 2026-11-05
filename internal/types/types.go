@@ -27,6 +27,8 @@ type Degradation struct {
 	Remedy string
 	// Seen is when elly last hit it.
 	Seen time.Time
+	// Owner is the repo owner whose token hit it, "" for the primary token.
+	Owner string `json:",omitempty"`
 }
 
 // DegradationChecksUnreadable is reported on every poll by a fine-grained

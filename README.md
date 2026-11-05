@@ -169,8 +169,32 @@ stores nothing and answers 409.
 When GitHub rate-limits the poll, elly waits until the time GitHub names, at
 most an hour; setting a token lifts the wait.
 A token for another GitHub login than the previous one first deletes the
-stored PRs, buries, annotations and notification history, and a poll still
-running with the old token stores nothing.
+stored PRs, buries, annotations, notification history and org tokens, and a
+poll still running with the old token stores nothing. A replaced or cleared
+token is deleted, not kept inactive, and the database files are made
+readable by the user only on start.
+
+### Org tokens
+
+A fine-grained token covers one resource owner, and some orgs take nothing
+else. Each such org gets its own token beside the main one, on the page or
+with `PUT /api/v0/config/pat/{owner}` (`{"token":"github_pat_…"}`) and
+`DELETE /api/v0/config/pat/{owner}`. It must be fine-grained, made by the
+main token's login, and see at least one of the owner's private
+repositories: a token still waiting for the org's approval, or whose
+resource owner is another account, answers every search with nothing, so
+elly refuses it rather than show an empty org.
+
+Every poll asks each org token for its owner's PRs and keeps only those,
+after checking it still reaches the owner. The main token answers every other
+owner. When an org token fails, the page and `GET /api/v0/config/status`
+(`degradations[].owner`, `owner_tokens`) say so, without GitHub's text:
+
+- refused (401) or lost access: the org's PRs leave the list at once, and
+  the org is not polled again until a new token is pasted;
+- rate limited, a 5xx or the network: its PRs stay as of the last good poll
+  for up to an hour, then leave the list until a poll succeeds. A rate limit
+  holds that org's polls back until GitHub's time, not the main token's.
 
 Two things are accepted rather than defended against:
 

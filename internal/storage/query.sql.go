@@ -205,6 +205,15 @@ func (q *Queries) DeleteAllAnnotations(ctx context.Context) error {
 	return err
 }
 
+const deleteAllOwnerPATs = `-- name: DeleteAllOwnerPATs :exec
+delete from owner_pat
+`
+
+func (q *Queries) DeleteAllOwnerPATs(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllOwnerPATs)
+	return err
+}
+
 const deleteAllPATs = `-- name: DeleteAllPATs :exec
 delete from pat
 `
@@ -226,6 +235,18 @@ type DeleteAnnotationParams struct {
 func (q *Queries) DeleteAnnotation(ctx context.Context, arg DeleteAnnotationParams) error {
 	_, err := q.db.ExecContext(ctx, deleteAnnotation, arg.PrUrl, arg.Source)
 	return err
+}
+
+const deleteOwnerPAT = `-- name: DeleteOwnerPAT :execrows
+delete from owner_pat where owner = ?
+`
+
+func (q *Queries) DeleteOwnerPAT(ctx context.Context, owner string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteOwnerPAT, owner)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deletePrs = `-- name: DeletePrs :exec
@@ -367,6 +388,43 @@ func (q *Queries) LastLogin(ctx context.Context) (string, error) {
 	return value, err
 }
 
+const listOwnerPATs = `-- name: ListOwnerPATs :many
+select owner, pat, username, set_at, expires_at, last_success, rate_limited_until, refused
+from owner_pat order by owner
+`
+
+func (q *Queries) ListOwnerPATs(ctx context.Context) ([]OwnerPat, error) {
+	rows, err := q.db.QueryContext(ctx, listOwnerPATs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OwnerPat
+	for rows.Next() {
+		var i OwnerPat
+		if err := rows.Scan(
+			&i.Owner,
+			&i.Pat,
+			&i.Username,
+			&i.SetAt,
+			&i.ExpiresAt,
+			&i.LastSuccess,
+			&i.RateLimitedUntil,
+			&i.Refused,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPrs = `-- name: ListPrs :many
 select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, rereview_from, reviewed_by, buried, checks_state, checks_failing, checks_complete, mergeable, merge_state_status, head_ref_oid, raw_json_response from prs
 `
@@ -501,12 +559,60 @@ func (q *Queries) PutAnnotation(ctx context.Context, arg PutAnnotationParams) er
 	return err
 }
 
+const putOwnerPAT = `-- name: PutOwnerPAT :exec
+insert into owner_pat (owner, pat, username, expires_at) values (?, ?, ?, ?)
+on conflict (owner) do update set owner = excluded.owner, pat = excluded.pat,
+    username = excluded.username, expires_at = excluded.expires_at,
+    set_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), rate_limited_until = '', refused = ''
+`
+
+type PutOwnerPATParams struct {
+	Owner     string
+	Pat       string
+	Username  string
+	ExpiresAt string
+}
+
+func (q *Queries) PutOwnerPAT(ctx context.Context, arg PutOwnerPATParams) error {
+	_, err := q.db.ExecContext(ctx, putOwnerPAT,
+		arg.Owner,
+		arg.Pat,
+		arg.Username,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
 const setLastLogin = `-- name: SetLastLogin :exec
 replace into meta (key, value) values ('last_login', ?)
 `
 
 func (q *Queries) SetLastLogin(ctx context.Context, value string) error {
 	_, err := q.db.ExecContext(ctx, setLastLogin, value)
+	return err
+}
+
+const setOwnerPollState = `-- name: SetOwnerPollState :exec
+update owner_pat set last_success = ?, rate_limited_until = ?, refused = ?
+where owner = ? and pat = ?
+`
+
+type SetOwnerPollStateParams struct {
+	LastSuccess      string
+	RateLimitedUntil string
+	Refused          string
+	Owner            string
+	Pat              string
+}
+
+func (q *Queries) SetOwnerPollState(ctx context.Context, arg SetOwnerPollStateParams) error {
+	_, err := q.db.ExecContext(ctx, setOwnerPollState,
+		arg.LastSuccess,
+		arg.RateLimitedUntil,
+		arg.Refused,
+		arg.Owner,
+		arg.Pat,
+	)
 	return err
 }
 
