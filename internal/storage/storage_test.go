@@ -885,3 +885,19 @@ func TestOwnerPATsFollowThePrimarysLogin(t *testing.T) {
 		t.Errorf("deleted a token that was gone: %v %v", ok, err)
 	}
 }
+
+func TestDeleteOwnerPATSaysItDeletedOne(t *testing.T) {
+	store := setupTestStorage(t)
+	if err := store.StorePAT("github_pat_main", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutOwnerPAT("acme", "github_pat_acme", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := store.DeleteOwnerPAT("ACME"); !ok || err != nil {
+		t.Fatalf("%v %v", ok, err)
+	}
+	if got, _ := store.OwnerPATs(); len(got) != 0 {
+		t.Errorf("left %+v", got)
+	}
+}

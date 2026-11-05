@@ -204,7 +204,8 @@ func TestRefreshLoopPollsEachOwnerWithItsToken(t *testing.T) {
 		}
 	}))
 	t.Cleanup(githubAPI.Close)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	var logs syncBuffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
 	store := storage.NewStorage(logger, filepath.Join(t.TempDir(), "elly.db"))
 	if err := store.StorePAT("github_pat_main", "me", time.Time{}); err != nil {
 		t.Fatal(err)
@@ -228,6 +229,9 @@ func TestRefreshLoopPollsEachOwnerWithItsToken(t *testing.T) {
 	owners, _ := store.OwnerPATs()
 	if len(owners) != 1 || owners[0].LastSuccess.IsZero() {
 		t.Errorf("acme's success was not recorded: %+v", owners)
+	}
+	if strings.Contains(logs.String(), "could not store an owner token's poll state") {
+		t.Errorf("a stored state logged a failure: %s", logs.String())
 	}
 }
 

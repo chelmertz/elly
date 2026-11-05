@@ -1,7 +1,9 @@
 package server
 
 import (
+	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	"time"
 
 	"github.com/chelmertz/elly/internal/storage"
+	"github.com/chelmertz/elly/internal/types"
 )
 
 // ownerGithub answers the login check as login, any search with nothing, and
@@ -176,4 +179,55 @@ func TestThePageListsOwnerTokens(t *testing.T) {
 
 func storageOwner(owner, token, refused string) storage.OwnerPAT {
 	return storage.OwnerPAT{Owner: owner, Token: token, Refused: refused}
+}
+
+// The status names the owner only on an owner token's degradation, says
+// "refused" only for a refused token, and a healthy store logs nothing.
+func TestStatusNamesOwnersOnlyWhereTheyApply(t *testing.T) {
+	var logs strings.Builder
+	w := newRoutesLogging(t, "", slog.New(slog.NewTextHandler(&logs, nil)))
+	if err := w.store.StorePAT("github_pat_main", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range []string{"acme", "dead-org"} {
+		if err := w.store.PutOwnerPAT(o, "github_pat_"+o, "me", time.Time{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.store.SetOwnerPollState(storageOwner("dead-org", "github_pat_dead-org", "owner_token_refused")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.store.StoreDegradations([]types.Degradation{{Kind: "main_kind"}, {Kind: "acme_kind", Owner: "acme"}}); err != nil {
+		t.Fatal(err)
+	}
+	var status struct {
+		Degradations []map[string]string `json:"degradations"`
+		OwnerTokens  []map[string]string `json:"owner_tokens"`
+	}
+	if err := json.Unmarshal(w.do("GET", "/api/v0/config/status", "").Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	owners := map[string]string{}
+	for _, d := range status.Degradations {
+		owner, ok := d["owner"]
+		if ok != (d["kind"] == "acme_kind") {
+			t.Errorf("degradation %v", d)
+		}
+		owners[d["kind"]] = owner
+	}
+	if owners["acme_kind"] != "acme" {
+		t.Errorf("owners %v", owners)
+	}
+	for _, o := range status.OwnerTokens {
+		if _, refused := o["refused"]; refused != (o["owner"] == "dead-org") {
+			t.Errorf("owner token %v", o)
+		}
+	}
+	if len(status.OwnerTokens) != 2 {
+		t.Errorf("owner tokens %v", status.OwnerTokens)
+	}
+	w.do("GET", "/", "")
+	if strings.Contains(logs.String(), "could not list owner tokens") {
+		t.Errorf("a healthy store logged a failure: %s", logs.String())
+	}
 }
