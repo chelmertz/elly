@@ -61,7 +61,7 @@ create table if not exists owner_pat (
 create table if not exists annotations (
     pr_url       text not null,
     source       text not null,
-    state        text not null check (state in ('handled', 'needs_you', 'running', 'stuck')),
+    state        text not null check (state in ('handled', 'needs_you', 'running', 'stuck', 'info')),
     note         text not null default '',
     links        text not null default '[]',
     expires_at   text not null,

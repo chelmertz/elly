@@ -531,13 +531,14 @@ func TestReadPAT_ReadsWithoutWriting(t *testing.T) {
 	}
 }
 
-// Each check constraint a released elly created: before running, and before
-// stuck. Startup rebuilds either into one that accepts every state.
+// Each check constraint a released elly created: before running, before
+// stuck, and before info. Startup rebuilds either into one that accepts every state.
 func TestNewStorage_AcceptsNewStatesOnAnOldAnnotationsTable(t *testing.T) {
-	const current = "check (state in ('handled', 'needs_you', 'running', 'stuck'))"
+	const current = "check (state in ('handled', 'needs_you', 'running', 'stuck', 'info'))"
 	for _, oldCheck := range []string{
 		"check (state in ('handled', 'needs_you'))",
 		"check (state in ('handled', 'needs_you', 'running'))",
+		"check (state in ('handled', 'needs_you', 'running', 'stuck'))",
 	} {
 		t.Run(oldCheck, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "elly.db")
@@ -563,19 +564,19 @@ func TestNewStorage_AcceptsNewStatesOnAnOldAnnotationsTable(t *testing.T) {
 			if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
 				t.Fatal(err)
 			}
-			for _, state := range []string{types.AnnotationRunning, types.AnnotationStuck} {
+			for _, state := range []string{types.AnnotationRunning, types.AnnotationStuck, types.AnnotationInfo} {
 				a := types.Annotation{Source: "tool-" + state, State: state, ExpiresAt: "2099-01-01T00:00:00Z"}
 				if err := store.PutAnnotation("u", a, time.Now().Add(time.Hour)); err != nil {
 					t.Fatalf("an upgraded database rejects %s: %v", state, err)
 				}
 			}
 			got := store.Prs().Prs[0].Annotations
-			if len(got) != 3 {
-				t.Fatalf("got %+v, want the old handled annotation kept beside running and stuck", got)
+			if len(got) != 4 {
+				t.Fatalf("got %+v, want the old handled annotation kept beside running, stuck and info", got)
 			}
 			// a second start must leave the rebuilt table alone
 			again := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
-			if got := again.Prs().Prs[0].Annotations; len(got) != 3 {
+			if got := again.Prs().Prs[0].Annotations; len(got) != 4 {
 				t.Fatalf("second start: got %+v", got)
 			}
 		})

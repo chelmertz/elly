@@ -195,7 +195,7 @@ func widenAnnotationStates(ctx context.Context, db *sql.DB) error {
 	if err := db.QueryRowContext(ctx, `select sql from sqlite_master where type = 'table' and name = 'annotations'`).Scan(&current); err != nil {
 		return fmt.Errorf("could not read the annotations schema: %w", err)
 	}
-	if strings.Contains(current, "'"+types.AnnotationStuck+"'") {
+	if strings.Contains(current, "'"+types.AnnotationInfo+"'") {
 		return nil
 	}
 	tx, err := db.BeginTx(ctx, nil)

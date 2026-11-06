@@ -129,6 +129,10 @@ const (
 	// tool stopped working on it. It counts like needs_you, and the page
 	// marks it apart.
 	AnnotationStuck = "stuck"
+	// AnnotationInfo only carries links (and a note) to the row: it neither
+	// hands the PR over nor asks for the user, so whose turn it is stays as
+	// elly scored it.
+	AnnotationInfo = "info"
 )
 
 // HasConflict reports whether the PR no longer merges into its base. It is

@@ -77,8 +77,8 @@ every change by someone else: a push, a comment, a review. With no
 
 ## Annotations
 
-Another local tool can mark a PR as `handled`, `needs_you`, `stuck` or
-`running`, with a note of up to 300 characters and up to four links; a note
+Another local tool can mark a PR as `handled`, `needs_you`, `stuck`,
+`running` or `info`, with a note of up to 300 characters and up to four links; a note
 or a link label holding a control or format character (a bidi override, a
 zero-width one) is refused. `handled`
 and `running` both say the user handed the PR to the tool, so both drop its
@@ -86,7 +86,8 @@ review-owed reasons from the score: `running` is a round in progress, which the
 tool replaces with another state when it finishes. `needs_you` counts the PR
 whatever it scored, and wins over `handled` and `running`. `stuck` counts like
 `needs_you` and says nothing but the user will move the PR; the page marks its
-row with an amber edge. On the page, a `handled` or `running` PR from
+row with an amber edge. `info` changes nothing about the score and only puts
+its links on the row. On the page, a `handled` or `running` PR from
 `claude-review` sits in the folded "With claude" group, and the note of a
 `needs_you` or `stuck` annotation shows under its row. No annotation sends a
 desktop notification.

@@ -81,8 +81,8 @@ func validateAnnotation(source string, body io.Reader, schemes []string, now tim
 	if !annotationSource.MatchString(source) {
 		return types.Annotation{}, time.Time{}, errors.New("source must be 1-40 characters of [a-z0-9-]")
 	}
-	if !slices.Contains([]string{types.AnnotationHandled, types.AnnotationNeedsYou, types.AnnotationRunning, types.AnnotationStuck}, req.State) {
-		return types.Annotation{}, time.Time{}, errors.New("state must be handled, needs_you, running or stuck")
+	if !slices.Contains([]string{types.AnnotationHandled, types.AnnotationNeedsYou, types.AnnotationRunning, types.AnnotationStuck, types.AnnotationInfo}, req.State) {
+		return types.Annotation{}, time.Time{}, errors.New("state must be handled, needs_you, running, stuck or info")
 	}
 	if err := plainText(req.Note, maxAnnotationNote); err != nil {
 		return types.Annotation{}, time.Time{}, fmt.Errorf("note: %w", err)
