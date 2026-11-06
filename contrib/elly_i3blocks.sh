@@ -7,12 +7,15 @@ set -eo pipefail
 text_or_icon="$1"
 
 elly_url=http://localhost:9876
+# where a click opens the page, e.g. http://elly.localhost:9876 for its own
+# entry in the browser's history; the API calls stay on elly_url
+page_url=${ELLY_PAGE_URL:-$elly_url}
 # the PRs the page puts on the user, so the count matches it
 prs=$(curl -sf "$elly_url/api/v0/prs?turn=you")
 
 # left click - open the page
 if [ "$BLOCK_BUTTON" = "1" ]; then
-	xdg-open "$elly_url/" &
+	xdg-open "$page_url/" &
 	wmctrl -a firefox
 fi
 
