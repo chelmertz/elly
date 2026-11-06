@@ -913,15 +913,18 @@ func TestSetExpiryOnlyTouchesTheSameToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	when := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
-	for _, err := range []error{s.SetPATExpiry("github_pat_old", when), s.SetOwnerPATExpiry("acme", "github_pat_acmeold", when)} {
+	for _, err := range []error{s.SetPATExpiry("github_pat_old", when), s.SetOwnerPATExpiry("acme", "github_pat_acmeold", when), s.SetPATOwner("github_pat_old", "Acme")} {
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 	pat, _, _ := s.GetPAT()
 	owners, _ := s.OwnerPATs()
-	if !pat.ExpiresAt.IsZero() || !owners[0].ExpiresAt.IsZero() {
-		t.Fatalf("a replaced token's expiry landed on its successor: %v, %v", pat.ExpiresAt, owners[0].ExpiresAt)
+	if !pat.ExpiresAt.IsZero() || !owners[0].ExpiresAt.IsZero() || pat.Owner != "" {
+		t.Fatalf("a replaced token's expiry or owner landed on its successor: %v, %v, %q", pat.ExpiresAt, owners[0].ExpiresAt, pat.Owner)
+	}
+	if err := s.SetPATOwner("github_pat_new", "Acme"); err != nil {
+		t.Fatal(err)
 	}
 	if err := s.SetPATExpiry("github_pat_new", when); err != nil {
 		t.Fatal(err)
@@ -931,7 +934,7 @@ func TestSetExpiryOnlyTouchesTheSameToken(t *testing.T) {
 	}
 	pat, _, _ = s.GetPAT()
 	owners, _ = s.OwnerPATs()
-	if !pat.ExpiresAt.Equal(when) || !owners[0].ExpiresAt.Equal(when) {
-		t.Errorf("expiry not stored: %v, %v", pat.ExpiresAt, owners[0].ExpiresAt)
+	if !pat.ExpiresAt.Equal(when) || !owners[0].ExpiresAt.Equal(when) || pat.Owner != "Acme" {
+		t.Errorf("expiry or owner not stored: %v, %v, %q", pat.ExpiresAt, owners[0].ExpiresAt, pat.Owner)
 	}
 }

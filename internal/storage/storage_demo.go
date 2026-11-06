@@ -142,6 +142,7 @@ func (s *StorageDemo) GetPAT() (StoredPAT, bool, error) {
 	return StoredPAT{
 		Token:     "demo-token",
 		Username:  "demo-user",
+		Owner:     "demo-org",
 		SetAt:     time.Now().Add(-24 * time.Hour),
 		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
 	}, true, nil
@@ -163,6 +164,7 @@ func (s *StorageDemo) DeleteOwnerPAT(owner string) (bool, error) { return false,
 
 func (s *StorageDemo) SetOwnerPollState(o OwnerPAT) error { return nil }
 func (s *StorageDemo) SetPATExpiry(string, time.Time) error  { return nil }
+func (s *StorageDemo) SetPATOwner(string, string) error       { return nil }
 func (s *StorageDemo) SetOwnerPATExpiry(string, string, time.Time) error {
 	return nil
 }

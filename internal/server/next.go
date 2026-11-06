@@ -46,7 +46,7 @@ type nextOwnerToken struct {
 func ownerTokenInfo(owners []storage.OwnerPAT, now time.Time) []nextOwnerToken {
 	out := make([]nextOwnerToken, 0, len(owners))
 	for _, o := range owners {
-		t := tokenInfo(storage.StoredPAT{Username: o.Username, ExpiresAt: o.ExpiresAt}, now)
+		t := tokenInfo(storage.StoredPAT{Username: o.Username, Owner: o.Owner, ExpiresAt: o.ExpiresAt}, now)
 		out = append(out, nextOwnerToken{Owner: o.Owner, nextToken: *t, Refused: o.Refused != ""})
 	}
 	return out
@@ -54,6 +54,8 @@ func ownerTokenInfo(owners []storage.OwnerPAT, now time.Time) []nextOwnerToken {
 
 type nextToken struct {
 	Username string
+	// Name is the token's owner, or its login until elly has found the owner.
+	Name string
 	// Expires is "" for a token that never expires.
 	Expires     string
 	ExpiresSoon bool
@@ -63,7 +65,10 @@ type nextToken struct {
 const tokenExpiryWarning = 5 * 24 * time.Hour
 
 func tokenInfo(pat storage.StoredPAT, now time.Time) *nextToken {
-	t := &nextToken{Username: pat.Username}
+	t := &nextToken{Username: pat.Username, Name: pat.Owner}
+	if t.Name == "" {
+		t.Name = "@" + pat.Username
+	}
 	if pat.ExpiresAt.IsZero() {
 		return t
 	}

@@ -36,6 +36,7 @@ type Pat struct {
 	ExpiresAt string
 	Username  string
 	Active    int64
+	Owner     string
 }
 
 type Pr struct {

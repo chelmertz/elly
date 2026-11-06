@@ -259,7 +259,7 @@ func (q *Queries) DeletePrs(ctx context.Context) error {
 }
 
 const getActivePAT = `-- name: GetActivePAT :one
-select pat, set_at, expires_at, username from pat where active = 1 limit 1
+select pat, set_at, expires_at, username, owner from pat where active = 1 limit 1
 `
 
 type GetActivePATRow struct {
@@ -267,6 +267,7 @@ type GetActivePATRow struct {
 	SetAt     string
 	ExpiresAt string
 	Username  string
+	Owner     string
 }
 
 func (q *Queries) GetActivePAT(ctx context.Context) (GetActivePATRow, error) {
@@ -277,6 +278,7 @@ func (q *Queries) GetActivePAT(ctx context.Context) (GetActivePATRow, error) {
 		&i.SetAt,
 		&i.ExpiresAt,
 		&i.Username,
+		&i.Owner,
 	)
 	return i, err
 }
@@ -642,6 +644,20 @@ type SetPATExpiryParams struct {
 
 func (q *Queries) SetPATExpiry(ctx context.Context, arg SetPATExpiryParams) error {
 	_, err := q.db.ExecContext(ctx, setPATExpiry, arg.ExpiresAt, arg.Pat)
+	return err
+}
+
+const setPATOwner = `-- name: SetPATOwner :exec
+update pat set owner = ? where pat = ?
+`
+
+type SetPATOwnerParams struct {
+	Owner string
+	Pat   string
+}
+
+func (q *Queries) SetPATOwner(ctx context.Context, arg SetPATOwnerParams) error {
+	_, err := q.db.ExecContext(ctx, setPATOwner, arg.Owner, arg.Pat)
 	return err
 }
 

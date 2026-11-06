@@ -27,6 +27,8 @@ type StoredPAT struct {
 	Username  string
 	SetAt     time.Time
 	ExpiresAt time.Time // Zero time if non-expiring
+	// Owner is the token's resource owner, "" until elly has found it.
+	Owner string
 }
 
 // OwnerPAT is a token for one repo owner's PRs, beside the primary PAT: a
@@ -91,6 +93,9 @@ type Storage interface {
 	// token was replaced meanwhile.
 	SetPATExpiry(token string, expiresAt time.Time) error
 	SetOwnerPATExpiry(owner, token string, expiresAt time.Time) error
+	// SetPATOwner records the token's resource owner, unless the token was
+	// replaced meanwhile.
+	SetPATOwner(token, owner string) error
 	// StoreDegradations records what the last poll could not do. An empty
 	// slice clears the record.
 	StoreDegradations(ds []types.Degradation) error
@@ -150,6 +155,7 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 		`alter table prs add column merge_state_status text not null default ''`,
 		`alter table prs add column head_ref_oid text not null default ''`,
 		`alter table prs add column reviewed_by text not null default ''`,
+		`alter table pat add column owner text not null default ''`,
 	} {
 		if _, err := db.ExecContext(ctx, alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			check(err)
@@ -506,6 +512,7 @@ func (s *DbStorage) GetPAT() (StoredPAT, bool, error) {
 		Username:  row.Username,
 		SetAt:     setAt,
 		ExpiresAt: expiresAt,
+		Owner:     row.Owner,
 	}, true, nil
 }
 
@@ -611,6 +618,10 @@ func (s *DbStorage) SetOwnerPollState(o OwnerPAT) error {
 
 func (s *DbStorage) SetPATExpiry(token string, expiresAt time.Time) error {
 	return s.db.SetPATExpiry(context.Background(), SetPATExpiryParams{ExpiresAt: formatTime(expiresAt), Pat: token})
+}
+
+func (s *DbStorage) SetPATOwner(token, owner string) error {
+	return s.db.SetPATOwner(context.Background(), SetPATOwnerParams{Owner: owner, Pat: token})
 }
 
 func (s *DbStorage) SetOwnerPATExpiry(owner, token string, expiresAt time.Time) error {

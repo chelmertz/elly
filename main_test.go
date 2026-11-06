@@ -90,6 +90,12 @@ func (s *testStorage) OwnerPATs() ([]storage.OwnerPAT, error)     { return nil, 
 func (s *testStorage) DeleteOwnerPAT(string) (bool, error)        { return false, nil }
 func (s *testStorage) SetOwnerPollState(o storage.OwnerPAT) error { return nil }
 func (s *testStorage) SetPATExpiry(string, time.Time) error        { return nil }
+func (s *testStorage) SetPATOwner(token, owner string) error {
+	if s.pat.Token == token {
+		s.pat.Owner = owner
+	}
+	return nil
+}
 func (s *testStorage) SetOwnerPATExpiry(string, string, time.Time) error {
 	return nil
 }
@@ -633,5 +639,40 @@ func TestInitPAT_BackfillsMissingExpiries(t *testing.T) {
 	}
 	if askedKnown.Load() {
 		t.Error("asked GitHub for an expiry already stored, or with a refused token")
+	}
+}
+
+// The main token is named after the first owner it reaches, as GitHub spells
+// it; one that reaches none is named by its login, a classic token always is,
+// and a failed probe leaves it unnamed for the next poll.
+func TestFindOwner(t *testing.T) {
+	reaches := func(owners ...string) func(string) (string, error) {
+		return func(o string) (string, error) {
+			for _, r := range owners {
+				if strings.EqualFold(r, o) {
+					return r, nil
+				}
+			}
+			return "", github.ErrNoAccess
+		}
+	}
+	for _, c := range []struct {
+		name, token string
+		reach       func(string) (string, error)
+		want        string
+	}{
+		{"the first owner it reaches", "github_pat_x", reaches("Matchiapp", "eversport"), "Matchiapp"},
+		{"a later owner", "github_pat_x", reaches("eversport"), "eversport"},
+		{"no owner but the login", "github_pat_x", reaches(), "me"},
+		{"a classic token", "ghp_x", reaches("Matchiapp"), "me"},
+		{"a failed probe", "github_pat_x", func(string) (string, error) { return "", github.ErrGithubServer }, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			store := newTestStorage(c.token, "me")
+			findOwner(store, store.pat, []string{"matchiapp", "eversport"}, c.reach, slog.New(slog.DiscardHandler))
+			if store.pat.Owner != c.want {
+				t.Errorf("owner %q, want %q", store.pat.Owner, c.want)
+			}
+		})
 	}
 }

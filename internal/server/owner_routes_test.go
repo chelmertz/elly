@@ -179,28 +179,37 @@ func TestThePageListsOwnerTokens(t *testing.T) {
 	}
 }
 
-// Every token is a row of one list: the main token says it covers every
-// other org, its form stays folded until Replace, and an org token is added
-// below the list.
+// Every token is a row of one list, named by its owner: the first token by
+// its login until elly has found its owner. Its form stays folded until
+// Replace, and another org's token is added below the list.
 func TestThePageListsEveryTokenAsARow(t *testing.T) {
 	w := newRoutes(t, "")
 	if err := w.store.StorePAT("github_pat_main", "me", time.Now().Add(2*24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	page := w.do("GET", "/", "").Body.String()
-	for _, want := range []string{`<p class="tokens-line">Tokens · <span class="warn">main expires in 2 d</span> · <button`,
-		`<li><span>@me · main · <span class="warn">expires in 2 d</span></span>`, "covers every org without its own token",
-		`<form class="pat-form" hidden>`, `class="replace-pat"`, "Add an org token"} {
+	for _, want := range []string{`<p class="tokens-line">Tokens · <span class="warn">@me expires in 2 d</span> · <button`,
+		`<li><span>@me · <span class="warn">expires in 2 d</span></span>`,
+		`<form class="pat-form" hidden>`, `class="replace-pat"`, "Add a token"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %s", want)
 		}
+	}
+	if err := w.store.SetPATOwner("github_pat_main", "Matchiapp"); err != nil {
+		t.Fatal(err)
 	}
 	if err := w.store.PutOwnerPAT("acme", "github_pat_acmesecret", "me", time.Time{}); err != nil {
 		t.Fatal(err)
 	}
 	page = w.do("GET", "/", "").Body.String()
-	if !strings.Contains(page, "<li><span>acme</span>") {
-		t.Error("the page does not list the stored org token as a row")
+	for _, want := range []string{`<span class="warn">Matchiapp expires in 2 d</span>`,
+		`<li><span>Matchiapp · <span class="warn">expires in 2 d</span></span>`, "The new token for Matchiapp", "<li><span>acme</span>"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page lacks %s", want)
+		}
+	}
+	if strings.Contains(page, "· main") || strings.Contains(page, "main token") {
+		t.Error("the page still calls a token main")
 	}
 }
 

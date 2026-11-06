@@ -63,7 +63,7 @@ select value from meta where key = 'rate_limit_until' limit 1;
 delete from meta where key = 'rate_limit_until';
 
 -- name: GetActivePAT :one
-select pat, set_at, expires_at, username from pat where active = 1 limit 1;
+select pat, set_at, expires_at, username, owner from pat where active = 1 limit 1;
 
 -- name: DeleteAllPATs :exec
 delete from pat;
@@ -135,6 +135,9 @@ where owner = ? and pat = ?;
 
 -- name: SetPATExpiry :exec
 update pat set expires_at = ? where pat = ?;
+
+-- name: SetPATOwner :exec
+update pat set owner = ? where pat = ?;
 
 -- name: SetOwnerPATExpiry :exec
 update owner_pat set expires_at = ? where owner = ? and pat = ?;

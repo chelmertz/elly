@@ -187,7 +187,9 @@ elly refuses it rather than show an empty org.
 
 Every poll asks each org token for its owner's PRs and keeps only those,
 after checking it still reaches the owner. The main token answers every other
-owner. When an org token fails, the page and `GET /api/v0/config/status`
+owner. The page lists every token alike, named by its owner: for the main
+token, the first of `-work-owners` it reaches, else its login (always its
+login for a classic token), found on the first poll after it is set. When an org token fails, the page and `GET /api/v0/config/status`
 (`degradations[].owner`, `owner_tokens`) say so, without GitHub's text:
 
 - refused (401) or lost access: the org's PRs leave the list at once, and

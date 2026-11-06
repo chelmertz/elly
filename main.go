@@ -244,6 +244,32 @@ func backfillExpiries(store storage.Storage, baseURL string, primary storage.Sto
 	}
 }
 
+// findOwner records which owner pat belongs to, so the page names it as it
+// names every other token. GitHub does not say, so each candidate is probed in
+// turn, then the login; a classic token reaches every owner, so it is named by
+// its login. A probe that fails for any reason but no access is retried on the
+// next poll.
+func findOwner(store storage.Storage, pat storage.StoredPAT, candidates []string, reach func(string) (string, error), logger *slog.Logger) {
+	owner := pat.Username
+	if !strings.HasPrefix(pat.Token, "ghp_") {
+		for _, c := range append(candidates, pat.Username) {
+			login, err := reach(c)
+			if errors.Is(err, github.ErrNoAccess) {
+				continue
+			}
+			if err != nil {
+				logger.Warn("could not find the token's owner", slog.Any("error", err))
+				return
+			}
+			owner = login
+			break
+		}
+	}
+	if err := store.SetPATOwner(pat.Token, owner); err != nil {
+		logger.Warn("could not store the token's owner", slog.Any("error", err))
+	}
+}
+
 func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL string, send func(notify.Notification), logger *slog.Logger) {
 	announced := map[string]bool{}
 	for {
@@ -288,6 +314,11 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 			continue
 		}
 		tracker.Succeeded()
+		if storedPat.Owner == "" {
+			findOwner(store, storedPat, splitOwners(*workOwners), func(owner string) (string, error) {
+				return github.OwnerReach(baseURL, storedPat.Token, owner, logger)
+			}, logger)
+		}
 		owners, err := store.OwnerPATs()
 		if err != nil {
 			logger.Error("could not read the owner tokens", slog.Any("error", err))

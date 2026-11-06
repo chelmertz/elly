@@ -36,7 +36,9 @@ create table if not exists pat (
     set_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     expires_at text not null,
     username text not null,
-    active integer not null check (active in (0, 1))
+    active integer not null check (active in (0, 1)),
+    -- The token's resource owner as GitHub spells it, '' until elly finds it.
+    owner text not null default ''
 );
 
 -- One token per repo owner whose PRs the primary token (pat) cannot see,
