@@ -253,7 +253,7 @@ func TestRootIsTheTurnPage(t *testing.T) {
 func TestThePageSetsAndShowsTheToken(t *testing.T) {
 	w := newRoutes(t, "")
 	page := w.do("GET", "/", "").Body.String()
-	for _, want := range []string{`<details class="token" open>`, `<form class="pat-form">`, "No token yet"} {
+	for _, want := range []string{`<dialog class="tokens" aria-labelledby="tokens-title" data-setup>`, `<form class="pat-form">`, "No token yet"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("setup mode: page lacks %s", want)
 		}
@@ -266,7 +266,7 @@ func TestThePageSetsAndShowsTheToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	page = w.do("GET", "/", "").Body.String()
-	for _, want := range []string{`<details class="token">`, "@me", `class="clear-pat"`, `<span class="warn">expires in 3 d</span>`} {
+	for _, want := range []string{`<dialog class="tokens" aria-labelledby="tokens-title">`, "@me", `class="clear-pat"`, `<span class="warn">expires in 3 d</span>`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("with a token: page lacks %s", want)
 		}

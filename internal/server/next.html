@@ -240,7 +240,7 @@ nav.side a.on-you { color: var(--fg); }
 nav.side .meta { margin-top: var(--s3); font-size: 12px; color: var(--faint); }
 nav.side .warn { color: var(--warm); }
 nav.side .meta p { margin: 0 0 var(--s1); }
-nav.side .meta button, .token button {
+nav.side .meta button, dialog.tokens button {
     padding: 0;
     background: none;
     border: 0;
@@ -248,24 +248,7 @@ nav.side .meta button, .token button {
     font: inherit;
     cursor: pointer;
 }
-.token { margin-top: var(--s3); }
-.token summary { cursor: pointer; color: var(--muted); }
-.token form { display: grid; gap: var(--s2); margin-top: var(--s2); }
-.token input {
-    width: 100%;
-    padding: var(--s1) var(--s2);
-    background: var(--raised);
-    border: 0;
-    border-radius: var(--s1);
-    color: var(--fg);
-    font: inherit;
-}
-.token .actions { display: flex; gap: var(--s3); }
-.token ul { display: grid; gap: var(--s3); margin: var(--s3) 0 0; padding: 0; list-style: none; }
-.token li { display: flex; flex-wrap: wrap; gap: 0 var(--s3); }
-.token li > span:first-child { flex: 1 0 100%; }
-.token li small { flex-basis: 100%; color: var(--muted); }
-dialog.keys {
+dialog.keys, dialog.tokens {
     padding: var(--s5);
     background: var(--raised);
     border: 0;
@@ -273,16 +256,33 @@ dialog.keys {
     color: var(--fg);
     font-size: 14px;
 }
-dialog.keys::backdrop { background: rgb(0 0 0 / 40%); }
+dialog.keys::backdrop, dialog.tokens::backdrop { background: rgb(0 0 0 / 40%); }
 dialog.keys h2 { margin: 0 0 var(--s3); font-size: 15px; }
 dialog.keys dl { display: grid; grid-template-columns: auto 1fr; gap: var(--s1) var(--s4); margin: 0 0 var(--s4); }
 dialog.keys dt { font-family: var(--mono); color: var(--fg2); }
 dialog.keys dd { margin: 0; color: var(--muted); }
 dialog.keys a, dialog.keys button { color: var(--blue); }
 dialog.keys button { padding: 0; background: none; border: 0; font: inherit; cursor: pointer; }
+dialog.tokens { width: min(36rem, 90vw); }
+dialog.tokens h2 { margin: 0 0 var(--s3); font-size: 15px; }
+dialog.tokens form { display: grid; gap: var(--s2); margin-top: var(--s4); }
+dialog.tokens input {
+    width: 100%;
+    padding: var(--s1) var(--s2);
+    background: var(--bg);
+    border: 0;
+    border-radius: var(--s1);
+    color: var(--fg);
+    font: inherit;
+}
+dialog.tokens .actions { display: flex; gap: var(--s3); }
+dialog.tokens ul { display: grid; gap: var(--s3); margin: 0; padding: 0; list-style: none; }
+dialog.tokens li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--s3); }
+dialog.tokens li > span:first-child { flex: 1; }
+dialog.tokens li small { flex-basis: 100%; color: var(--muted); }
+dialog.tokens label { color: var(--muted); }
 /* a link in running text, not a menu row */
-.token label a { display: inline; padding: 0; font-size: inherit; color: var(--blue); }
-nav.side .meta .token + p { margin-top: var(--s3); }
+dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: var(--blue); }
 
 @media (max-width: 720px) {
     :root { --num: 48px; --gap: var(--s2); --verb: 80px; }
@@ -367,43 +367,45 @@ nav.side .meta .token + p { margin-top: var(--s3); }
         <p>polled <time class="polled" datetime="{{.LastRefreshed}}">{{.LastRefreshed}}</time> · <button type="button" class="poll">poll now</button></p>
         {{if .RateLimitedUntil}}<p class="warn">rate limited until <time datetime="{{.RateLimitedUntil}}">{{.RateLimitedUntil}}</time></p>{{end}}
         {{range .Degradations}}<p class="warn" title="{{.Remedy}}">{{.Message}}</p>{{end}}
-        <details class="token"{{if .SetupMode}} open{{end}}>
-            <summary>{{with .Token}}Tokens{{if .ExpiresSoon}} · <span class="warn">main {{.Expires}}</span>{{end}}{{range $.OwnerTokens}}{{if .Refused}} · <span class="warn">{{.Owner}} refused</span>{{else if .ExpiresSoon}} · <span class="warn">{{.Owner}} {{.Expires}}</span>{{end}}{{end}}{{else}}<span class="warn">No token yet</span>{{end}}</summary>
-            {{with .Token}}
-            <ul>
-                <li><span>@{{.Username}} · main{{with .Expires}} · {{if $.Token.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}}</span>
-                    <button type="button" class="replace-pat">Replace</button>
-                    <button type="button" class="clear-pat">Clear</button>
-                    <small>covers every org without its own token</small></li>
-                {{range $.OwnerTokens}}{{$t := .}}<li><span>{{.Owner}}{{if .Refused}} · <span class="warn">refused</span>{{else}}{{with .Expires}} · {{if $t.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}}{{end}}</span>
-                    <button type="button" class="remove-owner" data-owner="{{.Owner}}">Remove</button></li>{{end}}
-            </ul>
-            {{end}}
-            <form class="pat-form"{{if .Token}} hidden{{end}}>
-                <label for="pat-input">{{if .Token}}The new main token: a{{else}}A{{end}} <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
-                    with read-only commit status, contents, metadata and pull requests.
-                    It cannot name a failing Actions job; a classic token with the repo
-                    scope can, and is far broader.</label>
-                <input type="password" id="pat-input" name="token" placeholder="github_pat_..." autocomplete="off">
-                <p class="warn form-error" hidden></p>
-                <div class="actions"><button type="submit" class="save-pat">Save</button></div>
-            </form>
-            {{if .Token}}
-            <form class="owner-form">
-                <label for="owner-input"><strong>Add an org token</strong> for an org that takes only its own
-                    <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
-                    (resource owner: the org), made by @{{.Token.Username}}, with the same permissions.</label>
-                <input type="text" id="owner-input" name="owner" placeholder="org, e.g. octo-org" autocomplete="off">
-                <input type="password" id="owner-token-input" name="token" placeholder="github_pat_..." autocomplete="off">
-                <p class="warn form-error" hidden></p>
-                <div class="actions"><button type="submit" class="save-owner">Save</button></div>
-            </form>
-            {{end}}
-        </details>
+        <p class="tokens-line">{{with .Token}}Tokens{{if .ExpiresSoon}} · <span class="warn">main {{.Expires}}</span>{{end}}{{range $.OwnerTokens}}{{if .Refused}} · <span class="warn">{{.Owner}} refused</span>{{else if .ExpiresSoon}} · <span class="warn">{{.Owner}} {{.Expires}}</span>{{end}}{{end}}{{else}}<span class="warn">No token yet</span>{{end}} · <button type="button" class="tokens-open">manage</button></p>
         <p>{{with .Version}}elly {{.}} · {{end}}<button type="button" class="keys-open">keys</button></p>
     </div>
 </nav>
 </div>
+<dialog class="tokens" aria-labelledby="tokens-title"{{if .SetupMode}} data-setup{{end}}>
+    <h2 id="tokens-title">Tokens</h2>
+    {{with .Token}}
+    <ul>
+        <li><span>@{{.Username}} · main{{with .Expires}} · {{if $.Token.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}}</span>
+            <button type="button" class="replace-pat">Replace</button>
+            <button type="button" class="clear-pat">Clear</button>
+            <small>covers every org without its own token</small></li>
+        {{range $.OwnerTokens}}{{$t := .}}<li><span>{{.Owner}}{{if .Refused}} · <span class="warn">refused</span>{{else}}{{with .Expires}} · {{if $t.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}}{{end}}</span>
+            <button type="button" class="remove-owner" data-owner="{{.Owner}}">Remove</button></li>{{end}}
+    </ul>
+    {{end}}
+    <form class="pat-form"{{if .Token}} hidden{{end}}>
+        <label for="pat-input">{{if .Token}}The new main token: a{{else}}A{{end}} <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
+            with read-only commit status, contents, metadata and pull requests.
+            It cannot name a failing Actions job; a classic token with the repo
+            scope can, and is far broader.</label>
+        <input type="password" id="pat-input" name="token" placeholder="github_pat_..." autocomplete="off">
+        <p class="warn form-error" hidden></p>
+        <div class="actions"><button type="submit" class="save-pat">Save</button></div>
+    </form>
+    {{if .Token}}
+    <form class="owner-form">
+        <label for="owner-input"><strong>Add an org token</strong> for an org that takes only its own
+            <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
+            (resource owner: the org), made by @{{.Token.Username}}, with the same permissions.</label>
+        <input type="text" id="owner-input" name="owner" placeholder="org, e.g. octo-org" autocomplete="off">
+        <input type="password" id="owner-token-input" name="token" placeholder="github_pat_..." autocomplete="off">
+        <p class="warn form-error" hidden></p>
+        <div class="actions"><button type="submit" class="save-owner">Save</button></div>
+    </form>
+    {{end}}
+    <form method="dialog"><div class="actions"><button>Close</button></div></form>
+</dialog>
 <dialog class="keys" aria-labelledby="keys-title">
     <h2 id="keys-title">Keys</h2>
     <dl>
@@ -515,6 +517,10 @@ nav.side .meta .token + p { margin-top: var(--s3); }
     });
     // the keys act on the focused row; none fires while typing in a field
     const keys = document.querySelector("dialog.keys");
+    // Nothing else works without a token, so setup mode opens the dialog.
+    const tokens = document.querySelector("dialog.tokens");
+    document.querySelector("button.tokens-open").addEventListener("click", () => tokens.showModal());
+    if ("setup" in tokens.dataset) tokens.showModal();
     const typing = (t) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || t.isContentEditable;
     const visibleRows = () => Array.from(document.querySelectorAll(".pr")).filter((el) => el.offsetParent !== null);
     const currentRow = () => document.activeElement instanceof Element ? document.activeElement.closest(".pr") : null;
@@ -525,7 +531,7 @@ nav.side .meta .token + p { margin-top: var(--s3); }
         btn.scrollIntoView({block: "nearest"});
     };
     window.addEventListener("keydown", (e) => {
-        if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || keys.open) return;
+        if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || keys.open || tokens.open) return;
         const rows = visibleRows();
         const pr = currentRow();
         const i = rows.indexOf(pr);
@@ -577,11 +583,11 @@ nav.side .meta .token + p { margin-top: var(--s3); }
             .then((r) => r.ok ? location.reload() : r.json().then((d) => showError(d.error || "Could not save the token")))
             .catch((err) => showError("Network error: " + err.message));
     });
-    const replaceBtn = document.querySelector(".token .replace-pat");
+    const replaceBtn = document.querySelector(".tokens .replace-pat");
     if (replaceBtn) {
         replaceBtn.addEventListener("click", () => { patForm.hidden = false; patForm.querySelector("#pat-input").focus(); });
     }
-    const clearBtn = document.querySelector(".token .clear-pat");
+    const clearBtn = document.querySelector(".tokens .clear-pat");
     if (clearBtn) {
         clearBtn.addEventListener("click", () => {
             if (!confirm("Clear the token? elly stops polling until a new one is set.")) return;
@@ -605,7 +611,7 @@ nav.side .meta .token + p { margin-top: var(--s3); }
                 .then((r) => r.ok ? location.reload() : r.json().then((d) => ownerFail(d.error || "Could not save the token")))
                 .catch((err) => ownerFail("Network error: " + err.message));
         });
-        document.querySelectorAll(".token .remove-owner").forEach((b) => b.addEventListener("click", () => {
+        document.querySelectorAll(".tokens .remove-owner").forEach((b) => b.addEventListener("click", () => {
             if (!confirm("Remove the token for " + b.dataset.owner + "? Its PRs leave the list.")) return;
             fetch("/api/v0/config/pat/" + encodeURIComponent(b.dataset.owner), {method: "DELETE"}).then((r) => { if (r.ok) location.reload(); });
         }));
@@ -623,7 +629,7 @@ nav.side .meta .token + p { margin-top: var(--s3); }
     // reload after each poll, unless the user is in the middle of something
     const minutes = parseInt(document.body.dataset.refreshMinutes, 10) || 5;
     setInterval(() => {
-        if (input.value || document.querySelector(".pr.open") || document.activeElement === input || document.querySelector("details.token[open]") || keys.open) return;
+        if (input.value || document.querySelector(".pr.open") || document.activeElement === input || tokens.open || keys.open) return;
         selfReload = true;
         location.reload();
     }, minutes * 60000);

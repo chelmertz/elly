@@ -167,8 +167,8 @@ func TestThePageListsOwnerTokens(t *testing.T) {
 	page := w.do("GET", "/", "").Body.String()
 	for _, want := range []string{`class="owner-form"`, "made by @me", `acme · <span class="warn">expires in 2 d</span>`,
 		`dead-org · <span class="warn">refused</span>`, `data-owner="acme"`,
-		// The folded heading warns too, so a dying token is seen without opening it.
-		`<summary>Tokens · <span class="warn">acme expires in 2 d</span> · <span class="warn">dead-org refused</span></summary>`} {
+		// The sidebar line warns too, so a dying token is seen without opening the dialog.
+		`<p class="tokens-line">Tokens · <span class="warn">acme expires in 2 d</span> · <span class="warn">dead-org refused</span> · <button`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %s", want)
 
@@ -188,7 +188,7 @@ func TestThePageListsEveryTokenAsARow(t *testing.T) {
 		t.Fatal(err)
 	}
 	page := w.do("GET", "/", "").Body.String()
-	for _, want := range []string{`<summary>Tokens · <span class="warn">main expires in 2 d</span></summary>`,
+	for _, want := range []string{`<p class="tokens-line">Tokens · <span class="warn">main expires in 2 d</span> · <button`,
 		`<li><span>@me · main · <span class="warn">expires in 2 d</span></span>`, "covers every org without its own token",
 		`<form class="pat-form" hidden>`, `class="replace-pat"`, "Add an org token"} {
 		if !strings.Contains(page, want) {

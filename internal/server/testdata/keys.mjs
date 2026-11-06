@@ -115,7 +115,7 @@ for (const k of ["j", "k", "b", "r", "o"]) await press(k);
 await expect("keys typed into the filter stay text", "document.getElementById('filter').value", "jkbro");
 await expect("and do nothing else", "window.__fetched.length", before);
 await value("document.getElementById('filter').value = ''; document.getElementById('filter').dispatchEvent(new Event('input'))");
-await value("document.querySelector('details.token').open = true; document.querySelector('.token .replace-pat').click()");
+await value("document.querySelector('dialog.tokens').showModal(); document.querySelector('.tokens .replace-pat').click()");
 await press("r");
 await expect("keys typed into the token field stay text", "document.getElementById('pat-input').value", "r");
 await expect("and do not poll", "window.__fetched.length", before);
