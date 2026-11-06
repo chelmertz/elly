@@ -676,3 +676,23 @@ func TestFindOwner(t *testing.T) {
 		})
 	}
 }
+
+// A tick polls when the last poll finished a little under one interval ago,
+// as every regular tick finds it; only a much younger poll is skipped.
+func TestPollDue(t *testing.T) {
+	now := time.Date(2026, 11, 6, 9, 12, 0, 0, time.UTC)
+	for _, c := range []struct {
+		ago  time.Duration
+		want bool
+	}{
+		{4*time.Minute + 55*time.Second, true},
+		{3 * time.Minute, true},
+		{time.Minute, false},
+		{0, false},
+		{time.Hour, true},
+	} {
+		if got := pollDue(now.Add(-c.ago), now, 5*time.Minute); got != c.want {
+			t.Errorf("last poll %v ago: due %v, want %v", c.ago, got, c.want)
+		}
+	}
+}

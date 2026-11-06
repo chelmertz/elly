@@ -244,6 +244,14 @@ func backfillExpiries(store storage.Storage, baseURL string, primary storage.Sto
 	}
 }
 
+// pollDue says whether a timer tick at now polls, given the last poll. A poll
+// is stored when it finishes, seconds after its tick, so the next tick finds
+// it a little under one interval old; only a poll younger than half the
+// interval, as after a restart, is skipped.
+func pollDue(last, now time.Time, interval time.Duration) bool {
+	return now.Sub(last) >= interval/2
+}
+
 // findOwner records which owner pat belongs to, so the page names it as it
 // names every other token. GitHub does not say, so each candidate is probed in
 // turn, then the login; a classic token reaches every owner, so it is named by
@@ -287,9 +295,9 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 			continue
 		}
 
-		// A timer tick (the one at startup included) skips a poll younger
-		// than the interval; "poll now" and a new token do not.
-		if !requested && time.Since(store.Prs().LastFetched) < tracker.BaseInterval() {
+		// A timer tick (the one at startup included) skips a recent poll;
+		// "poll now" and a new token do not.
+		if !requested && !pollDue(store.Prs().LastFetched, time.Now(), tracker.BaseInterval()) {
 			continue
 		}
 
