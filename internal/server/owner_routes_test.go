@@ -166,7 +166,9 @@ func TestThePageListsOwnerTokens(t *testing.T) {
 	}
 	page := w.do("GET", "/", "").Body.String()
 	for _, want := range []string{`class="owner-form"`, "made by @me", `acme · <span class="warn">expires in 2 d</span>`,
-		`dead-org · <span class="warn">refused</span>`, `data-owner="acme"`} {
+		`dead-org · <span class="warn">refused</span>`, `data-owner="acme"`,
+		// The folded heading warns too, so a dying token is seen without opening it.
+		`<summary>Tokens · <span class="warn">acme expires in 2 d</span> · <span class="warn">dead-org refused</span></summary>`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %s", want)
 
@@ -177,16 +179,18 @@ func TestThePageListsOwnerTokens(t *testing.T) {
 	}
 }
 
-// The two forms read as two slots: the main token says it covers every
-// other org, and an empty org list says so rather than showing nothing.
-func TestThePageNamesBothTokenSlots(t *testing.T) {
+// Every token is a row of one list: the main token says it covers every
+// other org, its form stays folded until Replace, and an org token is added
+// below the list.
+func TestThePageListsEveryTokenAsARow(t *testing.T) {
 	w := newRoutes(t, "")
-	if err := w.store.StorePAT("github_pat_main", "me", time.Time{}); err != nil {
+	if err := w.store.StorePAT("github_pat_main", "me", time.Now().Add(2*24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	page := w.do("GET", "/", "").Body.String()
-	for _, want := range []string{"<summary>Tokens · @me · no org tokens</summary>",
-		"<strong>Main token</strong>, for every org without its own", "<strong>Org tokens</strong>: none yet"} {
+	for _, want := range []string{`<summary>Tokens · <span class="warn">main expires in 2 d</span></summary>`,
+		`<li><span>@me · main · <span class="warn">expires in 2 d</span></span>`, "covers every org without its own token",
+		`<form class="pat-form" hidden>`, `class="replace-pat"`, "Add an org token"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %s", want)
 		}
@@ -195,8 +199,8 @@ func TestThePageNamesBothTokenSlots(t *testing.T) {
 		t.Fatal(err)
 	}
 	page = w.do("GET", "/", "").Body.String()
-	if !strings.Contains(page, "<summary>Tokens · @me · 1 org token</summary>") || strings.Contains(page, "none yet") {
-		t.Error("the page does not count the stored org token")
+	if !strings.Contains(page, "<li><span>acme</span>") {
+		t.Error("the page does not list the stored org token as a row")
 	}
 }
 

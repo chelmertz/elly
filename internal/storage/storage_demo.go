@@ -155,7 +155,9 @@ func (s *StorageDemo) PutOwnerPAT(owner, token, username string, expiresAt time.
 	return nil
 }
 
-func (s *StorageDemo) OwnerPATs() ([]OwnerPAT, error) { return nil, nil }
+func (s *StorageDemo) OwnerPATs() ([]OwnerPAT, error) {
+	return []OwnerPAT{{Owner: "octo-org", Username: "demo-user", ExpiresAt: time.Now().Add(300 * 24 * time.Hour)}}, nil
+}
 
 func (s *StorageDemo) DeleteOwnerPAT(owner string) (bool, error) { return false, nil }
 

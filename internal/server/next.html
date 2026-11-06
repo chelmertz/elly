@@ -261,6 +261,10 @@ nav.side .meta button, .token button {
     font: inherit;
 }
 .token .actions { display: flex; gap: var(--s3); }
+.token ul { display: grid; gap: var(--s3); margin: var(--s3) 0 0; padding: 0; list-style: none; }
+.token li { display: flex; flex-wrap: wrap; gap: 0 var(--s3); }
+.token li > span:first-child { flex: 1 0 100%; }
+.token li small { flex-basis: 100%; color: var(--muted); }
 dialog.keys {
     padding: var(--s5);
     background: var(--raised);
@@ -364,26 +368,31 @@ nav.side .meta .token + p { margin-top: var(--s3); }
         {{if .RateLimitedUntil}}<p class="warn">rate limited until <time datetime="{{.RateLimitedUntil}}">{{.RateLimitedUntil}}</time></p>{{end}}
         {{range .Degradations}}<p class="warn" title="{{.Remedy}}">{{.Message}}</p>{{end}}
         <details class="token"{{if .SetupMode}} open{{end}}>
-            <summary>{{with .Token}}Tokens · @{{.Username}}{{with .Expires}} · {{if $.Token.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}} · {{with $.OwnerTokens}}{{len .}} org token{{if gt (len .) 1}}s{{end}}{{else}}no org tokens{{end}}{{else}}<span class="warn">No token yet</span>{{end}}</summary>
-            <form class="pat-form">
-                <label for="pat-input">{{if .Token}}<strong>Main token</strong>, for every org without its own: a{{else}}A{{end}} <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
+            <summary>{{with .Token}}Tokens{{if .ExpiresSoon}} · <span class="warn">main {{.Expires}}</span>{{end}}{{range $.OwnerTokens}}{{if .Refused}} · <span class="warn">{{.Owner}} refused</span>{{else if .ExpiresSoon}} · <span class="warn">{{.Owner}} {{.Expires}}</span>{{end}}{{end}}{{else}}<span class="warn">No token yet</span>{{end}}</summary>
+            {{with .Token}}
+            <ul>
+                <li><span>@{{.Username}} · main{{with .Expires}} · {{if $.Token.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}}</span>
+                    <button type="button" class="replace-pat">Replace</button>
+                    <button type="button" class="clear-pat">Clear</button>
+                    <small>covers every org without its own token</small></li>
+                {{range $.OwnerTokens}}{{$t := .}}<li><span>{{.Owner}}{{if .Refused}} · <span class="warn">refused</span>{{else}}{{with .Expires}} · {{if $t.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}}{{end}}</span>
+                    <button type="button" class="remove-owner" data-owner="{{.Owner}}">Remove</button></li>{{end}}
+            </ul>
+            {{end}}
+            <form class="pat-form"{{if .Token}} hidden{{end}}>
+                <label for="pat-input">{{if .Token}}The new main token: a{{else}}A{{end}} <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
                     with read-only commit status, contents, metadata and pull requests.
                     It cannot name a failing Actions job; a classic token with the repo
                     scope can, and is far broader.</label>
                 <input type="password" id="pat-input" name="token" placeholder="github_pat_..." autocomplete="off">
                 <p class="warn form-error" hidden></p>
-                <div class="actions">
-                    <button type="submit" class="save-pat">Save</button>
-                    {{if .Token}}<button type="button" class="clear-pat">Clear</button>{{end}}
-                </div>
+                <div class="actions"><button type="submit" class="save-pat">Save</button></div>
             </form>
             {{if .Token}}
             <form class="owner-form">
-                <label for="owner-token-input"><strong>Org tokens</strong>{{if not .OwnerTokens}}: none yet{{end}}. Orgs that take only their own
+                <label for="owner-input"><strong>Add an org token</strong> for an org that takes only its own
                     <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
-                    (resource owner: the org) need one each, made by @{{.Token.Username}}, with the same permissions.</label>
-                {{range .OwnerTokens}}{{$t := .}}<p>{{.Owner}}{{if .Refused}} · <span class="warn">refused</span>{{else}}{{with .Expires}} · {{if $t.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}}{{end}}
-                    <button type="button" class="remove-owner" data-owner="{{.Owner}}">Remove</button></p>{{end}}
+                    (resource owner: the org), made by @{{.Token.Username}}, with the same permissions.</label>
                 <input type="text" id="owner-input" name="owner" placeholder="org, e.g. octo-org" autocomplete="off">
                 <input type="password" id="owner-token-input" name="token" placeholder="github_pat_..." autocomplete="off">
                 <p class="warn form-error" hidden></p>
@@ -568,7 +577,11 @@ nav.side .meta .token + p { margin-top: var(--s3); }
             .then((r) => r.ok ? location.reload() : r.json().then((d) => showError(d.error || "Could not save the token")))
             .catch((err) => showError("Network error: " + err.message));
     });
-    const clearBtn = patForm.querySelector(".clear-pat");
+    const replaceBtn = document.querySelector(".token .replace-pat");
+    if (replaceBtn) {
+        replaceBtn.addEventListener("click", () => { patForm.hidden = false; patForm.querySelector("#pat-input").focus(); });
+    }
+    const clearBtn = document.querySelector(".token .clear-pat");
     if (clearBtn) {
         clearBtn.addEventListener("click", () => {
             if (!confirm("Clear the token? elly stops polling until a new one is set.")) return;
@@ -592,7 +605,7 @@ nav.side .meta .token + p { margin-top: var(--s3); }
                 .then((r) => r.ok ? location.reload() : r.json().then((d) => ownerFail(d.error || "Could not save the token")))
                 .catch((err) => ownerFail("Network error: " + err.message));
         });
-        ownerForm.querySelectorAll(".remove-owner").forEach((b) => b.addEventListener("click", () => {
+        document.querySelectorAll(".token .remove-owner").forEach((b) => b.addEventListener("click", () => {
             if (!confirm("Remove the token for " + b.dataset.owner + "? Its PRs leave the list.")) return;
             fetch("/api/v0/config/pat/" + encodeURIComponent(b.dataset.owner), {method: "DELETE"}).then((r) => { if (r.ok) location.reload(); });
         }));
