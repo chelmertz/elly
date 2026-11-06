@@ -26,6 +26,7 @@ import (
 
 var timeoutMinutes = flag.Int("timeout", 5, "refresh PRs every N minutes")
 var url = flag.String("url", "localhost:9876", "URL for web GUI")
+var pageUrl = flag.String("page-url", "", "the page's address in notifications, e.g. http://elly.localhost:9876 (default: http:// and -url)")
 var dbPath = flag.String("db", "", "path to SQLite database file (default: OS-appropriate data dir)")
 var demo = flag.Bool("demo", false, "mock the PRs so you can take a proper screenshot of the GUI")
 var versionFlag = flag.Bool("version", false, "show version")
@@ -125,7 +126,7 @@ func main() {
 			logger.Error("-notify needs notify-send on PATH", slog.Any("error", err))
 			os.Exit(1)
 		}
-		send = notify.Sender{Bin: bin, PageUrl: "http://" + *url, Logger: logger}.Send
+		send = notify.Sender{Bin: bin, PageUrl: pageAddress(*pageUrl, *url), Logger: logger}.Send
 	}
 
 	go startRefreshLoop(store, tracker, apiURL, send, logger)
@@ -401,6 +402,15 @@ func notifyChanges(store storage.Storage, username string, workOwners []string, 
 	for _, n := range notify.Coalesce(ns, func(prUrl string) int { return pos[prUrl] }) {
 		send(n)
 	}
+}
+
+// pageAddress is where notifications send the user: -page-url, else the
+// listen address.
+func pageAddress(page, listen string) string {
+	if page != "" {
+		return page
+	}
+	return "http://" + listen
 }
 
 // splitOwners splits a comma-separated flag value, dropping empty entries.

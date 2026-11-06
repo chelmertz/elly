@@ -126,8 +126,11 @@ func (a hostAllowlist) allowsOrigin(u *url.URL) bool {
 	return false
 }
 
+// isLoopback accepts localhost and its subdomains (elly.localhost): browsers
+// resolve every .localhost name to loopback themselves (RFC 6761) and never
+// ask DNS, so a rebinding site cannot claim one.
 func isLoopback(h string) bool {
-	if h == "localhost" {
+	if h == "localhost" || strings.HasSuffix(h, ".localhost") {
 		return true
 	}
 	ip := net.ParseIP(h)

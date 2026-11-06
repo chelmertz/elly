@@ -117,8 +117,9 @@ link at all. `GET /api/v0/prs` returns each PR's live annotations.
 elly listens on localhost, where every web page the browser has open can send
 it requests. It answers only these:
 
-- **Host** must be a loopback name (`localhost`, `127.0.0.1`, `[::1]`) on the
-  listen port, the `-url` host itself when it is not a wildcard, or one of
+- **Host** must be a loopback name (`localhost` or a name under it such as
+  `elly.localhost`, which browsers resolve to loopback themselves,
+  `127.0.0.1`, `[::1]`) on the listen port, the `-url` host itself when it is not a wildcard, or one of
   `-allowed-hosts` (comma-separated, matched as the Host header carries it,
   e.g. `elly.example` behind a reverse proxy). A wildcard bind such as
   `0.0.0.0:9876` gets the same check, so a site that points its own name at
