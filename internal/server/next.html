@@ -266,7 +266,7 @@ dialog.keys button { padding: 0; background: none; border: 0; font: inherit; cur
 dialog.tokens { width: min(36rem, 90vw); }
 dialog.tokens h2 { margin: 0 0 var(--s3); font-size: 15px; }
 dialog.tokens form { display: grid; gap: var(--s2); margin-top: var(--s4); }
-dialog.tokens input {
+dialog.tokens input, dialog.tokens textarea {
     width: 100%;
     padding: var(--s1) var(--s2);
     background: var(--bg);
@@ -275,6 +275,7 @@ dialog.tokens input {
     color: var(--fg);
     font: inherit;
 }
+dialog.tokens textarea { font-family: monospace; word-break: break-all; resize: vertical; }
 dialog.tokens .actions { display: flex; gap: var(--s3); }
 dialog.tokens ul { display: grid; gap: var(--s3); margin: 0; padding: 0; list-style: none; }
 dialog.tokens li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--s3); }
@@ -387,7 +388,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
             with read-only commit status, contents, metadata and pull requests.
             It cannot name a failing Actions job; a classic token with the repo
             scope can, and is far broader.</label>
-        <input type="password" id="pat-input" name="token" placeholder="github_pat_..." autocomplete="off">
+        <textarea id="pat-input" name="token" rows="3" placeholder="github_pat_..." autocomplete="off" spellcheck="false"></textarea>
         <p class="warn form-error" hidden></p>
         <div class="actions"><button type="submit" class="save-pat">Save</button></div>
     </form>
@@ -397,7 +398,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
             <a href="https://github.com/settings/personal-access-tokens/new">fine-grained token</a>
             (resource owner: the org), made by @{{.Token.Username}}, with the same permissions.</label>
         <input type="text" id="owner-input" name="owner" placeholder="org, e.g. octo-org" autocomplete="off">
-        <input type="password" id="owner-token-input" name="token" placeholder="github_pat_..." autocomplete="off">
+        <textarea id="owner-token-input" name="token" rows="3" placeholder="github_pat_..." autocomplete="off" spellcheck="false"></textarea>
         <p class="warn form-error" hidden></p>
         <div class="actions"><button type="submit" class="save-owner">Save</button></div>
     </form>
@@ -573,7 +574,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
     const showError = (text) => { patError.textContent = text; patError.hidden = false; saveBtn.disabled = false; };
     patForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        const token = patForm.querySelector("#pat-input").value;
+        const token = patForm.querySelector("#pat-input").value.trim();
         if (!token) { showError("Paste a token first"); return; }
         saveBtn.disabled = true;
         patError.hidden = true;
@@ -601,7 +602,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
         ownerForm.addEventListener("submit", (e) => {
             e.preventDefault();
             const owner = ownerForm.querySelector("#owner-input").value.trim();
-            const token = ownerForm.querySelector("#owner-token-input").value;
+            const token = ownerForm.querySelector("#owner-token-input").value.trim();
             if (!owner || !token) { ownerFail("Name the org and paste its token"); return; }
             saveOwner.disabled = true;
             ownerError.hidden = true;
