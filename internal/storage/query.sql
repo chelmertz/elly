@@ -132,3 +132,9 @@ delete from owner_pat;
 -- name: SetOwnerPollState :exec
 update owner_pat set last_success = ?, rate_limited_until = ?, refused = ?
 where owner = ? and pat = ?;
+
+-- name: SetPATExpiry :exec
+update pat set expires_at = ? where pat = ?;
+
+-- name: SetOwnerPATExpiry :exec
+update owner_pat set expires_at = ? where owner = ? and pat = ?;

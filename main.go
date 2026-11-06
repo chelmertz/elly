@@ -197,7 +197,8 @@ func initPAT(store storage.Storage, githubBaseURL string, logger *slog.Logger) (
 	}
 
 	// Validate stored PAT
-	if _, _, err := github.ValidatePAT(githubBaseURL, storedPat.Token, logger); err != nil {
+	_, expiresAt, err := github.ValidatePAT(githubBaseURL, storedPat.Token, logger)
+	if err != nil {
 		if errors.Is(err, github.ErrInvalidToken) {
 			logger.Warn("stored PAT is no longer valid, starting in setup mode", slog.Any("error", err))
 			if clearErr := store.ClearPAT(); clearErr != nil {
@@ -210,8 +211,37 @@ func initPAT(store storage.Storage, githubBaseURL string, logger *slog.Logger) (
 		logger.Warn("could not validate stored PAT due to transient error, assuming it is still valid", slog.Any("error", err))
 		return false, nil
 	}
-
+	backfillExpiries(store, githubBaseURL, storedPat, expiresAt, logger)
 	return false, nil
+}
+
+// backfillExpiries stores the expiry of each token that has none stored, from
+// the header GitHub answers every request with: a token stored before elly
+// read it would otherwise never warn before it expires. A token's expiry is
+// fixed (regenerating makes a new token), so startup is often enough.
+func backfillExpiries(store storage.Storage, baseURL string, primary storage.StoredPAT, primaryExpiry time.Time, logger *slog.Logger) {
+	if primary.ExpiresAt.IsZero() && !primaryExpiry.IsZero() {
+		if err := store.SetPATExpiry(primary.Token, primaryExpiry); err != nil {
+			logger.Warn("could not store the token's expiry", slog.Any("error", err))
+		}
+	}
+	owners, err := store.OwnerPATs()
+	if err != nil {
+		logger.Warn("could not read the owner tokens", slog.Any("error", err))
+		return
+	}
+	for _, o := range owners {
+		if !o.ExpiresAt.IsZero() || o.Refused != "" {
+			continue
+		}
+		_, expiry, err := github.UsernameFromPat(baseURL, o.Token, logger)
+		if err != nil || expiry.IsZero() {
+			continue
+		}
+		if err := store.SetOwnerPATExpiry(o.Owner, o.Token, expiry); err != nil {
+			logger.Warn("could not store an owner token's expiry", slog.String("owner", o.Owner), slog.Any("error", err))
+		}
+	}
 }
 
 func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL string, send func(notify.Notification), logger *slog.Logger) {

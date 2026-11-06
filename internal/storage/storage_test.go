@@ -901,3 +901,37 @@ func TestDeleteOwnerPATSaysItDeletedOne(t *testing.T) {
 		t.Errorf("left %+v", got)
 	}
 }
+
+// An expiry lands only on the token it was read for: a token replaced in the
+// meantime keeps its own.
+func TestSetExpiryOnlyTouchesTheSameToken(t *testing.T) {
+	s := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), filepath.Join(t.TempDir(), "elly.db"))
+	if err := s.StorePAT("github_pat_new", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutOwnerPAT("acme", "github_pat_acmenew", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	when := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, err := range []error{s.SetPATExpiry("github_pat_old", when), s.SetOwnerPATExpiry("acme", "github_pat_acmeold", when)} {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	pat, _, _ := s.GetPAT()
+	owners, _ := s.OwnerPATs()
+	if !pat.ExpiresAt.IsZero() || !owners[0].ExpiresAt.IsZero() {
+		t.Fatalf("a replaced token's expiry landed on its successor: %v, %v", pat.ExpiresAt, owners[0].ExpiresAt)
+	}
+	if err := s.SetPATExpiry("github_pat_new", when); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetOwnerPATExpiry("acme", "github_pat_acmenew", when); err != nil {
+		t.Fatal(err)
+	}
+	pat, _, _ = s.GetPAT()
+	owners, _ = s.OwnerPATs()
+	if !pat.ExpiresAt.Equal(when) || !owners[0].ExpiresAt.Equal(when) {
+		t.Errorf("expiry not stored: %v, %v", pat.ExpiresAt, owners[0].ExpiresAt)
+	}
+}

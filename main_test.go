@@ -89,6 +89,10 @@ func (s *testStorage) PutOwnerPAT(string, string, string, time.Time) error {
 func (s *testStorage) OwnerPATs() ([]storage.OwnerPAT, error)     { return nil, nil }
 func (s *testStorage) DeleteOwnerPAT(string) (bool, error)        { return false, nil }
 func (s *testStorage) SetOwnerPollState(o storage.OwnerPAT) error { return nil }
+func (s *testStorage) SetPATExpiry(string, time.Time) error        { return nil }
+func (s *testStorage) SetOwnerPATExpiry(string, string, time.Time) error {
+	return nil
+}
 
 var _ storage.Storage = (*testStorage)(nil)
 
@@ -556,5 +560,78 @@ func TestRestrictDBFilesLeavesOnlyTheOwnerAccess(t *testing.T) {
 		if fi, err := os.Stat(f); err != nil || fi.Mode().Perm() != 0o600 {
 			t.Errorf("%s: %v %v", filepath.Base(f), fi.Mode().Perm(), err)
 		}
+	}
+}
+
+// A token stored before elly read its expiry, or whose expiry was lost, gets
+// it back at startup from the header GitHub sends with every answer. An
+// expiry already stored is not asked for again.
+func TestInitPAT_BackfillsMissingExpiries(t *testing.T) {
+	expiry := map[string]string{
+		"bearer github_pat_main": "2026-11-22 10:00:00 +0100",
+		"bearer github_pat_acme": "2027-01-01 00:00:00 +0000",
+	}
+	var askedKnown atomic.Bool
+	githubAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if auth == "bearer github_pat_known" || auth == "bearer github_pat_dead" {
+			askedKnown.Store(true)
+		}
+		if e, ok := expiry[auth]; ok {
+			w.Header().Set("Github-Authentication-Token-Expiration", e)
+		}
+		var body bytes.Buffer
+		_, _ = body.ReadFrom(r.Body)
+		if strings.Contains(body.String(), "viewer") {
+			w.Write(graphqlViewerResponse("me"))
+			return
+		}
+		w.Write(graphqlSearchResponse())
+	}))
+	defer githubAPI.Close()
+
+	logger := testLogger(t)
+	store := storage.NewStorage(logger, filepath.Join(t.TempDir(), "elly.db"))
+	if err := store.StorePAT("github_pat_main", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutOwnerPAT("acme", "github_pat_acme", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	known := time.Date(2027, 3, 1, 0, 0, 0, 0, time.UTC)
+	if err := store.PutOwnerPAT("known", "github_pat_known", "me", known); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutOwnerPAT("dead", "github_pat_dead", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetOwnerPollState(storage.OwnerPAT{Owner: "dead", Token: "github_pat_dead", Refused: "owner_token_refused"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if setup, err := initPAT(store, githubAPI.URL, logger); err != nil || setup {
+		t.Fatalf("initPAT = %v, %v", setup, err)
+	}
+
+	pat, _, _ := store.GetPAT()
+	if want := time.Date(2026, 11, 22, 9, 0, 0, 0, time.UTC); !pat.ExpiresAt.Equal(want) {
+		t.Errorf("main token expires %v, want %v", pat.ExpiresAt, want)
+	}
+	owners, err := store.OwnerPATs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]time.Time{}
+	for _, o := range owners {
+		got[o.Owner] = o.ExpiresAt
+	}
+	if want := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC); !got["acme"].Equal(want) {
+		t.Errorf("acme expires %v, want %v", got["acme"], want)
+	}
+	if !got["known"].Equal(known) {
+		t.Errorf("known expires %v, want it kept at %v", got["known"], known)
+	}
+	if askedKnown.Load() {
+		t.Error("asked GitHub for an expiry already stored, or with a refused token")
 	}
 }

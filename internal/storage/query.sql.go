@@ -592,6 +592,21 @@ func (q *Queries) SetLastLogin(ctx context.Context, value string) error {
 	return err
 }
 
+const setOwnerPATExpiry = `-- name: SetOwnerPATExpiry :exec
+update owner_pat set expires_at = ? where owner = ? and pat = ?
+`
+
+type SetOwnerPATExpiryParams struct {
+	ExpiresAt string
+	Owner     string
+	Pat       string
+}
+
+func (q *Queries) SetOwnerPATExpiry(ctx context.Context, arg SetOwnerPATExpiryParams) error {
+	_, err := q.db.ExecContext(ctx, setOwnerPATExpiry, arg.ExpiresAt, arg.Owner, arg.Pat)
+	return err
+}
+
 const setOwnerPollState = `-- name: SetOwnerPollState :exec
 update owner_pat set last_success = ?, rate_limited_until = ?, refused = ?
 where owner = ? and pat = ?
@@ -613,6 +628,20 @@ func (q *Queries) SetOwnerPollState(ctx context.Context, arg SetOwnerPollStatePa
 		arg.Owner,
 		arg.Pat,
 	)
+	return err
+}
+
+const setPATExpiry = `-- name: SetPATExpiry :exec
+update pat set expires_at = ? where pat = ?
+`
+
+type SetPATExpiryParams struct {
+	ExpiresAt string
+	Pat       string
+}
+
+func (q *Queries) SetPATExpiry(ctx context.Context, arg SetPATExpiryParams) error {
+	_, err := q.db.ExecContext(ctx, setPATExpiry, arg.ExpiresAt, arg.Pat)
 	return err
 }
 

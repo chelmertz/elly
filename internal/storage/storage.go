@@ -87,6 +87,10 @@ type Storage interface {
 	// SetOwnerPollState records a poll's outcome for o.Owner, unless its
 	// token was replaced meanwhile.
 	SetOwnerPollState(o OwnerPAT) error
+	// SetPATExpiry and SetOwnerPATExpiry record a token's expiry, unless the
+	// token was replaced meanwhile.
+	SetPATExpiry(token string, expiresAt time.Time) error
+	SetOwnerPATExpiry(owner, token string, expiresAt time.Time) error
 	// StoreDegradations records what the last poll could not do. An empty
 	// slice clears the record.
 	StoreDegradations(ds []types.Degradation) error
@@ -603,6 +607,14 @@ func (s *DbStorage) SetOwnerPollState(o OwnerPAT) error {
 		Owner:            o.Owner,
 		Pat:              o.Token,
 	})
+}
+
+func (s *DbStorage) SetPATExpiry(token string, expiresAt time.Time) error {
+	return s.db.SetPATExpiry(context.Background(), SetPATExpiryParams{ExpiresAt: formatTime(expiresAt), Pat: token})
+}
+
+func (s *DbStorage) SetOwnerPATExpiry(owner, token string, expiresAt time.Time) error {
+	return s.db.SetOwnerPATExpiry(context.Background(), SetOwnerPATExpiryParams{ExpiresAt: formatTime(expiresAt), Owner: owner, Pat: token})
 }
 
 // formatTime is RFC3339, or "" for the zero time.

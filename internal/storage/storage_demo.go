@@ -160,6 +160,10 @@ func (s *StorageDemo) OwnerPATs() ([]OwnerPAT, error) { return nil, nil }
 func (s *StorageDemo) DeleteOwnerPAT(owner string) (bool, error) { return false, nil }
 
 func (s *StorageDemo) SetOwnerPollState(o OwnerPAT) error { return nil }
+func (s *StorageDemo) SetPATExpiry(string, time.Time) error  { return nil }
+func (s *StorageDemo) SetOwnerPATExpiry(string, string, time.Time) error {
+	return nil
+}
 
 // The demo database is for screenshots, so it is deliberately never degraded.
 func (s *StorageDemo) StoreDegradations(ds []types.Degradation) error { return nil }
