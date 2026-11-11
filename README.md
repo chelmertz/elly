@@ -60,6 +60,13 @@ page order, so a status bar can show the same count as the page.
 `?minPoints=N` filters by score instead, which counts a PR nobody has touched
 for weeks for as long as it stays open.
 
+The page updates itself without reloading. `GET /api/v0/events` is a
+server-sent event stream of a version string: the current one on connect,
+then a new one after every write the page shows (a poll stored, a bury, an
+annotation, a token). On a new version the page fetches itself and swaps in
+the rows and the side nav, keeping open rows, focus and the filter. Without
+the stream it falls back to reloading after each poll.
+
 ## Desktop notifications
 
 `elly -notify` sends a desktop notification through `notify-send` when a PR

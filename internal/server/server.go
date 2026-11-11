@@ -105,6 +105,9 @@ type HttpServerConfig struct {
 	AllowedHosts []string
 	// GithubURL is where a pasted PAT is checked; empty means GitHub's API.
 	GithubURL string
+	// Changes streams page changes on GET /api/v0/events; nil leaves the
+	// route out and the page falls back to its timed reload.
+	Changes *Changes
 }
 
 func (c HttpServerConfig) githubURL() string {
@@ -218,6 +221,9 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 	check(err)
 
 	registerAnnotationRoutes(mux, webConfig)
+	if webConfig.Changes != nil {
+		mux.HandleFunc("GET /api/v0/events", webConfig.Changes.serveEvents)
+	}
 
 	mux.HandleFunc("POST /api/v0/prs/{prUrl}/{action}", func(w http.ResponseWriter, r *http.Request) {
 		ghPrUrl, err := decodePrId(r.PathValue("prUrl"))

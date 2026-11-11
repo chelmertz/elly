@@ -298,6 +298,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
     <label class="visually-hidden" for="filter">Filter pull requests</label>
     <input id="filter" class="filter" type="search" autocomplete="off" placeholder="Filter: number, title, repo, author  ( / )">
 
+    <div class="rows">
     {{range $g := .Groups}}{{if $g.Rows}}
     <section class="group{{if $g.Folded}} folded{{end}}{{if $g.FirstFolded}} first-folded{{end}}" id="{{$g.Slug}}" data-folded="{{$g.Folded}}">
         {{if $g.Folded}}
@@ -354,6 +355,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
 
     <p class="done" hidden>Nothing matches.</p>
     <p class="stats">{{.OnYou}} on you{{with .OldestOnYou}}, the longest waiting {{.}}{{end}} · {{.OnOthers}} on others</p>
+    </div>
 </main>
 
 <nav class="side" aria-label="Groups">
@@ -421,8 +423,10 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
     <form method="dialog"><button>Close</button></form>
 </dialog>
 <script>
-// Everything here only toggles attributes and sets textContent on elements
-// the server rendered; no HTML is built from PR strings.
+// The server renders every row. This script toggles attributes, sets
+// textContent, and swaps in the server's own rendering of .rows and the side
+// nav when GET /api/v0/events says the data changed; no HTML is built from
+// PR strings here. Listeners hang on document, so they survive a swap.
 (() => {
     const store = {
         get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -431,41 +435,33 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
 
     // "new": the PR became the user's turn after their previous visit. The
     // baseline is written when the user leaves, not by the page's own
-    // reloads, so a reload does not clear the dots.
+    // reloads or swaps, so neither clears the dots.
     const seenKey = "elly.next.lastVisit";
     const lastVisit = Date.parse(store.get(seenKey) || "");
-    if (!Number.isNaN(lastVisit)) {
+    const markNew = () => {
+        if (Number.isNaN(lastVisit)) return;
         document.querySelectorAll(".pr[data-turn-at]").forEach((el) => {
             if (Date.parse(el.dataset.turnAt) > lastVisit) el.classList.add("new");
         });
-    }
+    };
+    markNew();
     let selfReload = false;
     window.addEventListener("pagehide", () => {
         if (!selfReload) store.set(seenKey, new Date().toISOString());
     });
+    const reload = () => { selfReload = true; location.reload(); };
 
     const setOpen = (pr, open) => {
         pr.classList.toggle("open", open);
         pr.querySelector(".toggle").setAttribute("aria-expanded", String(open));
         pr.querySelector(".panel").hidden = !open;
     };
-    document.querySelectorAll(".pr .toggle").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            const pr = btn.closest(".pr");
-            setOpen(pr, !pr.classList.contains("open"));
-        });
-    });
-
-    const groups = Array.from(document.querySelectorAll(".group"));
+    const groups = () => Array.from(document.querySelectorAll(".group"));
     const unfold = (group, open) => {
         const btn = group.querySelector(".fold");
         group.querySelector("ol").hidden = !open;
         if (btn) btn.setAttribute("aria-expanded", String(open));
     };
-    groups.forEach((g) => {
-        const btn = g.querySelector(".fold");
-        if (btn) btn.addEventListener("click", () => unfold(g, g.querySelector("ol").hidden));
-    });
 
     // a link to a row or group opens what holds it
     const reveal = () => {
@@ -481,7 +477,6 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
 
     // fuzzy filter: every typed character appears in order
     const input = document.getElementById("filter");
-    const done = document.querySelector(".done");
     const matches = (hay, q) => {
         let i = 0;
         for (const ch of hay) if (ch === q[i]) i++;
@@ -490,7 +485,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
     const filter = () => {
         const q = input.value.trim().toLowerCase().replace(/^#/, "");
         let any = false;
-        groups.forEach((g) => {
+        groups().forEach((g) => {
             const list = g.querySelector("ol");
             let shown = 0;
             Array.from(list.children).forEach((pr) => {
@@ -508,18 +503,54 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
                 list.hidden = btn ? btn.getAttribute("aria-expanded") !== "true" : false;
             }
         });
-        done.hidden = !q || any;
+        document.querySelector(".done").hidden = !q || any;
     };
     input.addEventListener("input", filter);
     input.addEventListener("keydown", (e) => {
         if (e.key === "Escape") { input.value = ""; filter(); input.blur(); }
     });
-    // the keys act on the focused row; none fires while typing in a field
+
     const keys = document.querySelector("dialog.keys");
     // Nothing else works without a token, so setup mode opens the dialog.
     const tokens = document.querySelector("dialog.tokens");
-    document.querySelector("button.tokens-open").addEventListener("click", () => tokens.showModal());
     if ("setup" in tokens.dataset) tokens.showModal();
+
+    // Live: the stream connected, so changes arrive by swap, not reload.
+    let live = false;
+
+    // polling runs in the background; its stored result arrives by swap,
+    // which renders a fresh, enabled button. Without the stream, reload once
+    // the poll has had a moment.
+    const pollNow = (btn) => {
+        btn.disabled = true;
+        fetch("/api/v0/prs/refresh", {method: "POST"}).then(() => {
+            if (!live) setTimeout(reload, 1500);
+            // a poll held back (rate limit, backoff) stores nothing
+            else setTimeout(() => { btn.disabled = false; }, 30000);
+        });
+    };
+
+    document.addEventListener("click", (e) => {
+        const btn = e.target instanceof Element ? e.target.closest("button") : null;
+        if (!btn) return;
+        if (btn.matches(".pr .toggle")) {
+            const pr = btn.closest(".pr");
+            setOpen(pr, !pr.classList.contains("open"));
+        } else if (btn.matches(".fold")) {
+            const g = btn.closest(".group");
+            unfold(g, g.querySelector("ol").hidden);
+        } else if (btn.matches("button.bury")) {
+            fetch(btn.dataset.url, {method: "POST"}).then(() => { if (!live) reload(); });
+        } else if (btn.matches("button.poll")) {
+            pollNow(btn);
+        } else if (btn.matches("button.tokens-open")) {
+            tokens.showModal();
+        } else if (btn.matches("button.keys-open")) {
+            keys.showModal();
+        }
+    });
+
+    // the keys act on the focused row; none fires while typing in a field
     const typing = (t) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || t.isContentEditable;
     const visibleRows = () => Array.from(document.querySelectorAll(".pr")).filter((el) => el.offsetParent !== null);
     const currentRow = () => document.activeElement instanceof Element ? document.activeElement.closest(".pr") : null;
@@ -545,29 +576,14 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
             break;
         case "o": if (!pr) return; setOpen(pr, !pr.classList.contains("open")); break;
         case "b": if (!pr) return; pr.querySelector("button.bury").click(); break;
-        case "r": poll.click(); break;
+        case "r": document.querySelector("button.poll").click(); break;
         case "?": keys.showModal(); break;
         default: return;
         }
         e.preventDefault();
     });
-    document.querySelector("button.keys-open").addEventListener("click", () => keys.showModal());
 
-    document.querySelectorAll("button.bury").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            fetch(btn.dataset.url, {method: "POST"}).then(() => { selfReload = true; location.reload(); });
-        });
-    });
-
-    // polling runs in the background; reload once it has had a moment
-    const poll = document.querySelector("button.poll");
-    poll.addEventListener("click", () => {
-        poll.disabled = true;
-        fetch("/api/v0/prs/refresh", {method: "POST"}).then(() => {
-            setTimeout(() => { selfReload = true; location.reload(); }, 1500);
-        });
-    });
-
+    // Token changes reload: the dialog is outside what a swap replaces.
     const patForm = document.querySelector("form.pat-form");
     const patError = patForm.querySelector(".form-error");
     const saveBtn = patForm.querySelector(".save-pat");
@@ -579,7 +595,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
         saveBtn.disabled = true;
         patError.hidden = true;
         fetch("/api/v0/config/pat", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({token})})
-            .then((r) => r.ok ? location.reload() : r.json().then((d) => showError(d.error || "Could not save the token")))
+            .then((r) => r.ok ? reload() : r.json().then((d) => showError(d.error || "Could not save the token")))
             .catch((err) => showError("Network error: " + err.message));
     });
     const replaceBtn = document.querySelector(".tokens .replace-pat");
@@ -590,7 +606,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
     if (clearBtn) {
         clearBtn.addEventListener("click", () => {
             if (!confirm("Remove the token? elly stops polling until a new one is set.")) return;
-            fetch("/api/v0/config/pat", {method: "DELETE"}).then((r) => { if (r.ok) location.reload(); });
+            fetch("/api/v0/config/pat", {method: "DELETE"}).then((r) => { if (r.ok) reload(); });
         });
     }
 
@@ -607,30 +623,69 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
             saveOwner.disabled = true;
             ownerError.hidden = true;
             fetch("/api/v0/config/pat/" + encodeURIComponent(owner), {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({token})})
-                .then((r) => r.ok ? location.reload() : r.json().then((d) => ownerFail(d.error || "Could not save the token")))
+                .then((r) => r.ok ? reload() : r.json().then((d) => ownerFail(d.error || "Could not save the token")))
                 .catch((err) => ownerFail("Network error: " + err.message));
         });
         document.querySelectorAll(".tokens .remove-owner").forEach((b) => b.addEventListener("click", () => {
             if (!confirm("Remove the token for " + b.dataset.owner + "? Its PRs leave the list.")) return;
-            fetch("/api/v0/config/pat/" + encodeURIComponent(b.dataset.owner), {method: "DELETE"}).then((r) => { if (r.ok) location.reload(); });
+            fetch("/api/v0/config/pat/" + encodeURIComponent(b.dataset.owner), {method: "DELETE"}).then((r) => { if (r.ok) reload(); });
         }));
     }
 
-    const polled = document.querySelector("time.polled");
     const rtf = new Intl.RelativeTimeFormat("en", {numeric: "auto"});
     const tick = () => {
+        const polled = document.querySelector("time.polled");
         const at = new Date(polled.dateTime);
         polled.textContent = at.getFullYear() < 2020 ? "not yet" : rtf.format(Math.round((at - new Date()) / 60000), "minute");
     };
     tick();
     setInterval(tick, 15000);
 
-    // reload after each poll, unless the user is in the middle of something
+    // swap: replace .rows and the side nav with the server's fresh rendering,
+    // keeping what the user had open, unfolded, focused and filtered. A
+    // response that arrives after a newer request's is dropped.
+    let swaps = 0;
+    const swap = () => {
+        const n = ++swaps;
+        fetch("/", {cache: "no-store"}).then((r) => r.ok ? r.text() : Promise.reject(new Error(String(r.status)))).then((html) => {
+            if (n !== swaps) return;
+            const doc = new DOMParser().parseFromString(html, "text/html");
+            const rows = doc.querySelector(".rows");
+            const nav = doc.querySelector("nav.side");
+            if (!rows || !nav) return;
+            const open = Array.from(document.querySelectorAll(".pr.open"), (el) => el.id);
+            const unfolded = groups().filter((g) => g.dataset.folded === "true" && !g.querySelector("ol").hidden).map((g) => g.id);
+            const focus = currentRow() && document.activeElement.classList.contains("toggle") ? currentRow().id : "";
+            document.querySelector(".rows").replaceWith(rows);
+            document.querySelector("nav.side").replaceWith(nav);
+            open.forEach((id) => { const el = document.getElementById(id); if (el) setOpen(el, true); });
+            unfolded.forEach((id) => { const g = document.getElementById(id); if (g && g.querySelector("ol")) unfold(g, true); });
+            if (focus && document.getElementById(focus)) document.getElementById(focus).querySelector(".toggle").focus({preventScroll: true});
+            markNew();
+            filter();
+            tick();
+        }).catch(() => { /* the next change or the fallback tries again */ });
+    };
+
+    // The stream sends the current version on connect and a new one per
+    // change. A version other than the last one seen (also after elly
+    // restarts) swaps. Until it connects, and if it never does, the page
+    // keeps its timed reload.
+    let version = null;
+    if (window.EventSource) {
+        const events = new EventSource("/api/v0/events");
+        events.onmessage = (e) => {
+            live = true;
+            if (version !== null && e.data !== version) swap();
+            version = e.data;
+        };
+        // a dropped stream reconnects by itself; meanwhile the timed reload
+        events.onerror = () => { live = false; };
+    }
     const minutes = parseInt(document.body.dataset.refreshMinutes, 10) || 5;
     setInterval(() => {
-        if (input.value || document.querySelector(".pr.open") || document.activeElement === input || tokens.open || keys.open) return;
-        selfReload = true;
-        location.reload();
+        if (live || input.value || document.querySelector(".pr.open") || document.activeElement === input || tokens.open || keys.open) return;
+        reload();
     }, minutes * 60000);
 })();
 </script>

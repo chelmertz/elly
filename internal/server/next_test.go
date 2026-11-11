@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"html"
+	"io"
+	"log/slog"
 	"net/http/httptest"
 	"os/exec"
 	"regexp"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	"github.com/chelmertz/elly/internal/points"
+	"github.com/chelmertz/elly/internal/storage"
 	"github.com/chelmertz/elly/internal/types"
 )
 
@@ -358,6 +361,18 @@ func TestNextStartHandsAnAskedReviewToClaudeReview(t *testing.T) {
 // drives headless chromium over the DevTools protocol. Skipped where node or
 // chromium is missing.
 func TestPageKeys(t *testing.T) {
+	runPageScript(t, "testdata/keys.mjs", nil)
+}
+
+// The page swaps in a change from the stream without reloading.
+func TestPageLive(t *testing.T) {
+	runPageScript(t, "testdata/live.mjs", NewChanges())
+}
+
+// runPageScript serves the fixture page and runs script against it in
+// headless chromium; changes, when set, wires the change stream.
+func runPageScript(t *testing.T, script string, changes *Changes) {
+	t.Helper()
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("no node on PATH")
@@ -372,22 +387,27 @@ func TestPageKeys(t *testing.T) {
 		t.Skip("no chromium on PATH")
 	}
 	// Served by the real handler behind guard, so the page runs under its
-	// CSP: a script the header does not allow fails every key check.
+	// CSP: a script the header does not allow fails every check.
 	w := newRoutes(t, "")
-	if err := w.store.StorePAT("ghp_x", "me", time.Time{}); err != nil {
+	var store storage.Storage = w.store
+	if changes != nil {
+		store = storage.Notifying(w.store, changes.Changed)
+		w.mux = routes(HttpServerConfig{Store: store, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Tracker: w.tracker, Changes: changes})
+	}
+	if err := store.StorePAT("ghp_x", "me", time.Time{}); err != nil {
 		t.Fatal(err)
 	}
 	prs := nextFixture(time.Now())
 	for i := range prs {
 		prs[i].RawJsonResponse = []byte("{}")
 	}
-	if err := w.store.StoreRepoPrs(prs); err != nil {
+	if err := store.StoreRepoPrs(prs); err != nil {
 		t.Fatal(err)
 	}
 	for _, pr := range prs {
 		for _, a := range pr.Annotations {
 			a.Links = []types.AnnotationLink{}
-			if err := w.store.PutAnnotation(pr.Url, a, time.Now().Add(time.Hour)); err != nil {
+			if err := store.PutAnnotation(pr.Url, a, time.Now().Add(time.Hour)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -398,7 +418,7 @@ func TestPageKeys(t *testing.T) {
 	defer srv.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, node, "testdata/keys.mjs", browser, srv.URL+"/").CombinedOutput()
+	out, err := exec.CommandContext(ctx, node, script, browser, srv.URL+"/").CombinedOutput()
 	if err != nil {
 		t.Errorf("%v\n%s", err, out)
 	}

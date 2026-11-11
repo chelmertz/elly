@@ -105,6 +105,10 @@ func main() {
 		}
 	}
 
+	// every write the page shows tells open pages to re-render
+	changes := server.NewChanges()
+	store = storage.Notifying(store, changes.Changed)
+
 	setupMode, err := initPAT(store, apiURL, logger)
 	if err != nil {
 		logger.Error("failed to initialize PAT", slog.Any("error", err))
@@ -155,6 +159,7 @@ func main() {
 		ReviewRepos:       splitOwners(*reviewRepos),
 		AllowedHosts:      splitOwners(*allowedHosts),
 		GithubURL:         apiURL,
+		Changes:           changes,
 	})
 }
 

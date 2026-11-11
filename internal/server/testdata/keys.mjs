@@ -3,65 +3,15 @@
 // TestPageKeys: node keys.mjs <chromium> <url>. A CSP violation fails it.
 // window.open and fetch are stubbed, so nothing navigates or posts; the script
 // prints one line per failed check and exits non-zero if there was any.
-import { spawn } from "node:child_process";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { openPage } from "./cdp.mjs";
 
 const [chromium, url] = process.argv.slice(2);
-const browser = spawn(chromium, [
-    "--headless=new", "--no-sandbox", "--disable-gpu", "--remote-debugging-port=0",
-    "--user-data-dir=" + mkdtempSync(join(tmpdir(), "elly-keys-")), "about:blank",
-], { stdio: ["ignore", "ignore", "pipe"] });
-const fail = (msg) => { console.log(msg); process.exitCode = 1; };
-const timer = setTimeout(() => { fail("timed out"); browser.kill(); process.exit(1); }, 30000);
-
-const wsUrl = await new Promise((resolve, reject) => {
-    let buf = "";
-    browser.stderr.on("data", (d) => {
-        buf += d;
-        const m = buf.match(/DevTools listening on (ws:\S+)/);
-        if (m) resolve(m[1]);
-    });
-    browser.on("exit", () => reject(new Error("chromium exited: " + buf)));
-});
-
-const ws = new WebSocket(wsUrl);
-await new Promise((r) => ws.addEventListener("open", r));
-let id = 0;
-const pending = new Map();
-const waiters = [];
-ws.addEventListener("message", (e) => {
-    const msg = JSON.parse(e.data);
-    if (msg.id && pending.has(msg.id)) {
-        pending.get(msg.id)(msg);
-        pending.delete(msg.id);
-    } else if (msg.method) {
-        waiters.filter((w) => w.method === msg.method).forEach((w) => w.resolve(msg));
-    }
-});
-const send = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
-    const n = ++id;
-    pending.set(n, (msg) => msg.error ? reject(new Error(method + ": " + msg.error.message)) : resolve(msg.result));
-    ws.send(JSON.stringify({ id: n, method, params, sessionId }));
-});
-const next = (method) => new Promise((resolve) => waiters.push({ method, resolve }));
-
-const { targetId } = await send("Target.createTarget", { url: "about:blank" });
-const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
-const s = (method, params) => send(method, params, sessionId);
-await s("Page.enable");
-await s("Page.addScriptToEvaluateOnNewDocument", { source: `
+const { s, value, expect, close } = await openPage(chromium, url, `
     window.__opened = [];
-    window.__csp = [];
-    document.addEventListener("securitypolicyviolation", (e) => window.__csp.push(e.violatedDirective + " " + e.blockedURI));
     window.__fetched = [];
     window.open = (u) => { window.__opened.push(String(u)); return null; };
     window.fetch = (u, o) => { window.__fetched.push((o && o.method || "GET") + " " + u); return new Promise(() => {}); };
-` });
-const loaded = next("Page.loadEventFired");
-await s("Page.navigate", { url });
-await loaded;
+`);
 
 const codes = { Enter: 13, Escape: 27, ArrowDown: 40, ArrowUp: 38 };
 const press = async (key) => {
@@ -74,11 +24,6 @@ const press = async (key) => {
     };
     await s("Input.dispatchKeyEvent", { type: "keyDown", ...base, text: printable ? key : key === "Enter" ? "\r" : undefined });
     await s("Input.dispatchKeyEvent", { type: "keyUp", ...base });
-};
-const value = async (expr) => (await s("Runtime.evaluate", { expression: expr, returnByValue: true })).result.value;
-const expect = async (what, expr, want) => {
-    const got = await value(expr);
-    if (JSON.stringify(got) !== JSON.stringify(want)) fail(`${what}: got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
 };
 const focused = "document.activeElement.closest('.pr') && document.activeElement.closest('.pr').id";
 
@@ -122,6 +67,4 @@ await expect("and do not poll", "window.__fetched.length", before);
 
 await expect("the CSP blocked nothing", "window.__csp", []);
 
-clearTimeout(timer);
-ws.close();
-browser.kill();
+close();
