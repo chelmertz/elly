@@ -112,3 +112,35 @@ func TestEventsOutliveTheWriteTimeout(t *testing.T) {
 		t.Errorf("got %d events; the stream ended past the write timeout: %v", events, lines.Err())
 	}
 }
+
+// An idle stream sends a comment line, so proxies and the browser keep it
+// open, and a closed one gives its subscription back.
+func TestEventsKeepAliveAndUnsubscribeOnClose(t *testing.T) {
+	c := NewChanges()
+	c.keepalive = 20 * time.Millisecond
+	srv := httptest.NewServer(http.HandlerFunc(c.serveEvents))
+	t.Cleanup(srv.Close)
+	// a stream that never sends a keepalive fails here instead of hanging
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := bufio.NewScanner(resp.Body)
+	seen := false
+	for !seen && lines.Scan() {
+		seen = lines.Text() == ": keepalive"
+	}
+	if !seen {
+		t.Errorf("no keepalive: %v", lines.Err())
+	}
+	if n := c.subscribers(); n != 1 {
+		t.Errorf("%d subscribers while open", n)
+	}
+	_ = resp.Body.Close()
+	for i := 0; i < 100 && c.subscribers() != 0; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := c.subscribers(); n != 0 {
+		t.Errorf("%d subscribers after the client left", n)
+	}
+}

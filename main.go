@@ -36,7 +36,6 @@ var annotationSchemes = flag.String("annotation-schemes", "", "comma-separated l
 var annotationTokenFile = flag.String("annotation-token-file", "", "where to write the bearer token annotation writes need (default: $XDG_RUNTIME_DIR/elly/annotation-token; no XDG_RUNTIME_DIR disables annotation writes)")
 var recordDir = flag.String("record", "", "development: run one poll, write it anonymised to the next free poll-N.json in this directory, and exit")
 var recordOwners = flag.String("record-owners", "", "comma-separated repo owners -record keeps; every other PR is left out of the recording")
-var reviewRepos = flag.String("review-repos", "", "comma-separated owner/* or owner/repo where claude-review runs rounds; a review asked of you there gets a Start verb (claude-review's review_repos)")
 var allowedHosts = flag.String("allowed-hosts", "", "comma-separated Host values elly answers besides loopback names on the listen port, e.g. elly.example behind a reverse proxy (port included unless it is the scheme's default)")
 var githubAPIFlag = flag.String("github-api", github.DefaultAPIURL, "development: the GitHub API to poll and check tokens with, e.g. a stub on a loopback address")
 var workOwners = flag.String("work-owners", "", "comma-separated repo owners that notify only on reasons to act; any other owner notifies on every change by someone else")
@@ -156,7 +155,6 @@ func main() {
 		SetupMode:         setupMode,
 		AnnotationToken:   annotationToken,
 		AnnotationSchemes: splitOwners(*annotationSchemes),
-		ReviewRepos:       splitOwners(*reviewRepos),
 		AllowedHosts:      splitOwners(*allowedHosts),
 		GithubURL:         apiURL,
 		Changes:           changes,

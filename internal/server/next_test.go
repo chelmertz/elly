@@ -57,7 +57,7 @@ func renderNext(t *testing.T, data NextData) string {
 
 func TestNextRendersEachGroupAndRowAnchor(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
-	data := buildNext(nextFixture(now), "me", now, nil, nil)
+	data := buildNext(nextFixture(now), "me", now, nil)
 	for _, g := range data.Groups {
 		if len(g.Rows) != 1 {
 			t.Errorf("group %s has %d rows, want 1", g.Name, len(g.Rows))
@@ -107,7 +107,7 @@ func TestNextEscapesPrFields(t *testing.T) {
 		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Note: payload,
 			Links: []types.AnnotationLink{{Label: payload, Url: "javascript:alert(1)"}}}},
 	}
-	page := renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, nil, nil))
+	page := renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, nil))
 	if strings.Contains(page, payload) {
 		t.Error("next.html renders a PR field unescaped")
 	}
@@ -124,14 +124,14 @@ func TestNextVerbFollowsAnAllowedAnnotationLink(t *testing.T) {
 	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now,
 		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou,
 			Links: []types.AnnotationLink{{Label: "Approve", Url: "claude-review://o/r/1/approve"}}}}}
-	page := renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"}, nil))
+	page := renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"}))
 	if !strings.Contains(page, `href="claude-review://o/r/1/approve">Approve</a>`) {
 		t.Error("the Approve verb does not follow the annotation link")
 	}
 	if !strings.Contains(page, `<span class="scheme">claude-review · approve</span>`) {
 		t.Error("the link's verb is not shown beside its label")
 	}
-	page = renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, nil, nil))
+	page = renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, nil))
 	if strings.Contains(page, "claude-review://") {
 		t.Error("a link whose scheme is no longer allowed still renders")
 	}
@@ -152,7 +152,7 @@ func TestRepoNameGetsItsOwnerOnlyWhenAmbiguous(t *testing.T) {
 		{Url: "https://github.com/a/web/pull/3", RepoOwner: "a", RepoName: "web", LastUpdated: now},
 	}
 	repos := map[string]bool{}
-	for _, g := range buildNext(prs, "me", now, nil, nil).Groups {
+	for _, g := range buildNext(prs, "me", now, nil).Groups {
 		for _, r := range g.Rows {
 			repos[r.Repo] = true
 		}
@@ -196,7 +196,7 @@ func TestNextShowsWhatNeedsTheUserUnderTheRow(t *testing.T) {
 		row("3", types.AnnotationRunning, "started by a click"),
 		row("4", types.AnnotationHandled, "round posted its review"),
 	}
-	page := renderNext(t, buildNext(prs, "me", now, nil, nil))
+	page := renderNext(t, buildNext(prs, "me", now, nil))
 	if strings.Contains(page, "<script>alert") {
 		t.Fatal("an annotation note reached the page unescaped")
 	}
@@ -222,7 +222,7 @@ func TestNextAttachVerbFollowsTheAnnotationLink(t *testing.T) {
 	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now, ReviewRequestedFromUsers: []string{"me"},
 		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning,
 			Links: []types.AnnotationLink{{Label: "Attach", Url: "claude-review://o/r/1/attach"}}}}}
-	data := buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"}, nil)
+	data := buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"})
 	if data.OnYou != 0 {
 		t.Errorf("a handed-over PR counts as on the user: %d", data.OnYou)
 	}
@@ -236,7 +236,7 @@ func TestNextAttachVerbFollowsTheAnnotationLink(t *testing.T) {
 func TestNextLeavesEmptyGroupsOut(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	prs := nextFixture(now)[1:] // without the buried PR
-	page := renderNext(t, buildNext(prs, "me", now, nil, nil))
+	page := renderNext(t, buildNext(prs, "me", now, nil))
 	if strings.Contains(page, `id="buried"`) || strings.Contains(page, `id="buried-list"`) {
 		t.Error("the empty Buried group rendered in the list")
 	}
@@ -252,7 +252,7 @@ func TestNextLeavesEmptyGroupsOut(t *testing.T) {
 // the folded block apart from the rows on the user.
 func TestNextFoldedGroupsAreOneToggleRowEach(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
-	page := renderNext(t, buildNext(nextFixture(now), "me", now, nil, nil))
+	page := renderNext(t, buildNext(nextFixture(now), "me", now, nil))
 	want := `<button type="button" class="fold" aria-expanded="false" aria-controls="with-claude-list"><span class="fold-name">With claude · handed over, nothing for you</span><span class="fold-count">1</span></button>`
 	if !strings.Contains(page, want) {
 		t.Errorf("page lacks %s", want)
@@ -317,42 +317,40 @@ func colourTokens(page, opener string) map[string]bool {
 	return toks
 }
 
-// A review asked of the user, in a repo claude-review runs in, offers to hand
-// it over: Start opens claude-review://owner/repo/number. Nowhere else does,
-// since the link starts a round that posts as the user.
-func TestNextStartHandsAnAskedReviewToClaudeReview(t *testing.T) {
+// An add-on offers the row's action with a primary link: it replaces the
+// verb, and its target shows on hover, so the label cannot pass off one
+// action as another. elly itself offers no Start: without the add-on, or
+// without its scheme allowed, the row keeps its own verb.
+func TestNextPrimaryLinkBecomesTheVerb(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	asked := func(url string) types.ViewPr {
 		return types.ViewPr{Url: url, Author: "a", LastUpdated: now, ReviewRequestedFromUsers: []string{"me"}}
 	}
-	running := asked("https://github.com/o/r/pull/4")
-	running.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning}}
-	stuck := asked("https://github.com/o/r/pull/5")
-	stuck.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationStuck}}
-	notAsked := asked("https://github.com/o/r/pull/6")
-	notAsked.ReviewRequestedFromUsers = nil
-	notAsked.ThreadsActionable = 1
-	prs := []types.ViewPr{
-		asked("https://github.com/o/r/pull/1"),
-		asked("https://github.com/other/r/pull/2"),
-		asked("https://github.com/O/Only/pull/3"),
-		running, stuck, notAsked,
-		asked("https://github.com/o/../pull/7"),
+	offered := asked("https://github.com/o/r/pull/1")
+	offered.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationInfo, Links: []types.AnnotationLink{
+		{Label: "Start", Url: "claude-review://o/r/1?from=elly", Primary: true},
+	}}}
+	plain := asked("https://github.com/o/r/pull/2")
+	plain.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationInfo, Links: []types.AnnotationLink{
+		{Label: "Session", Url: "claude-review://o/r/2/attach"},
+	}}}
+	elsewhere := asked("https://github.com/o/r/pull/4")
+	elsewhere.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationInfo, Links: []types.AnnotationLink{
+		{Label: "Start", Url: "claude-review://o/r/99?from=elly", Primary: true},
+	}}}
+	notAnOffer := asked("https://github.com/o/r/pull/5")
+	notAnOffer.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{
+		{Label: "Start", Url: "claude-review://o/r/5?from=elly", Primary: true},
+	}}}
+	prs := []types.ViewPr{offered, plain, asked("https://github.com/o/r/pull/3"), elsewhere, notAnOffer}
+	page := renderNext(t, buildNext(prs, "me", now, []string{"claude-review"}))
+	if want := `href="claude-review://o/r/1?from=elly" title="claude-review · claude-review://o/r/1?from=elly">Start</a>`; !strings.Contains(page, want) {
+		t.Errorf("page lacks %s", want)
 	}
-	repos := []string{"o/*", "O/only"}
-	page := renderNext(t, buildNext(prs, "me", now, []string{"claude-review"}, repos))
-	for _, want := range []string{
-		`href="claude-review://o/r/1" title="Start claude-review">Start</a>`,
-		`href="claude-review://O/Only/3" title="Start claude-review">Start</a>`,
-	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("page lacks %s", want)
-		}
+	if n := strings.Count(page, ">Start</a>"); n != 1 {
+		t.Errorf("%d Start verbs, want 1: only the offered row, not a link to another PR or one outside an info offer", n)
 	}
-	if n := strings.Count(page, ">Start</a>"); n != 2 {
-		t.Errorf("%d Start verbs, want 2: not outside the repos, not running, stuck, unasked or a dot-dot repo", n)
-	}
-	if page := renderNext(t, buildNext(prs, "me", now, nil, repos)); strings.Contains(page, ">Start</a>") {
+	if page := renderNext(t, buildNext(prs, "me", now, nil)); strings.Contains(page, ">Start</a>") {
 		t.Error("Start renders although the claude-review scheme is not allowed")
 	}
 }
@@ -392,7 +390,7 @@ func runPageScript(t *testing.T, script string, changes *Changes) {
 	var store storage.Storage = w.store
 	if changes != nil {
 		store = storage.Notifying(w.store, changes.Changed)
-		w.mux = routes(HttpServerConfig{Store: store, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Tracker: w.tracker, Changes: changes})
+		w.mux = routes(HttpServerConfig{Store: store, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Tracker: w.tracker, Changes: changes, AnnotationSchemes: []string{"claude-review"}})
 	}
 	if err := store.StorePAT("ghp_x", "me", time.Time{}); err != nil {
 		t.Fatal(err)
@@ -412,6 +410,15 @@ func runPageScript(t *testing.T, script string, changes *Changes) {
 			}
 		}
 	}
+	if changes != nil {
+		// claude-review's offer on #6, for the page's "starting…"
+		offer := types.Annotation{Source: "claude-review", State: types.AnnotationInfo, Links: []types.AnnotationLink{
+			{Label: "Start", Url: "claude-review://o/r/6?from=elly", Primary: true},
+		}}
+		if err := store.PutAnnotation("https://github.com/o/r/pull/6", offer, time.Now().Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	srv := httptest.NewUnstartedServer(nil)
 	srv.Config.Handler = guard(srv.Listener.Addr().String(), nil, w.mux)
 	srv.Start()
@@ -424,25 +431,6 @@ func runPageScript(t *testing.T, script string, changes *Changes) {
 	}
 }
 
-func TestStartUrlMatchesOwnerAndRepo(t *testing.T) {
-	for _, c := range []struct {
-		repos []string
-		url   string
-		want  string
-	}{
-		{[]string{"o/*"}, "https://github.com/o/r/pull/1", "claude-review://o/r/1"},
-		{[]string{"o/*"}, "https://github.com/other/r/pull/1", ""},
-		{[]string{"o/r"}, "https://github.com/o/r/pull/1", "claude-review://o/r/1"},
-		{[]string{"o/r"}, "https://github.com/o/x/pull/1", ""},
-		{[]string{"O/R"}, "https://github.com/o/r/pull/1", "claude-review://o/r/1"},
-		{nil, "https://github.com/o/r/pull/1", ""},
-	} {
-		if got := startUrl(types.ViewPr{Url: c.url}, c.repos); got != c.want {
-			t.Errorf("%v %s: got %q, want %q", c.repos, c.url, got, c.want)
-		}
-	}
-}
-
 // Inside a group the rows follow the points order, whatever order the PRs
 // came in.
 func TestNextOrdersRowsByPointsInsideAGroup(t *testing.T) {
@@ -450,7 +438,7 @@ func TestNextOrdersRowsByPointsInsideAGroup(t *testing.T) {
 	asked := func(n string, loc int) types.ViewPr {
 		return types.ViewPr{Url: "https://github.com/o/r/pull/" + n, Author: "a", Additions: loc, LastUpdated: now, ReviewRequestedFromUsers: []string{"me"}}
 	}
-	data := buildNext([]types.ViewPr{asked("1", 400), asked("2", 200), asked("3", 100), asked("4", 10)}, "me", now, nil, nil)
+	data := buildNext([]types.ViewPr{asked("1", 400), asked("2", 200), asked("3", 100), asked("4", 10)}, "me", now, nil)
 	var got []string
 	for _, g := range data.Groups {
 		for _, r := range g.Rows {
@@ -466,7 +454,7 @@ func TestNextOrdersRowsByPointsInsideAGroup(t *testing.T) {
 // one-click group's verb is the primary button.
 func TestNextVerbHrefAndPrimary(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
-	for _, g := range buildNext(nextFixture(now), "me", now, nil, nil).Groups {
+	for _, g := range buildNext(nextFixture(now), "me", now, nil).Groups {
 		for _, r := range g.Rows {
 			if string(r.VerbHref) != r.Url {
 				t.Errorf("%s: verb opens %q, want the PR", r.Url, r.VerbHref)
@@ -484,11 +472,11 @@ func TestNextCountsAndOldestWait(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	prs := nextFixture(now)
 	prs[5].LastUpdated = now.Add(-3 * 24 * time.Hour) // a review asked of the user
-	data := buildNext(prs, "me", now, nil, nil)
+	data := buildNext(prs, "me", now, nil)
 	if data.OnYou != 3 || data.OnOthers != 1 || data.OldestOnYou != "3 d" {
 		t.Errorf("OnYou %d OnOthers %d OldestOnYou %q, want 3, 1, \"3 d\"", data.OnYou, data.OnOthers, data.OldestOnYou)
 	}
-	data = buildNext([]types.ViewPr{prs[3]}, "me", now, nil, nil) // the user's PR, waiting on a reviewer
+	data = buildNext([]types.ViewPr{prs[3]}, "me", now, nil) // the user's PR, waiting on a reviewer
 	if data.OnYou != 0 || data.OnOthers != 1 || data.OldestOnYou != "" {
 		t.Errorf("nothing on the user: OnYou %d OnOthers %d OldestOnYou %q", data.OnYou, data.OnOthers, data.OldestOnYou)
 	}
@@ -499,7 +487,7 @@ func TestNextFirstFoldedSkipsEmptyGroups(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	waiting := nextFixture(now)[3]
 	var first []string
-	for _, g := range buildNext([]types.ViewPr{waiting}, "me", now, nil, nil).Groups {
+	for _, g := range buildNext([]types.ViewPr{waiting}, "me", now, nil).Groups {
 		if g.FirstFolded {
 			first = append(first, g.Slug)
 		}
@@ -545,7 +533,7 @@ func TestNextLinksThePrOnlyWhenItIsAGithubPrUrl(t *testing.T) {
 		{"https://github.com/o/r/pull/1/../../x", false},
 	} {
 		pr := types.ViewPr{Url: c.url, Author: "a", LastUpdated: now}
-		data := buildNext([]types.ViewPr{pr}, "me", now, nil, nil)
+		data := buildNext([]types.ViewPr{pr}, "me", now, nil)
 		var row nextRow
 		for _, g := range data.Groups {
 			for _, r := range g.Rows {

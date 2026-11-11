@@ -16,10 +16,19 @@ type Changes struct {
 	boot int64 // start time, so a restarted elly never repeats a version
 	n    uint64
 	subs map[chan struct{}]struct{}
+	// keepalive is how often an idle stream sends a comment line.
+	keepalive time.Duration
 }
 
 func NewChanges() *Changes {
-	return &Changes{boot: time.Now().UnixNano(), subs: map[chan struct{}]struct{}{}}
+	return &Changes{boot: time.Now().UnixNano(), subs: map[chan struct{}]struct{}{}, keepalive: eventsKeepalive}
+}
+
+// subscribers counts the open streams.
+func (c *Changes) subscribers() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.subs)
 }
 
 // Version names the current state; it differs after every change and
@@ -71,7 +80,7 @@ func (c *Changes) serveEvents(w http.ResponseWriter, r *http.Request) {
 	ch, cancel := c.Subscribe()
 	defer cancel()
 	send := func(line string) bool {
-		_ = rc.SetWriteDeadline(time.Now().Add(2 * eventsKeepalive))
+		_ = rc.SetWriteDeadline(time.Now().Add(2 * c.keepalive))
 		if _, err := fmt.Fprint(w, line); err != nil {
 			return false
 		}
@@ -80,7 +89,7 @@ func (c *Changes) serveEvents(w http.ResponseWriter, r *http.Request) {
 	if !send("data: " + c.Version() + "\n\n") {
 		return
 	}
-	keepalive := time.NewTicker(eventsKeepalive)
+	keepalive := time.NewTicker(c.keepalive)
 	defer keepalive.Stop()
 	for {
 		select {

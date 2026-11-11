@@ -47,7 +47,7 @@ func fuzzWorld(t *testing.T, githubURL string) (http.Handler, *storage.DbStorage
 	tracker := backoff.New(logger, time.Hour)
 	t.Cleanup(tracker.Stop)
 	cfg := HttpServerConfig{Store: store, Logger: logger, Tracker: tracker, GithubURL: githubURL,
-		AnnotationToken: fuzzAnnotationToken, AnnotationSchemes: []string{"claude-review"}, ReviewRepos: []string{"o/*"}}
+		AnnotationToken: fuzzAnnotationToken, AnnotationSchemes: []string{"claude-review"}}
 	return guard("localhost:9876", nil, routes(cfg)), store
 }
 

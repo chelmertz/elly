@@ -115,6 +115,10 @@ type Annotation struct {
 type AnnotationLink struct {
 	Label string `json:"label"`
 	Url   string `json:"url"`
+	// Primary makes the link the row's action button in place of its verb:
+	// how an add-on offers an action (claude-review's Start). One per
+	// annotation.
+	Primary bool `json:"primary,omitempty"`
 }
 
 const (
@@ -244,6 +248,10 @@ func dotSegment(s string) bool { return s == "." || s == ".." }
 // it), or a claude-review:// link for its owner/repo/number with at most a
 // verb after it. A row's one-click verb follows only such a link; any other
 // annotation link stays in the panel, under its label.
+// fromTag is a claude-review start link's one allowed query, the place it
+// was clicked; claude-review's EntrySource reads the same shape.
+var fromTag = regexp.MustCompile(`^from=[a-z]{1,16}$`)
+
 func LinkNamesPr(prUrl, link string) bool {
 	owner, repo, number, ok := PrParts(prUrl)
 	if !ok {
@@ -263,8 +271,11 @@ func LinkNamesPr(prUrl, link string) bool {
 			strings.EqualFold(segments[0], owner) && strings.EqualFold(segments[1], repo) &&
 			segments[2] == "pull" && segments[3] == number
 	case "claude-review":
+		// The start link may say where it was clicked (?from=elly); a verb
+		// link carries no query.
+		query := u.RawQuery == "" || (len(segments) == 2 && fromTag.MatchString(u.RawQuery))
 		return strings.EqualFold(u.Host, owner) && (len(segments) == 2 || len(segments) == 3) &&
-			strings.EqualFold(segments[0], repo) && segments[1] == number && u.RawQuery == "" && u.Fragment == ""
+			strings.EqualFold(segments[0], repo) && segments[1] == number && query && u.Fragment == ""
 	}
 	return false
 }

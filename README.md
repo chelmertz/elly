@@ -48,12 +48,12 @@ your previous visit, remembered in the browser only. The page follows the
 system's light or dark theme. `/next`, where it lived beside the old page,
 redirects to `/`.
 
-With `-review-repos=owner/*,owner/repo` and `claude-review` in
-`-annotation-schemes`, a review asked of you in one of those repos offers
-Start instead of Review: a `claude-review://owner/repo/number` link that hands
-the PR to claude-review, which then shows it under "With claude". Owner and
-repo come from the PR URL and are refused when they are `.` or `..`; the
-match is claude-review's own, so pass the same list as its `review_repos`.
+elly offers no actions of its own beyond the PR's page. An add-on offers one
+with a primary link on an `info` annotation (see Annotations): claude-review
+puts Start on a review asked of you in its `review_repos`. Without the
+add-on, or with its scheme left out of `-annotation-schemes`, rows keep their
+own verb. A clicked `claude-review://` verb reads "starting…" at once, and
+"no answer" when nothing replaced it within 20 s.
 
 `GET /api/v0/prs?turn=you` returns exactly the PRs in the groups on you, in
 page order, so a status bar can show the same count as the page.
@@ -103,7 +103,7 @@ running stops hiding PRs.
 
 ```
 PUT    /api/v0/prs/{base64 PR url}/annotations/{source}
-       {"state":"needs_you","note":"…","links":[{"label":"…","url":"…"}],"expiresAt":"<RFC 3339>"}
+       {"state":"needs_you","note":"…","links":[{"label":"…","url":"…","primary":false}],"expiresAt":"<RFC 3339>"}
 DELETE /api/v0/prs/{base64 PR url}/annotations/{source}
 ```
 
@@ -115,8 +115,11 @@ readable only by the user and new on every start. Links must be https, or use
 a scheme named in `-annotation-schemes`; elly shows a custom-scheme link's
 last path segment beside its label. A row's one action follows an annotation
 link only when the link names that PR: its GitHub page (or a sub-path or
-fragment of it), or a `claude-review://owner/repo/number` link. Every other
-link stays in the row's details. A PR whose URL is not a GitHub PR URL gets no
+fragment of it), or a `claude-review://owner/repo/number` link (which may end
+in `?from=<word>`, where it was clicked). One link per annotation may be
+`primary`: on an `info` annotation, and naming the PR, it replaces the row's
+verb, with its source and target shown on hover; anywhere else it shows
+nowhere. Every other link stays in the row's details. A PR whose URL is not a GitHub PR URL gets no
 link at all. `GET /api/v0/prs` returns each PR's live annotations.
 
 ## What elly lets in

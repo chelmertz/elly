@@ -67,8 +67,9 @@ func validateAnnotation(source string, body io.Reader, schemes []string, now tim
 		State string `json:"state"`
 		Note  string `json:"note"`
 		Links []struct {
-			Label string `json:"label"`
-			Url   string `json:"url"`
+			Label   string `json:"label"`
+			Url     string `json:"url"`
+			Primary bool   `json:"primary"`
 		} `json:"links"`
 		ExpiresAt string `json:"expiresAt"`
 	}
@@ -91,14 +92,20 @@ func validateAnnotation(source string, body io.Reader, schemes []string, now tim
 		return types.Annotation{}, time.Time{}, fmt.Errorf("at most %d links", maxAnnotationLinks)
 	}
 	a := types.Annotation{Source: source, State: req.State, Note: req.Note, ExpiresAt: req.ExpiresAt, Links: []types.AnnotationLink{}}
+	primaries := 0
 	for _, l := range req.Links {
+		if l.Primary {
+			if primaries++; primaries > 1 {
+				return types.Annotation{}, time.Time{}, errors.New("at most one primary link")
+			}
+		}
 		if err := plainText(l.Label, maxLinkLabel); err != nil {
 			return types.Annotation{}, time.Time{}, fmt.Errorf("label: %w", err)
 		}
 		if !allowedLink(l.Url, schemes) {
 			return types.Annotation{}, time.Time{}, fmt.Errorf("link %q: https, or a scheme named in -annotation-schemes, at most %d characters", l.Url, maxLinkUrl)
 		}
-		a.Links = append(a.Links, types.AnnotationLink{Label: l.Label, Url: l.Url})
+		a.Links = append(a.Links, types.AnnotationLink{Label: l.Label, Url: l.Url, Primary: l.Primary})
 	}
 
 	expires, err := time.Parse(time.RFC3339, req.ExpiresAt)

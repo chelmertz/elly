@@ -154,10 +154,7 @@ type nextLink struct {
 
 // buildNext groups and orders the PRs for the page. Inside a group the
 // order is the points order.
-//
-// reviewRepos ("owner/*" or "owner/repo") are where claude-review runs
-// rounds; a review asked of the user there gets Start instead of Review.
-func buildNext(prs []types.ViewPr, username string, now time.Time, schemes, reviewRepos []string) NextData {
+func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []string) NextData {
 	href := annotationHref(schemes)
 	ranks := points.Rank(prs, username, now)
 	sorted := slices.Clone(prs)
@@ -195,9 +192,6 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes, revi
 			verbHref = href(turn.VerbUrl)
 		}
 		verbTitle := ""
-		if u := startUrl(pr, reviewRepos); u != "" && turn.Verb == "Review" && allowedLink(u, schemes) {
-			turn.Verb, verbHref, verbTitle = "Start", href(u), "Start claude-review"
-		}
 		row := nextRow{
 			Anchor:      types.Anchor(pr.Url),
 			Number:      types.Number(pr.Url),
@@ -232,6 +226,16 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes, revi
 				row.Note = a.Note
 			}
 			for _, l := range a.Links {
+				// An add-on's offer (a primary link on an info annotation,
+				// naming this PR) is the row's button, not a panel link; its
+				// target shows on hover, so the label cannot pass off one
+				// action as another. Anything else primary shows nowhere.
+				if l.Primary {
+					if a.State == types.AnnotationInfo && types.LinkNamesPr(pr.Url, l.Url) && allowedLink(l.Url, schemes) {
+						row.Verb, row.VerbHref, row.VerbTitle = l.Label, href(l.Url), a.Source+" · "+l.Url
+					}
+					continue
+				}
 				row.Links = append(row.Links, nextLink{Label: l.Label, Href: href(l.Url), Verb: annotationVerb(l.Url)})
 			}
 		}
@@ -514,21 +518,4 @@ func stateFacts(pr types.ViewPr, username string) []string {
 		out = append(out, note)
 	}
 	return out
-}
-
-// startUrl is the claude-review link that starts a round on pr, or "" when
-// pr is outside reviewRepos. The match is claude-review's repoAllowed:
-// "owner/*" or "owner/repo", case-insensitive.
-func startUrl(pr types.ViewPr, reviewRepos []string) string {
-	owner, repo, number, ok := types.PrParts(pr.Url)
-	if !ok {
-		return ""
-	}
-	for _, a := range reviewRepos {
-		o, r, _ := strings.Cut(strings.ToLower(a), "/")
-		if o == strings.ToLower(owner) && (r == "*" || r == strings.ToLower(repo)) {
-			return "claude-review://" + owner + "/" + repo + "/" + number
-		}
-	}
-	return ""
 }

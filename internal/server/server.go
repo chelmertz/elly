@@ -97,9 +97,6 @@ type HttpServerConfig struct {
 	AnnotationToken string
 	// AnnotationSchemes are the link schemes allowed besides https.
 	AnnotationSchemes []string
-	// ReviewRepos are where claude-review runs rounds, "owner/*" or
-	// "owner/repo" (review_repos in its config); see buildNext.
-	ReviewRepos []string
 	// AllowedHosts are Host values elly answers besides loopback names on
 	// the listen port (-allowed-hosts); see guard.
 	AllowedHosts []string
@@ -285,7 +282,7 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		storedPrs := webConfig.Store.Prs()
 		pat, found, _ := webConfig.Store.GetPAT()
-		data := buildNext(storedPrs.Prs, getCurrentUsername(webConfig.Store), time.Now(), webConfig.AnnotationSchemes, webConfig.ReviewRepos)
+		data := buildNext(storedPrs.Prs, getCurrentUsername(webConfig.Store), time.Now(), webConfig.AnnotationSchemes)
 		data.LastRefreshed = storedPrs.LastFetched.Format(time.RFC3339)
 		data.RefreshIntervalMinutes = webConfig.TimeoutMinutes
 		data.Degradations = pageDegradations(webConfig.Store.Degradations())

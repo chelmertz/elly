@@ -200,6 +200,7 @@ nav.side { flex: 1 1 160px; max-width: 200px; padding-top: var(--s2); }
 }
 .verb.primary { background: var(--amber); color: var(--on-amber); }
 .verb.primary:hover { color: var(--on-amber); filter: brightness(1.1); }
+.verb.starting { opacity: .6; pointer-events: none; }
 
 .pr:target .row { animation: target 6s ease-out forwards; }
 @keyframes target {
@@ -530,6 +531,32 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
         });
     };
 
+    // A clicked claude-review link answers at once: the row says
+    // "starting…" until the swap that claude-review's "starting" row brings
+    // changes its verb, or says so after 20 s without an answer.
+    const pending = new Map(); // row id -> {href, at}
+    const startWait = 20000;
+    const showPending = () => {
+        pending.forEach((p, id) => {
+            const verb = document.querySelector("#" + CSS.escape(id) + " a.verb");
+            if (!verb || verb.getAttribute("href") !== p.href) { pending.delete(id); return; }
+            const late = Date.now() - p.at > startWait;
+            verb.classList.toggle("starting", !late);
+            verb.textContent = late ? "no answer" : "starting…";
+            verb.title = late ? "claude-review did not answer within 20 s; click to try again" : verb.title;
+            if (late) pending.delete(id);
+        });
+    };
+    document.addEventListener("click", (e) => {
+        const link = e.target instanceof Element ? e.target.closest("a.verb") : null;
+        if (!link || !(link.getAttribute("href") || "").startsWith("claude-review:")) return;
+        const pr = link.closest(".pr");
+        if (!pr) return;
+        pending.set(pr.id, {href: link.getAttribute("href"), at: Date.now()});
+        showPending();
+        setTimeout(showPending, startWait + 100);
+    });
+
     document.addEventListener("click", (e) => {
         const btn = e.target instanceof Element ? e.target.closest("button") : null;
         if (!btn) return;
@@ -664,6 +691,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
             markNew();
             filter();
             tick();
+            showPending();
         }).catch(() => { /* the next change or the fallback tries again */ });
     };
 

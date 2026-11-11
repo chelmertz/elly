@@ -58,6 +58,8 @@ func TestValidateAnnotation(t *testing.T) {
 		{"expires in 25 hours", "t", body(testNow.Add(25*time.Hour).Format(time.RFC3339), ""), schemes, false},
 		{"expiry with an offset", "t", body(testNow.Add(time.Hour).In(time.FixedZone("CET", 3600)).Format(time.RFC3339), ""), schemes, true},
 		{"expiry not RFC 3339", "t", body("tomorrow", ""), schemes, false},
+		{"one primary link", "t", `{"state":"info","links":[{"label":"Start","url":"claude-review://o/r/1?from=elly","primary":true},{"label":"x","url":"https://a.example"}],"expiresAt":"` + in15 + `"}`, schemes, true},
+		{"two primary links", "t", `{"state":"info","links":[{"label":"Start","url":"claude-review://o/r/1","primary":true},{"label":"x","url":"https://a.example","primary":true}],"expiresAt":"` + in15 + `"}`, schemes, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
