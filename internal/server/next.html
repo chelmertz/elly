@@ -278,6 +278,14 @@ dialog.tokens input, dialog.tokens textarea {
 }
 dialog.tokens textarea { font-family: monospace; word-break: break-all; resize: vertical; }
 dialog.tokens .actions { display: flex; gap: var(--s3); }
+/* A save asks GitHub about the token, which takes seconds: say so. */
+dialog.tokens button[aria-busy="true"]::before {
+    content: ""; display: inline-block; width: .8em; height: .8em; margin-right: .5em; vertical-align: -.1em;
+    border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+    animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { dialog.tokens button[aria-busy="true"]::before { animation: none; } }
 dialog.tokens ul { display: grid; gap: var(--s3); margin: 0; padding: 0; list-style: none; }
 dialog.tokens li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--s3); }
 dialog.tokens li > span:first-child { flex: 1; }
@@ -611,18 +619,26 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
     });
 
     // Token changes reload: the dialog is outside what a swap replaces.
+    // busy(btn, text) marks a save in flight on its button; busy(btn) ends it.
+    const busy = (btn, text) => {
+        if (!btn.dataset.idle) btn.dataset.idle = btn.textContent;
+        btn.disabled = Boolean(text);
+        btn.setAttribute("aria-busy", text ? "true" : "false");
+        btn.textContent = text || btn.dataset.idle;
+    };
+    const checking = "Checking with GitHub…", saved = "Saved, reloading…";
     const patForm = document.querySelector("form.pat-form");
     const patError = patForm.querySelector(".form-error");
     const saveBtn = patForm.querySelector(".save-pat");
-    const showError = (text) => { patError.textContent = text; patError.hidden = false; saveBtn.disabled = false; };
+    const showError = (text) => { patError.textContent = text; patError.hidden = false; busy(saveBtn); };
     patForm.addEventListener("submit", (e) => {
         e.preventDefault();
         const token = patForm.querySelector("#pat-input").value.trim();
         if (!token) { showError("Paste a token first"); return; }
-        saveBtn.disabled = true;
+        busy(saveBtn, checking);
         patError.hidden = true;
         fetch("/api/v0/config/pat", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({token})})
-            .then((r) => r.ok ? reload() : r.json().then((d) => showError(d.error || "Could not save the token")))
+            .then((r) => r.ok ? (busy(saveBtn, saved), reload()) : r.json().then((d) => showError(d.error || "Could not save the token")))
             .catch((err) => showError("Network error: " + err.message));
     });
     const replaceBtn = document.querySelector(".tokens .replace-pat");
@@ -641,16 +657,16 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
     if (ownerForm) {
         const ownerError = ownerForm.querySelector(".form-error");
         const saveOwner = ownerForm.querySelector(".save-owner");
-        const ownerFail = (text) => { ownerError.textContent = text; ownerError.hidden = false; saveOwner.disabled = false; };
+        const ownerFail = (text) => { ownerError.textContent = text; ownerError.hidden = false; busy(saveOwner); };
         ownerForm.addEventListener("submit", (e) => {
             e.preventDefault();
             const owner = ownerForm.querySelector("#owner-input").value.trim();
             const token = ownerForm.querySelector("#owner-token-input").value.trim();
             if (!owner || !token) { ownerFail("Name the org and paste its token"); return; }
-            saveOwner.disabled = true;
+            busy(saveOwner, checking);
             ownerError.hidden = true;
             fetch("/api/v0/config/pat/" + encodeURIComponent(owner), {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({token})})
-                .then((r) => r.ok ? reload() : r.json().then((d) => ownerFail(d.error || "Could not save the token")))
+                .then((r) => r.ok ? (busy(saveOwner, saved), reload()) : r.json().then((d) => ownerFail(d.error || "Could not save the token")))
                 .catch((err) => ownerFail("Network error: " + err.message));
         });
         document.querySelectorAll(".tokens .remove-owner").forEach((b) => b.addEventListener("click", () => {

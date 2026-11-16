@@ -65,6 +65,18 @@ await press("r");
 await expect("keys typed into the token field stay text", "document.getElementById('pat-input').value", "r");
 await expect("and do not poll", "window.__fetched.length", before);
 
+// A save asks GitHub about the token and takes seconds: the button says so
+// while it runs (the stubbed fetch never answers), and comes back on an error.
+await value("document.getElementById('pat-input').value = 'github_pat_x'; document.querySelector('form.pat-form').requestSubmit()");
+await expect("a token save in flight says so", "document.querySelector('.save-pat').textContent", "Checking with GitHub…");
+await expect("and cannot be sent twice", "document.querySelector('.save-pat').disabled", true);
+await expect("and is marked busy", "document.querySelector('.save-pat').getAttribute('aria-busy')", "true");
+await value("window.fetch = () => Promise.reject(new Error('down')); document.querySelector('.save-pat').disabled = false; document.querySelector('form.pat-form').requestSubmit()");
+await new Promise((r) => setTimeout(r, 100));
+await expect("a failed save gives Save back", "document.querySelector('.save-pat').textContent", "Save");
+await expect("enabled", "document.querySelector('.save-pat').disabled", false);
+await expect("with the error shown", "document.querySelector('form.pat-form .form-error').textContent", "Network error: down");
+
 await expect("the CSP blocked nothing", "window.__csp", []);
 
 close();
