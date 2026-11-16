@@ -510,7 +510,7 @@ func TestStateFacts(t *testing.T) {
 			ChecksState: "SUCCESS", MergeStateStatus: "BEHIND", ThreadsActionable: 2, ThreadsWaiting: 1, IsDraft: true, LastPrCommenter: "d",
 			Annotations: []types.Annotation{{Source: "t", State: types.AnnotationNeedsYou, Note: "look"}, {Source: "u", State: types.AnnotationHandled}}},
 			"review requested: me|reviewed before the latest change: b|reviewed by c|CI green|behind the base branch|" +
-				"2 threads waiting on you|1 threads waiting on others|draft|last comment by d|t: needs you, look|u: handled"},
+				"2 threads waiting on you|1 threads waiting on others|draft|last comment by d|t: needs you|u: handled"},
 		{"conflict wins over behind", types.ViewPr{Author: "me", ChecksState: "PENDING", Mergeable: "CONFLICTING", MergeStateStatus: "BEHIND"},
 			"no reviewer requested|CI running|conflicts with the base branch"},
 	} {

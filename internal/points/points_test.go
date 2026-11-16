@@ -331,8 +331,9 @@ func TestNeedsYouCountsEvenWhenScoredBelowZero(t *testing.T) {
 	if p.Total <= 0 {
 		t.Errorf("needs_you on an approved PR scores %d, want it counted", p.Total)
 	}
-	if !strings.Contains(strings.Join(p.Reasons, "|"), "note for needs_you") {
-		t.Errorf("the note is not among the reasons: %v", p.Reasons)
+	// The note shows once, under the row; the reason says who needs the user.
+	if r := strings.Join(p.Reasons, "|"); !strings.Contains(r, "tool-needs_you: needs you") || strings.Contains(r, "note for") {
+		t.Errorf("reasons %v", p.Reasons)
 	}
 }
 
@@ -367,8 +368,8 @@ func TestStuckCountsLikeNeedsYou(t *testing.T) {
 	if p.Total < needsYouPoints {
 		t.Errorf("stuck on an approved PR scores %d, want at least %d", p.Total, needsYouPoints)
 	}
-	if !strings.Contains(strings.Join(p.Reasons, "|"), "note for stuck") {
-		t.Errorf("the note is not among the reasons: %v", p.Reasons)
+	if r := strings.Join(p.Reasons, "|"); !strings.Contains(r, "tool-stuck: stuck") || strings.Contains(r, "note for") {
+		t.Errorf("reasons %v", p.Reasons)
 	}
 }
 

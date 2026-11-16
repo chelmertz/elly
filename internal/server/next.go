@@ -523,11 +523,8 @@ func stateFacts(pr types.ViewPr, username string) []string {
 		out = append(out, "last comment by "+pr.LastPrCommenter)
 	}
 	for _, a := range pr.Annotations {
-		note := a.Source + ": " + strings.ReplaceAll(a.State, "_", " ")
-		if a.Note != "" {
-			note += ", " + a.Note
-		}
-		out = append(out, note)
+		// The note shows once, under the row.
+		out = append(out, a.Source+": "+strings.ReplaceAll(a.State, "_", " "))
 	}
 	return out
 }

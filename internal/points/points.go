@@ -204,18 +204,15 @@ func HandedOver(pr types.ViewPr, source string) bool {
 // high as an own approved PR, since both are one action away from done.
 const needsYouPoints = 100
 
-// annotationNotes returns "source: note" for each annotation in that state.
+// annotationNotes returns "source: state" for each annotation in that state.
 func annotationNotes(pr types.ViewPr, state string) []string {
 	var notes []string
 	for _, a := range pr.Annotations {
 		if a.State != state {
 			continue
 		}
-		note := a.Source + ": " + a.Note
-		if a.Note == "" {
-			note = a.Source + ": " + strings.ReplaceAll(state, "_", " ")
-		}
-		notes = append(notes, note)
+		// The note itself shows once, under the row; here only who and what.
+		notes = append(notes, a.Source+": "+strings.ReplaceAll(state, "_", " "))
 	}
 	return notes
 }

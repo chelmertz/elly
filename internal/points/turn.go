@@ -99,7 +99,7 @@ func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
 
 	switch {
 	case pr.Buried:
-		return Turn{Group: GroupBuried, Verb: "Open", Reason: "you buried it"}
+		return Turn{Group: GroupBuried, Verb: "GitHub", Reason: "you buried it"}
 	case approveUrl != "" && !pr.ChecksRed():
 		return Turn{Group: GroupOneClick, Verb: "Approve", Reason: "a tool says it is ready to approve", VerbUrl: approveUrl}
 	case needsYou != nil:
@@ -123,17 +123,17 @@ func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
 		}
 		return t
 	case !asked && pr.LastUpdated.Before(now.Add(-icebox)):
-		return Turn{Group: GroupIcebox, Verb: "Open", Reason: "nobody has touched it for two weeks"}
+		return Turn{Group: GroupIcebox, Verb: "GitHub", Reason: "nobody has touched it for two weeks"}
 	case pr.IsDraft:
-		return Turn{Group: GroupNobody, Verb: "Open", Reason: "a draft"}
+		return Turn{Group: GroupNobody, Verb: "GitHub", Reason: "a draft"}
 	case own && pr.HasConflict():
 		return Turn{Group: GroupUnblock, Verb: "Rebase", Reason: "yours, and it conflicts with the base branch"}
 	case own && pr.ChecksRed():
 		return Turn{Group: GroupUnblock, Verb: "Fix CI", Reason: "yours, and CI is red"}
 	case pr.ChecksRed():
-		return Turn{Group: GroupOnOthers, Verb: "Open", Reason: "CI is red, the author's to fix"}
+		return Turn{Group: GroupOnOthers, Verb: "GitHub", Reason: "CI is red, the author's to fix"}
 	case withClaude:
-		t := Turn{Group: GroupWithClaude, Verb: "Open", Reason: "handed over to " + ClaudeReviewSource + ", nothing for you"}
+		t := Turn{Group: GroupWithClaude, Verb: "GitHub", Reason: "handed over to " + ClaudeReviewSource + ", nothing for you"}
 		if u := attachUrl(pr); u != "" {
 			t.Verb, t.VerbUrl = "Attach", u
 		}
@@ -143,7 +143,7 @@ func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
 	case own && pr.ReviewStatus == "CHANGES_REQUESTED":
 		return Turn{Group: GroupUnblock, Verb: "Address", Reason: "yours, and changes are requested"}
 	case pr.ChecksState == "PENDING" || pr.ChecksState == "EXPECTED":
-		return Turn{Group: GroupNobody, Verb: "Open", Reason: "CI is still running"}
+		return Turn{Group: GroupNobody, Verb: "GitHub", Reason: "CI is still running"}
 	case own && pr.ReviewStatus == "APPROVED":
 		return Turn{Group: GroupOneClick, Verb: "Merge", Reason: "yours and approved"}
 	case own && len(pr.RereviewFrom) > 0:
@@ -151,15 +151,15 @@ func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
 	case own && len(pr.ReviewRequestedFromUsers) == 0 && len(pr.ReviewedBy) == 0:
 		return Turn{Group: GroupUnblock, Verb: "Add reviewer", Reason: "yours, and nobody is asked to review it"}
 	case own:
-		return Turn{Group: GroupOnOthers, Verb: "Open", Reason: "yours, waiting on reviewers"}
+		return Turn{Group: GroupOnOthers, Verb: "GitHub", Reason: "yours, waiting on reviewers"}
 	case asked && !handled:
 		return Turn{Group: GroupWaiting, Verb: "Review", Reason: "a review is asked of you"}
 	case pr.ThreadsWaiting > 0:
-		return Turn{Group: GroupOnOthers, Verb: "Open", Reason: "the author owes replies to your threads"}
+		return Turn{Group: GroupOnOthers, Verb: "GitHub", Reason: "the author owes replies to your threads"}
 	case handled:
-		return Turn{Group: GroupOnOthers, Verb: "Open", Reason: "a tool took over your part"}
+		return Turn{Group: GroupOnOthers, Verb: "GitHub", Reason: "a tool took over your part"}
 	default:
-		return Turn{Group: GroupNobody, Verb: "Open", Reason: "nobody asked you for anything"}
+		return Turn{Group: GroupNobody, Verb: "GitHub", Reason: "nobody asked you for anything"}
 	}
 }
 
