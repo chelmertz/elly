@@ -549,3 +549,23 @@ func TestNextLinksThePrOnlyWhenItIsAGithubPrUrl(t *testing.T) {
 		}
 	}
 }
+
+// A needs_you row's button is its first link naming the PR, under that
+// link's own label, and the panel does not repeat it: a row offering Check
+// and Open session that did the same thing read as two choices.
+func TestNextNeedsYouButtonIsItsFirstLink(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now,
+		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Note: "the round has a question for you: rows?",
+			Links: []types.AnnotationLink{{Label: "Answer", Url: "claude-review://o/r/1/attach"}, {Label: "Fork with prod data", Url: "claude-review://o/r/1/fork"}, {Label: "Ignore", Url: "claude-review://o/r/1/ignore"}}}}}
+	page := renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"}))
+	if !strings.Contains(page, `href="claude-review://o/r/1/attach" title="claude-review · claude-review://o/r/1/attach">Answer</a>`) {
+		t.Error("the button is not the Answer link, with its target on hover")
+	}
+	if strings.Count(page, "claude-review://o/r/1/attach") != 2 {
+		t.Error("the panel repeats the button's link")
+	}
+	if !strings.Contains(page, `>Fork with prod data</a>`) || !strings.Contains(page, `>Ignore</a>`) {
+		t.Error("the other links left the panel")
+	}
+}

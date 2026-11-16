@@ -192,6 +192,18 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 			verbHref = href(turn.VerbUrl)
 		}
 		verbTitle := ""
+		if turn.Group == points.GroupWaiting && turn.VerbUrl != "" {
+			if allowedLink(turn.VerbUrl, schemes) {
+				// A tool's link is the button under its own label: its
+				// target shows on hover, as for an add-on's offer, and the
+				// panel does not repeat it.
+				verbTitle = annotationSourceOf(pr, turn.VerbUrl) + " · " + turn.VerbUrl
+			} else {
+				// A scheme no longer allowed: no label of the tool's, and
+				// the PR page, as for any other row.
+				turn.Verb, turn.VerbUrl, verbHref = "Check", "", prHref
+			}
+		}
 		row := nextRow{
 			Anchor:      types.Anchor(pr.Url),
 			Number:      types.Number(pr.Url),
@@ -234,6 +246,9 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 					if a.State == types.AnnotationInfo && types.LinkNamesPr(pr.Url, l.Url) && allowedLink(l.Url, schemes) {
 						row.Verb, row.VerbHref, row.VerbTitle = l.Label, href(l.Url), a.Source+" · "+l.Url
 					}
+					continue
+				}
+				if verbTitle != "" && l.Url == turn.VerbUrl {
 					continue
 				}
 				row.Links = append(row.Links, nextLink{Label: l.Label, Href: href(l.Url), Verb: annotationVerb(l.Url)})
@@ -518,4 +533,16 @@ func stateFacts(pr types.ViewPr, username string) []string {
 		out = append(out, note)
 	}
 	return out
+}
+
+// annotationSourceOf is the source of pr's first annotation holding link.
+func annotationSourceOf(pr types.ViewPr, link string) string {
+	for _, a := range pr.Annotations {
+		for _, l := range a.Links {
+			if l.Url == link {
+				return a.Source
+			}
+		}
+	}
+	return ""
 }

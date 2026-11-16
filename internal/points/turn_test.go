@@ -40,6 +40,7 @@ func TestTurnOf(t *testing.T) {
 		{"a team request is not a request of me", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{"@team"}, LastUpdated: fresh}, GroupNobody, "Open"},
 		{"someone else's red PR is on them", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, ChecksState: "FAILURE", LastUpdated: fresh}, GroupOnOthers, "Open"},
 		{"they owe replies to my threads", types.ViewPr{Author: "a", ThreadsWaiting: 3, LastUpdated: fresh}, GroupOnOthers, "Open"},
+		{"needs_you's first link labels the button", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{{Label: "Answer", Url: "claude-review://o/r/1/attach"}, {Label: "Fork with prod data", Url: "claude-review://o/r/1/fork"}}}}, LastUpdated: fresh}, GroupWaiting, "Answer"},
 		{"needs_you annotation waits for me", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou}}, LastUpdated: fresh}, GroupWaiting, "Check"},
 		{"approve link is one click", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupOneClick, "Approve"},
 		{"approve link on a red PR is not one click", types.ViewPr{Author: "a", ChecksState: "FAILURE", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupWaiting, "Check"},
@@ -183,5 +184,17 @@ func TestTurnVerbFollowsOnlyALinkToThisPr(t *testing.T) {
 		if !c.follows && got.Group == GroupOneClick {
 			t.Errorf("%s: a link to somewhere else made the PR one click from done", c.name)
 		}
+	}
+}
+
+// On a red PR an approve link is not the row's action: the button must not
+// approve under another label.
+func TestTurnOfNeverPointsCheckAtApprove(t *testing.T) {
+	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", ChecksState: "FAILURE", LastUpdated: time.Now(),
+		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{
+			{Label: "Approve", Url: "claude-review://o/r/1/approve"}, {Label: "Answer", Url: "claude-review://o/r/1/attach"}}}}}
+	turn := TurnOf(pr, "me", time.Now())
+	if turn.Verb != "Answer" || turn.VerbUrl != "claude-review://o/r/1/attach" {
+		t.Errorf("turn %+v", turn)
 	}
 }
