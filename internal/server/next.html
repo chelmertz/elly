@@ -147,10 +147,9 @@ nav.side { flex: 1 1 160px; max-width: 200px; padding-top: var(--s2); }
 
 .pr { border-radius: var(--s2); }
 /* An open row is one surface: the row, its note line and the panel. */
-.pr.open { background: var(--raised); }
+.pr:hover, .pr.open { background: var(--raised); }
 .row { display: flex; align-items: center; gap: var(--gap); padding: 0 var(--pad); border-radius: var(--s2); }
-.row:hover, .pr.open .row { background: var(--raised); }
-.pr.open .row { border-radius: var(--s2) var(--s2) 0 0; }
+
 .toggle {
     flex: 1 1 auto;
     min-width: 0;
