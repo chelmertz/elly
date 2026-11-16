@@ -146,6 +146,8 @@ nav.side { flex: 1 1 160px; max-width: 200px; padding-top: var(--s2); }
 .group ol { list-style: none; margin: 0; padding: 0; }
 
 .pr { border-radius: var(--s2); }
+/* An open row is one surface: the row, its note line and the panel. */
+.pr.open { background: var(--raised); }
 .row { display: flex; align-items: center; gap: var(--gap); padding: 0 var(--pad); border-radius: var(--s2); }
 .row:hover, .pr.open .row { background: var(--raised); }
 .pr.open .row { border-radius: var(--s2) var(--s2) 0 0; }
@@ -210,8 +212,9 @@ nav.side { flex: 1 1 160px; max-width: 200px; padding-top: var(--s2); }
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--s5);
-    padding: var(--s2) var(--pad) var(--s4) var(--title-x);
-    background: var(--raised);
+    margin: var(--s2) var(--pad) 0 var(--title-x);
+    padding: var(--s3) 0 var(--s4);
+    border-top: 1px solid var(--chip);
     border-radius: 0 0 var(--s2) var(--s2);
     font-size: 13px;
     line-height: 1.5;
