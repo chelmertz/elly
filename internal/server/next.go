@@ -121,8 +121,6 @@ type nextRow struct {
 	VerbTitle   string
 	VerbPrimary bool
 	Tag         *nextTag
-	// Stuck marks the row's edge: nothing but the user moves the PR.
-	Stuck bool
 	// Ask is the note of an annotation that needs the user, shown under the
 	// row; Note is claude-review's note on a PR handed over to it.
 	Ask     string
@@ -230,7 +228,6 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 		for _, a := range pr.Annotations {
 			switch {
 			case a.State == types.AnnotationNeedsYou || a.State == types.AnnotationStuck:
-				row.Stuck = row.Stuck || a.State == types.AnnotationStuck
 				if row.Ask == "" {
 					row.Ask = a.Note
 				}

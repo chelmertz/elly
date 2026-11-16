@@ -123,9 +123,11 @@ func TestNextVerbFollowsAnAllowedAnnotationLink(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now,
 		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou,
-			Links: []types.AnnotationLink{{Label: "Approve", Url: "claude-review://o/r/1/approve"}}}}}
+			Links: []types.AnnotationLink{{Label: "Approve", Url: "claude-review://o/r/1/approve?at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&token=000000000000000000000000000000000000000000000000"}}}}}
 	page := renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"}))
-	if !strings.Contains(page, `href="claude-review://o/r/1/approve">Approve</a>`) {
+	// The link as claude-review writes it, with its sha and token: elly
+	// refused the query until 2026-11-16, and Approve was never the button.
+	if !strings.Contains(page, `href="claude-review://o/r/1/approve?at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&amp;token=000000000000000000000000000000000000000000000000">Approve</a>`) {
 		t.Error("the Approve verb does not follow the annotation link")
 	}
 	if !strings.Contains(page, `<span class="scheme">claude-review · approve</span>`) {
@@ -203,7 +205,6 @@ func TestNextShowsWhatNeedsTheUserUnderTheRow(t *testing.T) {
 	for _, want := range []string{
 		`<div class="ask">the round has a question for you: &lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt; &amp; &#34;quotes&#34;</div>`,
 		`<div class="ask">a post was refused over the limit</div>`,
-		`<li class="pr stuck" id="pr-o-r-2"`,
 		`<span class="tag stuck">claude ! stuck</span>`,
 		`<div class="note">started by a click</div>`,
 		`<div class="note">round posted its review</div>`,
@@ -212,8 +213,9 @@ func TestNextShowsWhatNeedsTheUserUnderTheRow(t *testing.T) {
 			t.Errorf("page lacks %s", want)
 		}
 	}
-	if strings.Count(page, `class="pr stuck"`) != 1 {
-		t.Error("only the stuck row has the stuck edge")
+	// The tag says stuck; an unexplained edge on the row did not.
+	if strings.Contains(page, `class="pr stuck"`) {
+		t.Error("a stuck row still has its own edge")
 	}
 }
 
@@ -567,5 +569,19 @@ func TestNextNeedsYouButtonIsItsFirstLink(t *testing.T) {
 	}
 	if !strings.Contains(page, `>Fork with prod data</a>`) || !strings.Contains(page, `>Ignore</a>`) {
 		t.Error("the other links left the panel")
+	}
+}
+
+// The row's number is the link to the PR on GitHub; the panel has no
+// separate Open link.
+func TestNextNumberLinksThePr(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now}
+	page := renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, nil))
+	if !strings.Contains(page, `<a class="num" href="https://github.com/o/r/pull/1">#1</a>`) {
+		t.Error("the number does not link the PR")
+	}
+	if strings.Contains(page, `<a href="https://github.com/o/r/pull/1">Open</a>`) {
+		t.Error("the panel still has an Open link")
 	}
 }

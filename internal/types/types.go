@@ -252,6 +252,11 @@ func dotSegment(s string) bool { return s == "." || s == ".." }
 // was clicked; claude-review's EntrySource reads the same shape.
 var fromTag = regexp.MustCompile(`^from=[a-z]{1,16}$`)
 
+// approveQuery is the query of the Approve link claude-review writes: the
+// reviewed sha and its one-time token, in that order (approveURL in
+// claude-review's decide.go; the token is ids.tokenPattern there).
+var approveQuery = regexp.MustCompile(`^at=[0-9a-f]{40}&token=[0-9a-f]{48}$`)
+
 func LinkNamesPr(prUrl, link string) bool {
 	owner, repo, number, ok := PrParts(prUrl)
 	if !ok {
@@ -273,7 +278,8 @@ func LinkNamesPr(prUrl, link string) bool {
 	case "claude-review":
 		// The start link may say where it was clicked (?from=elly); a verb
 		// link carries no query.
-		query := u.RawQuery == "" || (len(segments) == 2 && fromTag.MatchString(u.RawQuery))
+		query := u.RawQuery == "" || (len(segments) == 2 && fromTag.MatchString(u.RawQuery)) ||
+			(len(segments) == 3 && segments[2] == "approve" && approveQuery.MatchString(u.RawQuery))
 		return strings.EqualFold(u.Host, owner) && (len(segments) == 2 || len(segments) == 3) &&
 			strings.EqualFold(segments[0], repo) && segments[1] == number && query && u.Fragment == ""
 	}

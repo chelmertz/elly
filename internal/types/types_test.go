@@ -113,13 +113,19 @@ func TestLinkNamesPr(t *testing.T) {
 		"claude-review://Owner/other/7":                false,
 		"claude-review://Other/repo/7":                 false,
 		"claude-review://Owner/repo/7/approve?token=t": false,
-		"claude-review://Owner/repo/7#x":               false,
-		"claude-review://Owner/repo/7?from=elly":       true,
-		"claude-review://Owner/repo/7/?from=elly":      false,
-		"claude-review://Owner/repo/7?from=Elly":       false,
-		"claude-review://Owner/repo/7?from=elly&x=1":   false,
-		"claude-review://Owner/repo/7/approve?from=e":  false,
-		"prr://Owner/repo/7":                           false,
+		// The Approve link claude-review writes carries the sha and the token.
+		"claude-review://Owner/repo/7/approve?at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&token=000000000000000000000000000000000000000000000000":     true,
+		"claude-review://Owner/repo/7/attach?at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&token=000000000000000000000000000000000000000000000000":      false,
+		"claude-review://Owner/repo/7/approve?at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&token=000000000000000000000000000000000000000000000000&x=1": false,
+		"claude-review://Owner/repo/7/approve?at=abc&token=000000000000000000000000000000000000000000000000":                                          false,
+		"claude-review://Owner/repo/7/approve?token=000000000000000000000000000000000000000000000000&at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":     false,
+		"claude-review://Owner/repo/7#x":              false,
+		"claude-review://Owner/repo/7?from=elly":      true,
+		"claude-review://Owner/repo/7/?from=elly":     false,
+		"claude-review://Owner/repo/7?from=Elly":      false,
+		"claude-review://Owner/repo/7?from=elly&x=1":  false,
+		"claude-review://Owner/repo/7/approve?from=e": false,
+		"prr://Owner/repo/7":                          false,
 	} {
 		if got := LinkNamesPr(pr, link); got != want {
 			t.Errorf("LinkNamesPr(%s) = %v, want %v", link, got, want)

@@ -146,7 +146,7 @@ nav.side { flex: 1 1 160px; max-width: 200px; padding-top: var(--s2); }
 .group ol { list-style: none; margin: 0; padding: 0; }
 
 .pr { border-radius: var(--s2); }
-.row { display: flex; align-items: center; gap: var(--gap); padding-right: var(--pad); border-radius: var(--s2); }
+.row { display: flex; align-items: center; gap: var(--gap); padding: 0 var(--pad); border-radius: var(--s2); }
 .row:hover, .pr.open .row { background: var(--raised); }
 .pr.open .row { border-radius: var(--s2) var(--s2) 0 0; }
 .toggle {
@@ -155,7 +155,7 @@ nav.side { flex: 1 1 160px; max-width: 200px; padding-top: var(--s2); }
     display: flex;
     align-items: center;
     gap: var(--gap);
-    padding: var(--s2) 0 var(--s2) var(--pad);
+    padding: var(--s2) 0;
     background: none;
     border: 0;
     color: inherit;
@@ -173,8 +173,6 @@ nav.side { flex: 1 1 160px; max-width: 200px; padding-top: var(--s2); }
 .tag.needs-you { color: var(--warm); }
 .tag.stuck { color: var(--amber); }
 /* square on the left, so the edge is a straight bar down the row and its note */
-.pr.stuck { box-shadow: inset 3px 0 0 var(--amber); border-radius: 0 var(--s2) var(--s2) 0; }
-.pr.stuck .row { border-radius: 0 var(--s2) var(--s2) 0; }
 .ask, .note { margin-top: calc(-1 * var(--s1)); padding: 0 var(--pad) var(--s2) var(--title-x); font-size: 13px; overflow-wrap: anywhere; }
 .ask { color: var(--warm); }
 .note { color: var(--muted); }
@@ -319,11 +317,11 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
         {{end}}
         <ol id="{{$g.Slug}}-list"{{if $g.Folded}} hidden{{end}}>
         {{range $r := $g.Rows}}
-            <li class="pr{{if $r.Stuck}} stuck{{end}}" id="{{$r.Anchor}}" data-search="{{$r.Search}}" {{with $r.PrHref}} data-url="{{.}}"{{end}}{{if $r.OnYou}} data-turn-at="{{$r.TurnAt}}"{{end}}>
+            <li class="pr" id="{{$r.Anchor}}" data-search="{{$r.Search}}" {{with $r.PrHref}} data-url="{{.}}"{{end}}{{if $r.OnYou}} data-turn-at="{{$r.TurnAt}}"{{end}}>
                 <div class="row">
+                    <span class="dot" aria-hidden="true"></span>
+                    {{if $r.PrHref}}<a class="num" href="{{$r.PrHref}}">#{{$r.Number}}</a>{{else}}<span class="num">#{{$r.Number}}</span>{{end}}
                     <button type="button" class="toggle" aria-expanded="false" aria-controls="{{$r.Anchor}}-panel">
-                        <span class="dot" aria-hidden="true"></span>
-                        <span class="num">#{{$r.Number}}</span>
                         <span class="title">{{$r.Title}}</span>
                         {{with $r.Tag}}<span class="tag {{.Class}}">claude {{.Symbol}} {{.Word}}</span>{{end}}
                         <span class="who">{{$r.Repo}} · {{$r.Author}}</span>
@@ -350,7 +348,6 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
                         <h3>State</h3>
                         <ul>{{range $r.State}}<li>{{.}}</li>{{end}}</ul>
                         <div class="links">
-                            {{with $r.PrHref}}<a href="{{.}}">Open</a>{{end}}
                             <button type="button" class="bury" data-url="{{$r.BuryUrl}}">{{if $r.Buried}}Unbury{{else}}Bury{{end}}</button>
                             {{range $r.Links}}<a href="{{.Href}}">{{.Label}}</a>{{with .Verb}}<span class="scheme">{{.}}</span>{{end}}{{end}}
                         </div>
