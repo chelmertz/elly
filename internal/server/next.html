@@ -76,7 +76,9 @@ a:hover { color: var(--fg); }
 /* the same gutter left of the list, between it and the menu, and right of the menu */
 .page {
     --gutter: var(--s5);
-    max-width: 1180px;
+    /* wide enough that a wide window shows whole titles; past this a row's
+       columns drift too far apart to read across */
+    max-width: 1800px;
     padding: var(--gutter);
     display: flex;
     flex-wrap: wrap;
@@ -324,7 +326,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
                     <span class="dot" aria-hidden="true"></span>
                     {{if $r.PrHref}}<a class="num" href="{{$r.PrHref}}">#{{$r.Number}}</a>{{else}}<span class="num">#{{$r.Number}}</span>{{end}}
                     <button type="button" class="toggle" aria-expanded="false" aria-controls="{{$r.Anchor}}-panel">
-                        <span class="title">{{$r.Title}}</span>
+                        <span class="title" title="{{$r.Title}}">{{$r.Title}}</span>
                         {{with $r.Tag}}<span class="tag {{.Class}}">claude {{.Symbol}} {{.Word}}</span>{{end}}
                         <span class="who">{{$r.Repo}} · {{$r.Author}}</span>
                         <span class="wait {{if eq $r.Bucket "week+"}}week{{else}}{{$r.Bucket}}{{end}}" title="since the last activity by someone else">{{$r.Bucket}}</span>
