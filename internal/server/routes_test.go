@@ -233,6 +233,9 @@ func TestGetPrsTurnYouMatchesThePage(t *testing.T) {
 
 func TestRootIsTheTurnPage(t *testing.T) {
 	w := newRoutes(t, "")
+	if err := w.store.StorePAT("ghp_x", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
 	page := w.do("GET", "/", "").Body.String()
 	if !strings.Contains(page, `id="pr-o-r-1"`) || strings.Contains(page, "classic page") {
 		t.Error("/ does not serve the page grouped by turn")

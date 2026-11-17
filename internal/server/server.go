@@ -287,6 +287,7 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 		data.RefreshIntervalMinutes = webConfig.TimeoutMinutes
 		data.Degradations = pageDegradations(webConfig.Store.Degradations())
 		data.SetupMode = !found
+		data.State = pageStateOf(found, storedPrs.LastFetched, data.rowCount(), data.OnYou)
 		data.Version = webConfig.Version
 		if found {
 			data.Token = tokenInfo(pat, time.Now())

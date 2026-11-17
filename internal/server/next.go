@@ -22,6 +22,8 @@ type NextData struct {
 	RateLimitedUntil       string
 	Degradations           []types.Degradation
 	SetupMode              bool
+	// State is what the page says before any row; see pageState.
+	State pageState
 	OnYou                  int
 	OnOthers               int
 	// OldestOnYou is the longest wait among the PRs on the user, as a

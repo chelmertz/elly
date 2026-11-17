@@ -233,6 +233,10 @@ nav.side { flex: 1 1 160px; max-width: 200px; padding-top: var(--s2); }
 .links button { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 .links .scheme { color: var(--faint); }
 
+.empty-state { padding: var(--s6) 0 0 var(--title-x); max-width: 60ch; }
+.empty-state p { margin: 0 0 var(--s3); }
+.empty-state .hint { color: var(--muted); }
+.empty-state button.primary { padding: var(--s2) var(--s4); background: var(--amber); color: var(--on-amber); border-radius: 4px; }
 .done { padding: var(--s6) 0 0 var(--title-x); color: var(--muted); }
 .stats { margin: var(--s7) 0 0; padding-left: var(--title-x); font-size: 12px; color: var(--faint); }
 
@@ -311,7 +315,22 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
     <label class="visually-hidden" for="filter">Filter pull requests</label>
     <input id="filter" class="filter" type="search" autocomplete="off" placeholder="Filter: number, title, repo, author  ( / )">
 
-    <div class="rows">
+    <div class="rows" data-state="{{.State}}">
+    {{if eq .State "no-token"}}
+    <div class="empty-state">
+        <p>elly lists the pull requests waiting on you, grouped by whose turn it is. It needs a GitHub token to read them.</p>
+        <p><button type="button" class="tokens-open primary">Add a GitHub token</button></p>
+    </div>
+    {{else if eq .State "first-poll"}}
+    <div class="empty-state"><p>Reading your pull requests from GitHub…</p></div>
+    {{else if eq .State "nothing"}}
+    <div class="empty-state">
+        <p>No open pull requests involve you.</p>
+        <p class="hint">elly sees what the token reaches: its owner and repositories. Another org needs a token of its own, under <button type="button" class="tokens-open">tokens</button>.</p>
+    </div>
+    {{else if eq .State "clear"}}
+    <div class="empty-state"><p>Nothing waits on you.</p></div>
+    {{end}}
     {{range $g := .Groups}}{{if $g.Rows}}
     <section class="group{{if $g.Folded}} folded{{end}}{{if $g.FirstFolded}} first-folded{{end}}" id="{{$g.Slug}}" data-folded="{{$g.Folded}}">
         {{if $g.Folded}}
@@ -367,7 +386,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
     {{end}}{{end}}
 
     <p class="done" hidden>Nothing matches.</p>
-    <p class="stats">{{.OnYou}} on you{{with .OldestOnYou}}, the longest waiting {{.}}{{end}} · {{.OnOthers}} on others</p>
+    <p class="stats"{{if or (eq .State "no-token") (eq .State "first-poll")}} hidden{{end}}>{{.OnYou}} on you{{with .OldestOnYou}}, the longest waiting {{.}}{{end}} · {{.OnOthers}} on others</p>
     </div>
 </main>
 
@@ -379,7 +398,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
     {{end}}
     </ul>
     <div class="meta">
-        <p>polled <time class="polled" datetime="{{.LastRefreshed}}">{{.LastRefreshed}}</time> · <button type="button" class="poll">poll now</button></p>
+        {{if .Token}}<p>polled <time class="polled" datetime="{{.LastRefreshed}}">{{.LastRefreshed}}</time> · <button type="button" class="poll">poll now</button></p>{{end}}
         {{if .RateLimitedUntil}}<p class="warn">rate limited until <time datetime="{{.RateLimitedUntil}}">{{.RateLimitedUntil}}</time></p>{{end}}
         {{range .Degradations}}<p class="warn" title="{{.Remedy}}">{{.Message}}</p>{{end}}
         <p class="tokens-line">{{with .Token}}Tokens{{if .ExpiresSoon}} · <span class="warn">{{.Name}} {{.Expires}}</span>{{end}}{{range $.OwnerTokens}}{{if .Refused}} · <span class="warn">{{.Owner}} refused</span>{{else if .ExpiresSoon}} · <span class="warn">{{.Owner}} {{.Expires}}</span>{{end}}{{end}}{{else}}<span class="warn">No token yet</span>{{end}} · <button type="button" class="tokens-open">manage</button></p>
@@ -388,7 +407,8 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
 </nav>
 </div>
 <dialog class="tokens" aria-labelledby="tokens-title"{{if .SetupMode}} data-setup{{end}}>
-    <h2 id="tokens-title">Tokens</h2>
+    <h2 id="tokens-title">{{if .Token}}Tokens{{else}}Connect GitHub{{end}}</h2>
+    {{if not .Token}}<p>elly reads the pull requests you are involved in, and only reads: nothing is posted or changed. The token decides what it sees: its owner and the repositories it grants.</p>{{end}}
     {{with .Token}}
     <ul>
         <li><span>{{.Name}}{{with .Expires}} · {{if $.Token.ExpiresSoon}}<span class="warn">{{.}}</span>{{else}}{{.}}{{end}}{{end}}</span>
@@ -615,7 +635,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
             break;
         case "o": if (!pr) return; setOpen(pr, !pr.classList.contains("open")); break;
         case "b": if (!pr) return; pr.querySelector("button.bury").click(); break;
-        case "r": document.querySelector("button.poll").click(); break;
+        case "r": document.querySelector("button.poll")?.click(); break;
         case "?": keys.showModal(); break;
         default: return;
         }
@@ -682,6 +702,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
     const rtf = new Intl.RelativeTimeFormat("en", {numeric: "auto"});
     const tick = () => {
         const polled = document.querySelector("time.polled");
+        if (!polled) return; // no token: nothing is polled
         const at = new Date(polled.dateTime);
         polled.textContent = at.getFullYear() < 2020 ? "not yet" : rtf.format(Math.round((at - new Date()) / 60000), "minute");
     };
