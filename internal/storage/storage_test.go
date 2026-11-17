@@ -939,3 +939,17 @@ func TestSetExpiryOnlyTouchesTheSameToken(t *testing.T) {
 		t.Errorf("expiry or owner not stored: %v, %v, %q", pat.ExpiresAt, owners[0].ExpiresAt, pat.Owner)
 	}
 }
+
+// Every connection runs in WAL with a busy timeout: without them a write
+// that met another connection failed at once with SQLITE_BUSY.
+func TestStorageWaitsOutALockedDatabase(t *testing.T) {
+	s := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), filepath.Join(t.TempDir(), "elly.db"))
+	var mode string
+	var timeout int
+	if err := s.rawDb.QueryRow("pragma journal_mode").Scan(&mode); err != nil || mode != "wal" {
+		t.Errorf("journal_mode %q, %v", mode, err)
+	}
+	if err := s.rawDb.QueryRow("pragma busy_timeout").Scan(&timeout); err != nil || timeout != 5000 {
+		t.Errorf("busy_timeout %d, %v", timeout, err)
+	}
+}

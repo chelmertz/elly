@@ -129,10 +129,17 @@ type StoredState struct {
 //go:embed schema.sql
 var ddl string
 
+// writePragmas apply to every connection, in modernc's _pragma form: the
+// _journal_mode=WAL spelling is another driver's, and modernc ignored it, so
+// the database ran in rollback mode with no busy timeout and every write
+// that met another connection failed at once with SQLITE_BUSY (737 in a day
+// by 2026-11-17, annotation PUTs and PR polls alike). WAL lets readers and
+// the writer overlap; busy_timeout waits out the rest. secure_delete: a
+// deleted token's bytes are overwritten, not left in a free page.
+const writePragmas = "mode=rwc&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=secure_delete(1)"
+
 func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
-	// secure_delete: a deleted token's bytes are overwritten, not left in a
-	// free page.
-	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=rwc&_journal_mode=WAL&_synchronous=NORMAL&_pragma=secure_delete(1)", dbPath))
+	db, err := sql.Open("sqlite", "file:"+dbPath+"?"+writePragmas)
 	check(err)
 
 	// create tables
@@ -520,7 +527,7 @@ func (s *DbStorage) GetPAT() (StoredPAT, bool, error) {
 // unlike NewStorage it neither creates the file nor migrates the schema, so it
 // is safe against the database of an elly that is running.
 func ReadPAT(dbPath string) (StoredPAT, bool, error) {
-	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=ro", dbPath))
+	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=ro&_pragma=busy_timeout(5000)", dbPath))
 	if err != nil {
 		return StoredPAT{}, false, fmt.Errorf("could not open database: %w", err)
 	}
