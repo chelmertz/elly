@@ -16,6 +16,8 @@
         version = self.shortRev or "dirty";
         vendorHash = "sha256-Bf3BcXMzk12YY5KdOT9aNHLg4RgHcCv9tPyqWE8dKnY=";
         src = ./.;
+        # the page and --version name the commit, not "(devel)"
+        ldflags = [ "-X main.revision=${self.shortRev or "dirty"}" ];
         # the i3blocks script ships with the binary, so a bar that runs it
         # from the profile never lags behind the elly it talks to
         postInstall = ''

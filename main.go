@@ -40,19 +40,40 @@ var allowedHosts = flag.String("allowed-hosts", "", "comma-separated Host values
 var githubAPIFlag = flag.String("github-api", github.DefaultAPIURL, "development: the GitHub API to poll and check tokens with, e.g. a stub on a loopback address")
 var workOwners = flag.String("work-owners", "", "comma-separated repo owners that notify only on reasons to act; any other owner notifies on every change by someone else")
 
+// revision is the commit elly was built from, set by the nix build
+// (-X main.revision=<short rev>), so a screenshot of the page says which
+// build it shows.
+var revision string
+
+// buildVersion is the build's commit: the nix build's revision, else the
+// commit a "go build" in a checkout records, else the module version
+// ("(devel)" for any local build).
+func buildVersion(rev string, read func() (*debug.BuildInfo, bool)) string {
+	if rev != "" {
+		return rev
+	}
+	bi, ok := read()
+	if !ok {
+		return "unknown"
+	}
+	for _, s := range bi.Settings {
+		if s.Key == "vcs.revision" && len(s.Value) >= 7 {
+			return s.Value[:7]
+		}
+	}
+	if bi.Main.Version != "" {
+		return bi.Main.Version
+	}
+	return "unknown"
+}
+
 func main() {
 	flag.Parse()
 
 	logLevel := &slog.LevelVar{}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{AddSource: true, Level: logLevel}))
 
-	var version string
-	if bi, ok := debug.ReadBuildInfo(); ok {
-		version = bi.Main.Version
-	}
-	if version == "" {
-		version = "unknown"
-	}
+	version := buildVersion(revision, debug.ReadBuildInfo)
 
 	if *versionFlag {
 		fmt.Println(version)
