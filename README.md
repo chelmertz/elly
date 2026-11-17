@@ -112,8 +112,8 @@ URL-safe alphabet; the page's own links use URL-safe, since a standard id can
 hold `/`. Writes need `Authorization: Bearer <token>`, where the token is in
 `$XDG_RUNTIME_DIR/elly/annotation-token` (or `-annotation-token-file`),
 readable only by the user and new on every start. Links must be https, or use
-a scheme named in `-annotation-schemes`; elly shows a custom-scheme link's
-last path segment beside its label. A row's one action follows an annotation
+a scheme named in `-annotation-schemes`; a custom-scheme link's scheme and
+last path segment show when hovering it. A row's one action follows an annotation
 link only when the link names that PR: its GitHub page (or a sub-path or
 fragment of it), or a `claude-review://owner/repo/number` link (which may end
 in `?from=<word>`, where it was clicked). One link per annotation may be

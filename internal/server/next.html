@@ -231,7 +231,6 @@ nav.side { flex: 1 1 160px; max-width: 200px; padding-top: var(--s2); }
 .links { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3); margin-top: var(--s2); }
 .links a, .links button { color: var(--blue); }
 .links button { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
-.links .scheme { color: var(--faint); }
 
 .empty-state { padding: var(--s6) 0 0 var(--title-x); max-width: 60ch; }
 .empty-state p { margin: 0 0 var(--s3); }
@@ -375,7 +374,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
                         <ul>{{range $r.State}}<li>{{.}}</li>{{end}}</ul>
                         <div class="links">
                             <button type="button" class="bury" data-url="{{$r.BuryUrl}}">{{if $r.Buried}}Unbury{{else}}Bury{{end}}</button>
-                            {{range $r.Links}}<a href="{{.Href}}">{{.Label}}</a>{{with .Verb}}<span class="scheme">{{.}}</span>{{end}}{{end}}
+                            {{range $r.Links}}<a href="{{.Href}}"{{with .Verb}} title="{{.}}"{{end}}>{{.Label}}</a>{{end}}
                         </div>
                     </div>
                 </div>

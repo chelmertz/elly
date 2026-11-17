@@ -130,8 +130,10 @@ func TestNextVerbFollowsAnAllowedAnnotationLink(t *testing.T) {
 	if !strings.Contains(page, `href="claude-review://o/r/1/approve?at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&amp;token=000000000000000000000000000000000000000000000000">Approve</a>`) {
 		t.Error("the Approve verb does not follow the annotation link")
 	}
-	if !strings.Contains(page, `<span class="scheme">claude-review · approve</span>`) {
-		t.Error("the link's verb is not shown beside its label")
+	// the verb is on hover: the label is the tool's, the hover says what the
+	// click runs
+	if !strings.Contains(page, `title="claude-review · approve">Approve</a>`) || strings.Contains(page, `class="scheme"`) {
+		t.Error("the link's verb is not on hover, or still shown beside its label")
 	}
 	page = renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, nil))
 	if strings.Contains(page, "claude-review://") {
