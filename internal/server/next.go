@@ -129,6 +129,9 @@ type nextRow struct {
 	History []nextEvent
 	State   []string
 	Links   []nextLink
+	// Help is an annotation's `?` link: it shows on the row, not in the panel.
+	Help      template.URL
+	HelpTitle string
 	BuryUrl string
 	Buried  bool
 }
@@ -249,6 +252,12 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 				if verbTitle != "" && l.Url == turn.VerbUrl {
 					continue
 				}
+				// A tool's `?` explains the row; it sits on the row, by the
+				// button, where it is found without opening the panel.
+				if l.Label == helpLabel && row.Help == "" && types.LinkNamesPr(pr.Url, l.Url) && allowedLink(l.Url, schemes) {
+					row.Help, row.HelpTitle = href(l.Url), a.Source+" · what this row means · "+l.Url
+					continue
+				}
 				row.Links = append(row.Links, nextLink{Label: l.Label, Href: href(l.Url), Verb: annotationVerb(l.Url)})
 			}
 		}
@@ -275,6 +284,9 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 	}
 	return data
 }
+
+// helpLabel marks an annotation link as the row's explanation.
+const helpLabel = "?"
 
 // prEvent is one thing that happened on a PR, read from the search result
 // elly stores per PR. It is what github returned on the last poll and no more:

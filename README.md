@@ -122,7 +122,7 @@ it is the row's button under its own label, with its source and target
 shown on hover; an approve link is the button only through the one-click
 group. A `needs_you` or `stuck` annotation with no primary link gets a
 button that opens the PR; link order means nothing. Anywhere else a primary
-link shows nowhere. Every other link stays in the row's details. A PR whose URL is not a GitHub PR URL gets no
+link shows nowhere. A link labelled `?` that names the PR shows as a small `?` on the row, beside the button, for the tool's explanation of the row. Every other link stays in the row's details. A PR whose URL is not a GitHub PR URL gets no
 link at all. `GET /api/v0/prs` returns each PR's live annotations.
 
 ## What elly lets in

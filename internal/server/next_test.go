@@ -597,3 +597,25 @@ func TestNextTitleShowsWholeOnHover(t *testing.T) {
 		t.Errorf("page lacks %s", want)
 	}
 }
+
+// A tool's `?` link sits on the row, not in the panel; one naming another
+// PR shows nowhere special.
+func TestNextHelpLinkIsOnTheRow(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now,
+		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationHandled, Note: "round posted its review",
+			Links: []types.AnnotationLink{{Label: "?", Url: "claude-review://o/r/1/states"}}}}}
+	other := types.ViewPr{Url: "https://github.com/o/r/pull/2", Author: "a", LastUpdated: now,
+		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationHandled,
+			Links: []types.AnnotationLink{{Label: "?", Url: "claude-review://o/r/9/states"}}}}}
+	page := renderNext(t, buildNext([]types.ViewPr{pr, other}, "me", now, []string{"claude-review"}))
+	if !strings.Contains(page, `<a class="help" href="claude-review://o/r/1/states"`) {
+		t.Error("no ? on the row")
+	}
+	if strings.Count(page, "claude-review://o/r/1/states") != 2 { // href and its title
+		t.Error("the panel repeats the ? link")
+	}
+	if strings.Contains(page, `class="help" href="claude-review://o/r/9/states"`) {
+		t.Error("a ? naming another PR sits on the row")
+	}
+}
