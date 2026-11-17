@@ -40,7 +40,8 @@ func TestTurnOf(t *testing.T) {
 		{"a team request is not a request of me", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{"@team"}, LastUpdated: fresh}, GroupNobody, "GitHub"},
 		{"someone else's red PR is on them", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, ChecksState: "FAILURE", LastUpdated: fresh}, GroupOnOthers, "GitHub"},
 		{"they owe replies to my threads", types.ViewPr{Author: "a", ThreadsWaiting: 3, LastUpdated: fresh}, GroupOnOthers, "GitHub"},
-		{"needs_you's first link labels the button", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{{Label: "Answer", Url: "claude-review://o/r/1/attach"}, {Label: "Fork with prod data", Url: "claude-review://o/r/1/fork"}}}}, LastUpdated: fresh}, GroupWaiting, "Answer"},
+		{"needs_you's primary link labels the button", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{{Label: "Fork with prod data", Url: "claude-review://o/r/1/fork"}, {Label: "Answer", Url: "claude-review://o/r/1/attach", Primary: true}}}}, LastUpdated: fresh}, GroupWaiting, "Answer"},
+		{"needs_you without a primary link opens the PR", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{{Label: "Answer", Url: "claude-review://o/r/1/attach"}}}}, LastUpdated: fresh}, GroupWaiting, "Check"},
 		{"needs_you annotation waits for me", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou}}, LastUpdated: fresh}, GroupWaiting, "Check"},
 		{"approve link is one click", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupOneClick, "Approve"},
 		{"approve link on a red PR is not one click", types.ViewPr{Author: "a", ChecksState: "FAILURE", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupWaiting, "Check"},
@@ -154,6 +155,7 @@ func TestTurnVerbFollowsOnlyALinkToThisPr(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	const prUrl = "https://github.com/acme/widget/pull/1"
 	turn := func(state string, l types.AnnotationLink) Turn {
+		l.Primary = state == types.AnnotationNeedsYou // the button follows only a primary link
 		return TurnOf(types.ViewPr{Url: prUrl, Author: "a", LastUpdated: now,
 			Annotations: []types.Annotation{{Source: ClaudeReviewSource, State: state, Links: []types.AnnotationLink{l}}}}, "me", now)
 	}
@@ -192,7 +194,7 @@ func TestTurnVerbFollowsOnlyALinkToThisPr(t *testing.T) {
 func TestTurnOfNeverPointsCheckAtApprove(t *testing.T) {
 	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", ChecksState: "FAILURE", LastUpdated: time.Now(),
 		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{
-			{Label: "Approve", Url: "claude-review://o/r/1/approve"}, {Label: "Answer", Url: "claude-review://o/r/1/attach"}}}}}
+			{Label: "Approve", Url: "claude-review://o/r/1/approve"}, {Label: "Answer", Url: "claude-review://o/r/1/attach", Primary: true}}}}}
 	turn := TurnOf(pr, "me", time.Now())
 	if turn.Verb != "Answer" || turn.VerbUrl != "claude-review://o/r/1/attach" {
 		t.Errorf("turn %+v", turn)

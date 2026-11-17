@@ -238,7 +238,8 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 				// An add-on's offer (a primary link on an info annotation,
 				// naming this PR) is the row's button, not a panel link; its
 				// target shows on hover, so the label cannot pass off one
-				// action as another. Anything else primary shows nowhere.
+				// action as another. A needs_you or stuck primary is the
+				// button through TurnOf; anything else primary shows nowhere.
 				if l.Primary {
 					if a.State == types.AnnotationInfo && types.LinkNamesPr(pr.Url, l.Url) && allowedLink(l.Url, schemes) {
 						row.Verb, row.VerbHref, row.VerbTitle = l.Label, href(l.Url), a.Source+" · "+l.Url

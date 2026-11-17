@@ -117,9 +117,12 @@ last path segment beside its label. A row's one action follows an annotation
 link only when the link names that PR: its GitHub page (or a sub-path or
 fragment of it), or a `claude-review://owner/repo/number` link (which may end
 in `?from=<word>`, where it was clicked). One link per annotation may be
-`primary`: on an `info` annotation, and naming the PR, it replaces the row's
-verb, with its source and target shown on hover; anywhere else it shows
-nowhere. Every other link stays in the row's details. A PR whose URL is not a GitHub PR URL gets no
+`primary`: naming the PR, on an `info`, `needs_you` or `stuck` annotation,
+it is the row's button under its own label, with its source and target
+shown on hover; an approve link is the button only through the one-click
+group. A `needs_you` or `stuck` annotation with no primary link gets a
+button that opens the PR; link order means nothing. Anywhere else a primary
+link shows nowhere. Every other link stays in the row's details. A PR whose URL is not a GitHub PR URL gets no
 link at all. `GET /api/v0/prs` returns each PR's live annotations.
 
 ## What elly lets in

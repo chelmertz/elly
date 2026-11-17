@@ -107,13 +107,13 @@ func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
 		if needsYou.State == types.AnnotationStuck {
 			t.Reason = needsYou.Source + " is stuck: only you can move it"
 		}
-		// The button is the annotation's first link naming the PR, under
-		// its own label, so it says what to do ("Answer"). An approve link
-		// is never it: this case is reached on a red PR, where approving is
-		// not the action, and neither is a primary link, which is an
-		// add-on's offer and counts only on an info annotation.
+		// The button is the link the tool marks primary, naming the PR,
+		// under its own label, so it says what to do ("Answer"); with none
+		// it opens the PR. Link order means nothing. An approve link is
+		// never it: this case is reached on a red PR, where approving is
+		// not the action.
 		for _, l := range needsYou.Links {
-			if types.LinkNamesPr(pr.Url, l.Url) && !approves(l) && !l.Primary {
+			if l.Primary && types.LinkNamesPr(pr.Url, l.Url) && !approves(l) {
 				t.VerbUrl = l.Url
 				if l.Label != "" {
 					t.Verb = l.Label

@@ -111,7 +111,7 @@ func TestNextEscapesPrFields(t *testing.T) {
 	if strings.Contains(page, payload) {
 		t.Error("next.html renders a PR field unescaped")
 	}
-	if !strings.Contains(page, `<span class="title">&lt;img src=x onerror=alert(1)&gt;</span>`) {
+	if !strings.Contains(page, `<span class="title" title="&lt;img src=x onerror=alert(1)&gt;">&lt;img src=x onerror=alert(1)&gt;</span>`) {
 		t.Error("escaped PR title missing from the page")
 	}
 	if strings.Contains(page, "javascript:") {
@@ -320,9 +320,10 @@ func colourTokens(page, opener string) map[string]bool {
 }
 
 // An add-on offers the row's action with a primary link: it replaces the
-// verb, and its target shows on hover, so the label cannot pass off one
-// action as another. elly itself offers no Start: without the add-on, or
-// without its scheme allowed, the row keeps its own verb.
+// verb, on an info row as on a needs_you one, and its target shows on hover,
+// so the label cannot pass off one action as another. elly itself offers no
+// Start: without the add-on, or without its scheme allowed, or with a link
+// to another PR, the row keeps its own verb.
 func TestNextPrimaryLinkBecomesTheVerb(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	asked := func(url string) types.ViewPr {
@@ -340,17 +341,17 @@ func TestNextPrimaryLinkBecomesTheVerb(t *testing.T) {
 	elsewhere.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationInfo, Links: []types.AnnotationLink{
 		{Label: "Start", Url: "claude-review://o/r/99?from=elly", Primary: true},
 	}}}
-	notAnOffer := asked("https://github.com/o/r/pull/5")
-	notAnOffer.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{
+	needsYou := asked("https://github.com/o/r/pull/5")
+	needsYou.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{
 		{Label: "Start", Url: "claude-review://o/r/5?from=elly", Primary: true},
 	}}}
-	prs := []types.ViewPr{offered, plain, asked("https://github.com/o/r/pull/3"), elsewhere, notAnOffer}
+	prs := []types.ViewPr{offered, plain, asked("https://github.com/o/r/pull/3"), elsewhere, needsYou}
 	page := renderNext(t, buildNext(prs, "me", now, []string{"claude-review"}))
 	if want := `href="claude-review://o/r/1?from=elly" title="claude-review · claude-review://o/r/1?from=elly">Start</a>`; !strings.Contains(page, want) {
 		t.Errorf("page lacks %s", want)
 	}
-	if n := strings.Count(page, ">Start</a>"); n != 1 {
-		t.Errorf("%d Start verbs, want 1: only the offered row, not a link to another PR or one outside an info offer", n)
+	if n := strings.Count(page, ">Start</a>"); n != 2 {
+		t.Errorf("%d Start verbs, want 2: the offered row and the needs_you one, not a link to another PR", n)
 	}
 	if page := renderNext(t, buildNext(prs, "me", now, nil)); strings.Contains(page, ">Start</a>") {
 		t.Error("Start renders although the claude-review scheme is not allowed")
@@ -552,14 +553,15 @@ func TestNextLinksThePrOnlyWhenItIsAGithubPrUrl(t *testing.T) {
 	}
 }
 
-// A needs_you row's button is its first link naming the PR, under that
-// link's own label, and the panel does not repeat it: a row offering Check
-// and Open session that did the same thing read as two choices.
-func TestNextNeedsYouButtonIsItsFirstLink(t *testing.T) {
+// A needs_you row's button is its primary link naming the PR, wherever it
+// sits, under that link's own label, and the panel does not repeat it: a
+// row offering Check and Open session that did the same thing read as two
+// choices.
+func TestNextNeedsYouButtonIsItsPrimaryLink(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now,
 		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Note: "the round has a question for you: rows?",
-			Links: []types.AnnotationLink{{Label: "Answer", Url: "claude-review://o/r/1/attach"}, {Label: "Fork with prod data", Url: "claude-review://o/r/1/fork"}, {Label: "Ignore", Url: "claude-review://o/r/1/ignore"}}}}}
+			Links: []types.AnnotationLink{{Label: "Fork with prod data", Url: "claude-review://o/r/1/fork"}, {Label: "Answer", Url: "claude-review://o/r/1/attach", Primary: true}, {Label: "Ignore", Url: "claude-review://o/r/1/ignore"}}}}}
 	page := renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"}))
 	if !strings.Contains(page, `href="claude-review://o/r/1/attach" title="claude-review · claude-review://o/r/1/attach">Answer</a>`) {
 		t.Error("the button is not the Answer link, with its target on hover")
@@ -583,5 +585,15 @@ func TestNextNumberLinksThePr(t *testing.T) {
 	}
 	if strings.Contains(page, `<a href="https://github.com/o/r/pull/1">Open</a>`) {
 		t.Error("the panel still has an Open link")
+	}
+}
+
+// A title cut short on a narrow window is whole on hover.
+func TestNextTitleShowsWholeOnHover(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now, Title: `long "quoted" title & more`}
+	page := renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, nil))
+	if want := `<span class="title" title="long &#34;quoted&#34; title &amp; more">`; !strings.Contains(page, want) {
+		t.Errorf("page lacks %s", want)
 	}
 }
