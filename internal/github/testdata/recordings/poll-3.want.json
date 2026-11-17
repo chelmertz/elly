@@ -1,0 +1,165 @@
+{
+  "Prs": [
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo1/pull/1",
+        "Title": "redacted-3",
+        "Author": "me",
+        "RepoName": "repo1",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo1",
+        "IsDraft": false,
+        "LastUpdated": "2025-05-25T02:22:00Z",
+        "LastPrCommenter": "",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 154,
+        "Deletions": 52,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "MERGEABLE",
+        "MergeStateStatus": "BLOCKED",
+        "HeadRefOid": "0000000000000000000000000000000000000001",
+        "ReviewRequestedOfUser": false,
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 10,
+        "Reasons": [
+          "+10: You should add reviewers"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "",
+        "Url": "https://github.com/owner1/repo1/pull/2",
+        "Title": "redacted-6",
+        "Author": "user1",
+        "RepoName": "repo1",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo1",
+        "IsDraft": false,
+        "LastUpdated": "2025-05-25T06:05:29Z",
+        "LastPrCommenter": "user1",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 766,
+        "Deletions": 4,
+        "ReviewRequestedFromUsers": [
+          "@hidden"
+        ],
+        "RereviewFrom": [],
+        "ReviewedBy": [],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000002",
+        "ReviewRequestedOfUser": true,
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 10,
+        "Reasons": [
+          "+10: PR is bigish, 770 loc changed is \u003e300"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo1/pull/3",
+        "Title": "redacted-7",
+        "Author": "user1",
+        "RepoName": "repo1",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo1",
+        "IsDraft": true,
+        "LastUpdated": "2025-05-25T04:42:48Z",
+        "LastPrCommenter": "user1",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 889,
+        "Deletions": 1,
+        "ReviewRequestedFromUsers": [],
+        "RereviewFrom": [],
+        "ReviewedBy": [
+          "user1"
+        ],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000003",
+        "ReviewRequestedOfUser": false,
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": -10,
+        "Reasons": [
+          "-10: PR is someone else's draft"
+        ]
+      }
+    },
+    {
+      "Pr": {
+        "ReviewStatus": "REVIEW_REQUIRED",
+        "Url": "https://github.com/owner1/repo2/pull/4",
+        "Title": "redacted-8",
+        "Author": "user1",
+        "RepoName": "repo2",
+        "RepoOwner": "owner1",
+        "RepoUrl": "https://github.com/owner1/repo2",
+        "IsDraft": false,
+        "LastUpdated": "2025-03-10T21:39:57Z",
+        "LastPrCommenter": "user1",
+        "ThreadsActionable": 0,
+        "ThreadsWaiting": 0,
+        "Additions": 840,
+        "Deletions": 0,
+        "ReviewRequestedFromUsers": [
+          "user3",
+          "user4",
+          "me"
+        ],
+        "RereviewFrom": [],
+        "ReviewedBy": [
+          "user5",
+          "user1",
+          "user6"
+        ],
+        "Buried": false,
+        "ChecksState": "SUCCESS",
+        "ChecksFailing": null,
+        "ChecksComplete": true,
+        "Mergeable": "",
+        "MergeStateStatus": "",
+        "HeadRefOid": "0000000000000000000000000000000000000004",
+        "ReviewRequestedOfUser": true,
+        "RawJsonResponse": null,
+        "Annotations": null
+      },
+      "Points": {
+        "Total": 10,
+        "Reasons": [
+          "+10: PR is bigish, 840 loc changed is \u003e300"
+        ]
+      }
+    }
+  ],
+  "Degradations": []
+}

@@ -92,7 +92,7 @@ const icebox = 14 * 24 * time.Hour
 func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
 	own := username != "" && pr.Author == username
 	asked := !own && username != "" &&
-		(slices.Contains(pr.ReviewRequestedFromUsers, username) || slices.Contains(pr.RereviewFrom, username))
+		(pr.ReviewRequestedOfUser || slices.Contains(pr.ReviewRequestedFromUsers, username) || slices.Contains(pr.RereviewFrom, username))
 	needsYou, approveUrl := annotationVerdict(pr)
 	handled := needsYou == nil && HandedOver(pr, "")
 	withClaude := needsYou == nil && !own && HandedOver(pr, ClaudeReviewSource)

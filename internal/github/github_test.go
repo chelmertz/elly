@@ -768,7 +768,9 @@ func Test_fetchFailingChecks_ReportsTheMissingPermission(t *testing.T) {
 // A review requested from a team used to land as an empty string: the query
 // unwrapped "... on User" only, so a Team node parsed into a zero-valued
 // struct and every PR in a team-reviewing organisation reported [""] . The
-// empty name then read as "waiting on review from " with nobody named.
+// empty name then read as "waiting on review from " with nobody named. An
+// empty node is a team the token cannot read: still a request, so it is
+// named "@hidden" rather than dropped.
 func Test_QueryGithub_TeamReviewersAreNamed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"data":{"search":{"edges":[{"node":{
@@ -792,7 +794,7 @@ func Test_QueryGithub_TeamReviewersAreNamed(t *testing.T) {
 		t.Fatalf("expected one pr, got %d", len(prs))
 	}
 	got := prs[0].ReviewRequestedFromUsers
-	want := []string{"adam", "@backend"}
+	want := []string{"adam", "@backend", "@hidden"}
 	if len(got) != len(want) {
 		t.Fatalf("reviewers = %q, want %q", got, want)
 	}

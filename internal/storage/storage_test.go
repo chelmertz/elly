@@ -291,6 +291,7 @@ func TestNewStorage_AddsMergeabilityColumnsToOldDatabase(t *testing.T) {
 	oldDdl := strings.Replace(ddl, "    mergeable text not null default '',\n", "", 1)
 	oldDdl = strings.Replace(oldDdl, "    merge_state_status text not null default '',\n", "", 1)
 	oldDdl = strings.Replace(oldDdl, "    head_ref_oid text not null default '',\n", "", 1)
+	oldDdl = strings.Replace(oldDdl, "    review_requested_of_user boolean not null default 0,\n", "", 1)
 	old, err := sql.Open("sqlite", "file:"+path+"?mode=rwc")
 	if err != nil {
 		t.Fatal(err)
@@ -314,6 +315,7 @@ func TestNewStorage_AddsMergeabilityColumnsToOldDatabase(t *testing.T) {
 
 	prs[0].Mergeable, prs[0].MergeStateStatus = "CONFLICTING", "DIRTY"
 	prs[0].HeadRefOid = "0123456789abcdef0123456789abcdef01234567"
+	prs[0].ReviewRequestedOfUser = true
 	if err := store.StoreRepoPrs(prs); err != nil {
 		t.Fatal(err)
 	}
@@ -323,6 +325,9 @@ func TestNewStorage_AddsMergeabilityColumnsToOldDatabase(t *testing.T) {
 	}
 	if got.HeadRefOid != "0123456789abcdef0123456789abcdef01234567" {
 		t.Fatalf("round trip: headRefOid=%q", got.HeadRefOid)
+	}
+	if !got.ReviewRequestedOfUser {
+		t.Fatal("round trip: reviewRequestedOfUser lost")
 	}
 	// a second start must treat the existing columns as a no-op
 	NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)

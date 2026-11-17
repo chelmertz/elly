@@ -1,0 +1,1600 @@
+{
+  "exchanges": [
+    {
+      "request": {
+        "query": "query($search: String!) {\n  search(type: ISSUE, query: $search, first: 100) {    edges {\n      node {\n        ... on PullRequest {\n          id\n          title\n          url\n          isDraft\n          reviewRequests(first: 100) {\n            nodes {\n              requestedReviewer {\n                ... on User {\n                  login\n                }\n                ... on Team {\n                  name\n                }\n                ... on Mannequin {\n                  login\n                }\n              }\n            }\n          }\n          repository {\n            url\n            name\n            owner {\n              login\n            }\n          }\n          reviewDecision\n          updatedAt\n          author {\n            login\n          }\n          additions\n          deletions\n          headRefOid\n          comments(last: 5) {\n            edges {\n              node {\n                updatedAt\n                author {\n                  login\n                }\n                url\n              }\n            }\n          }\n          commits(last: 1) {\n            nodes {\n              commit {\n                author {\n                  date\n                  email\n                  name\n                }\n                # scalar only - see StatusCheckRollup in the struct above\n                statusCheckRollup {\n                  state\n                }\n              }\n            }\n          }\n          # threads can't be filtered on isResolved server-side, so every\n          # thread is fetched: this first page here, the rest per PR through\n          # queryReviewThreadsPage (see fetchRemainingReviewThreads). The\n          # page is kept small because its cost multiplies with the 100 PRs\n          # above; a follow-up query only costs what that one PR has.\n          reviewThreads(first: 15) {\n            totalCount\n            pageInfo {\n              hasNextPage\n              endCursor\n            }\n            edges {\n              node {\n                isResolved\n                isOutdated\n                isCollapsed\n                firstComment: comments(first: 1) {\n                  nodes {\n                    author {\n                      login\n                    }\n                  }\n                }\n                lastComment: comments(last: 1) {\n                  nodes {\n                    author {\n                      login\n                    }\n                    url\n                    createdAt\n                    reactions(first: 7) {\n                        edges {\n                            node {\n                                content\n                                user {\n                                    login\n                                }\n                            }\n                        }\n                    }\n                  }\n                }\n              }\n            }\n          }\n          reviews(first: 20) {\n            edges {\n                node {\n                    author {\n                        login\n                    }\n                    url\n                    state\n                    submittedAt\n                }\n            }\n          }\n        }\n      }\n    }\n  }\n}",
+        "variables": {
+          "search": "state:open involves:me type:pr archived:false"
+        }
+      },
+      "response": {
+        "data": {
+          "search": {
+            "edges": [
+              {
+                "node": {
+                  "additions": 154,
+                  "author": {
+                    "login": "me"
+                  },
+                  "comments": {
+                    "edges": []
+                  },
+                  "commits": {
+                    "nodes": [
+                      {
+                        "commit": {
+                          "author": {
+                            "date": "2025-05-25T02:21:57Z",
+                            "email": "redacted-1",
+                            "name": "redacted-2"
+                          },
+                          "statusCheckRollup": {
+                            "state": "SUCCESS"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "deletions": 52,
+                  "headRefOid": "0000000000000000000000000000000000000001",
+                  "id": "ID_000004",
+                  "isDraft": false,
+                  "repository": {
+                    "name": "repo1",
+                    "owner": {
+                      "login": "owner1"
+                    },
+                    "url": "https://github.com/owner1/repo1"
+                  },
+                  "reviewDecision": "REVIEW_REQUIRED",
+                  "reviewRequests": {
+                    "nodes": []
+                  },
+                  "reviewThreads": {
+                    "edges": [],
+                    "pageInfo": {
+                      "endCursor": null,
+                      "hasNextPage": false
+                    },
+                    "totalCount": 0
+                  },
+                  "reviews": {
+                    "edges": []
+                  },
+                  "title": "redacted-3",
+                  "updatedAt": "2025-05-25T02:22:00Z",
+                  "url": "https://github.com/owner1/repo1/pull/1"
+                }
+              },
+              {
+                "node": {
+                  "additions": 766,
+                  "author": {
+                    "login": "user1"
+                  },
+                  "comments": {
+                    "edges": [
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "updatedAt": "2025-05-25T06:05:29Z",
+                          "url": "https://github.com/owner1/repo1/pull/2#issuecomment-1"
+                        }
+                      }
+                    ]
+                  },
+                  "commits": {
+                    "nodes": [
+                      {
+                        "commit": {
+                          "author": {
+                            "date": "2025-05-25T06:04:23Z",
+                            "email": "redacted-4",
+                            "name": "redacted-5"
+                          },
+                          "statusCheckRollup": {
+                            "state": "SUCCESS"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "deletions": 4,
+                  "headRefOid": "0000000000000000000000000000000000000002",
+                  "id": "ID_000003",
+                  "isDraft": false,
+                  "repository": {
+                    "name": "repo1",
+                    "owner": {
+                      "login": "owner1"
+                    },
+                    "url": "https://github.com/owner1/repo1"
+                  },
+                  "reviewDecision": null,
+                  "reviewRequests": {
+                    "nodes": [
+                      {
+                        "requestedReviewer": null
+                      },
+                      {
+                        "requestedReviewer": {
+                          "login": "me"
+                        }
+                      }
+                    ]
+                  },
+                  "reviewThreads": {
+                    "edges": [],
+                    "pageInfo": {
+                      "endCursor": null,
+                      "hasNextPage": false
+                    },
+                    "totalCount": 0
+                  },
+                  "reviews": {
+                    "edges": []
+                  },
+                  "title": "redacted-6",
+                  "updatedAt": "2025-05-25T06:05:29Z",
+                  "url": "https://github.com/owner1/repo1/pull/2"
+                }
+              },
+              {
+                "node": {
+                  "additions": 889,
+                  "author": {
+                    "login": "user1"
+                  },
+                  "comments": {
+                    "edges": [
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "updatedAt": "2025-05-20T20:39:38Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#issuecomment-2"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "updatedAt": "2025-05-20T23:27:19Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#issuecomment-3"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "updatedAt": "2025-05-25T03:33:24Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#issuecomment-4"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "updatedAt": "2025-05-25T04:35:43Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#issuecomment-5"
+                        }
+                      }
+                    ]
+                  },
+                  "commits": {
+                    "nodes": [
+                      {
+                        "commit": {
+                          "author": {
+                            "date": "2025-05-25T04:35:14Z",
+                            "email": "redacted-4",
+                            "name": "redacted-5"
+                          },
+                          "statusCheckRollup": {
+                            "state": "SUCCESS"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "deletions": 1,
+                  "headRefOid": "0000000000000000000000000000000000000003",
+                  "id": "ID_000002",
+                  "isDraft": true,
+                  "repository": {
+                    "name": "repo1",
+                    "owner": {
+                      "login": "owner1"
+                    },
+                    "url": "https://github.com/owner1/repo1"
+                  },
+                  "reviewDecision": "REVIEW_REQUIRED",
+                  "reviewRequests": {
+                    "nodes": []
+                  },
+                  "reviewThreads": {
+                    "edges": [
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T02:34:19Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r1"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T02:34:28Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r2"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T02:34:33Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r3"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T02:34:14Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r4"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T02:34:24Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r5"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T02:34:38Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r6"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T02:34:43Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r7"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T02:34:48Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r8"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T02:34:53Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r9"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T02:34:57Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r10"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T02:35:02Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r11"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T02:35:09Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r12"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T03:38:54Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r13"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": true,
+                          "isOutdated": true,
+                          "isResolved": true,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "me"
+                                },
+                                "createdAt": "2025-05-25T04:42:40Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo1/pull/3#discussion_r14"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "pageInfo": {
+                      "endCursor": "cursor1",
+                      "hasNextPage": false
+                    },
+                    "totalCount": 14
+                  },
+                  "reviews": {
+                    "edges": [
+                      {
+                        "node": {
+                          "author": {
+                            "login": "me"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T00:48:12Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-1"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T20:39:02Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-2"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T20:39:04Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-3"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T20:39:06Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-4"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T20:39:08Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-5"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T20:39:10Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-6"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T20:39:12Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-7"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T20:39:13Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-8"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T20:39:15Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-9"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T20:39:17Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-10"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T20:39:18Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-11"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T20:39:20Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-12"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-20T20:39:22Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-13"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "me"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-25T02:35:34Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-14"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-25T03:33:07Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-15"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "me"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-25T03:39:12Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-16"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-25T04:35:40Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-17"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "me"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-05-25T04:42:47Z",
+                          "url": "https://github.com/owner1/repo1/pull/3#pullrequestreview-18"
+                        }
+                      }
+                    ]
+                  },
+                  "title": "redacted-7",
+                  "updatedAt": "2025-05-25T04:42:48Z",
+                  "url": "https://github.com/owner1/repo1/pull/3"
+                }
+              },
+              {
+                "node": {
+                  "additions": 840,
+                  "author": {
+                    "login": "user1"
+                  },
+                  "comments": {
+                    "edges": [
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user2"
+                          },
+                          "updatedAt": "2025-01-07T00:44:14Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#issuecomment-6"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "updatedAt": "2025-03-04T03:35:16Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#issuecomment-7"
+                        }
+                      }
+                    ]
+                  },
+                  "commits": {
+                    "nodes": [
+                      {
+                        "commit": {
+                          "author": {
+                            "date": "2025-03-04T03:30:58Z",
+                            "email": "redacted-4",
+                            "name": "redacted-5"
+                          },
+                          "statusCheckRollup": {
+                            "state": "SUCCESS"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "deletions": 0,
+                  "headRefOid": "0000000000000000000000000000000000000004",
+                  "id": "ID_000001",
+                  "isDraft": false,
+                  "repository": {
+                    "name": "repo2",
+                    "owner": {
+                      "login": "owner1"
+                    },
+                    "url": "https://github.com/owner1/repo2"
+                  },
+                  "reviewDecision": "REVIEW_REQUIRED",
+                  "reviewRequests": {
+                    "nodes": [
+                      {
+                        "requestedReviewer": {
+                          "login": "user3"
+                        }
+                      },
+                      {
+                        "requestedReviewer": {
+                          "login": "user4"
+                        }
+                      },
+                      {
+                        "requestedReviewer": {
+                          "login": "me"
+                        }
+                      }
+                    ]
+                  },
+                  "reviewThreads": {
+                    "edges": [
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user5"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": false,
+                          "isOutdated": false,
+                          "isResolved": false,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user5"
+                                },
+                                "createdAt": "2025-01-01T01:28:32Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo2/pull/4#discussion_r15"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user6"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": false,
+                          "isOutdated": false,
+                          "isResolved": false,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user6"
+                                },
+                                "createdAt": "2025-01-05T03:40:45Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo2/pull/4#discussion_r16"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user6"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": false,
+                          "isOutdated": true,
+                          "isResolved": false,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user6"
+                                },
+                                "createdAt": "2025-01-05T03:43:26Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo2/pull/4#discussion_r17"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user6"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": false,
+                          "isOutdated": true,
+                          "isResolved": false,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user6"
+                                },
+                                "createdAt": "2025-01-05T03:44:38Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo2/pull/4#discussion_r18"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "pageInfo": {
+                      "endCursor": "cursor2",
+                      "hasNextPage": false
+                    },
+                    "totalCount": 4
+                  },
+                  "reviews": {
+                    "edges": [
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user5"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2024-12-22T04:13:10Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-19"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2024-12-23T04:37:14Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-20"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user5"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-01-01T01:28:32Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-21"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user5"
+                          },
+                          "state": "DISMISSED",
+                          "submittedAt": "2025-01-01T01:28:46Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-22"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user6"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-01-05T03:40:45Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-23"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user6"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-01-05T03:43:26Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-24"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user6"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-01-05T03:44:38Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-25"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user6"
+                          },
+                          "state": "DISMISSED",
+                          "submittedAt": "2025-01-05T03:46:24Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-26"
+                        }
+                      }
+                    ]
+                  },
+                  "title": "redacted-8",
+                  "updatedAt": "2025-03-10T21:39:57Z",
+                  "url": "https://github.com/owner1/repo2/pull/4"
+                }
+              }
+            ]
+          }
+        },
+        "errors": [
+          {
+            "extensions": {
+              "ip_allow_list_failure": false,
+              "saml_failure": false
+            },
+            "locations": [
+              {
+                "column": 15,
+                "line": 11
+              }
+            ],
+            "message": "redacted-9",
+            "path": [
+              "redacted-10",
+              "redacted-11",
+              1,
+              "redacted-12",
+              "redacted-13",
+              "redacted-14",
+              0,
+              "redacted-15"
+            ],
+            "type": "FORBIDDEN"
+          }
+        ]
+      },
+      "status": 200
+    },
+    {
+      "request": {
+        "query": "query($search: String!) {\n  search(type: ISSUE, query: $search, first: 100) {    edges {\n      node {\n        ... on PullRequest {\n          id\n          title\n          url\n          isDraft\n          reviewRequests(first: 100) {\n            nodes {\n              requestedReviewer {\n                ... on User {\n                  login\n                }\n                ... on Team {\n                  name\n                }\n                ... on Mannequin {\n                  login\n                }\n              }\n            }\n          }\n          repository {\n            url\n            name\n            owner {\n              login\n            }\n          }\n          reviewDecision\n          updatedAt\n          author {\n            login\n          }\n          additions\n          deletions\n          headRefOid\n          comments(last: 5) {\n            edges {\n              node {\n                updatedAt\n                author {\n                  login\n                }\n                url\n              }\n            }\n          }\n          commits(last: 1) {\n            nodes {\n              commit {\n                author {\n                  date\n                  email\n                  name\n                }\n                # scalar only - see StatusCheckRollup in the struct above\n                statusCheckRollup {\n                  state\n                }\n              }\n            }\n          }\n          # threads can't be filtered on isResolved server-side, so every\n          # thread is fetched: this first page here, the rest per PR through\n          # queryReviewThreadsPage (see fetchRemainingReviewThreads). The\n          # page is kept small because its cost multiplies with the 100 PRs\n          # above; a follow-up query only costs what that one PR has.\n          reviewThreads(first: 15) {\n            totalCount\n            pageInfo {\n              hasNextPage\n              endCursor\n            }\n            edges {\n              node {\n                isResolved\n                isOutdated\n                isCollapsed\n                firstComment: comments(first: 1) {\n                  nodes {\n                    author {\n                      login\n                    }\n                  }\n                }\n                lastComment: comments(last: 1) {\n                  nodes {\n                    author {\n                      login\n                    }\n                    url\n                    createdAt\n                    reactions(first: 7) {\n                        edges {\n                            node {\n                                content\n                                user {\n                                    login\n                                }\n                            }\n                        }\n                    }\n                  }\n                }\n              }\n            }\n          }\n          reviews(first: 20) {\n            edges {\n                node {\n                    author {\n                        login\n                    }\n                    url\n                    state\n                    submittedAt\n                }\n            }\n          }\n        }\n      }\n    }\n  }\n}",
+        "variables": {
+          "search": "state:open review-requested:me type:pr archived:false"
+        }
+      },
+      "response": {
+        "data": {
+          "search": {
+            "edges": [
+              {
+                "node": {
+                  "additions": 766,
+                  "author": {
+                    "login": "user1"
+                  },
+                  "comments": {
+                    "edges": [
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "updatedAt": "2025-05-25T06:05:29Z",
+                          "url": "https://github.com/owner1/repo1/pull/2#issuecomment-1"
+                        }
+                      }
+                    ]
+                  },
+                  "commits": {
+                    "nodes": [
+                      {
+                        "commit": {
+                          "author": {
+                            "date": "2025-05-25T06:04:23Z",
+                            "email": "redacted-4",
+                            "name": "redacted-5"
+                          },
+                          "statusCheckRollup": {
+                            "state": "SUCCESS"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "deletions": 4,
+                  "headRefOid": "0000000000000000000000000000000000000002",
+                  "id": "ID_000003",
+                  "isDraft": false,
+                  "repository": {
+                    "name": "repo1",
+                    "owner": {
+                      "login": "owner1"
+                    },
+                    "url": "https://github.com/owner1/repo1"
+                  },
+                  "reviewDecision": null,
+                  "reviewRequests": {
+                    "nodes": [
+                      {
+                        "requestedReviewer": null
+                      },
+                      {
+                        "requestedReviewer": {
+                          "login": "me"
+                        }
+                      }
+                    ]
+                  },
+                  "reviewThreads": {
+                    "edges": [],
+                    "pageInfo": {
+                      "endCursor": null,
+                      "hasNextPage": false
+                    },
+                    "totalCount": 0
+                  },
+                  "reviews": {
+                    "edges": []
+                  },
+                  "title": "redacted-6",
+                  "updatedAt": "2025-05-25T06:05:29Z",
+                  "url": "https://github.com/owner1/repo1/pull/2"
+                }
+              },
+              {
+                "node": {
+                  "additions": 840,
+                  "author": {
+                    "login": "user1"
+                  },
+                  "comments": {
+                    "edges": [
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user2"
+                          },
+                          "updatedAt": "2025-01-07T00:44:14Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#issuecomment-6"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "updatedAt": "2025-03-04T03:35:16Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#issuecomment-7"
+                        }
+                      }
+                    ]
+                  },
+                  "commits": {
+                    "nodes": [
+                      {
+                        "commit": {
+                          "author": {
+                            "date": "2025-03-04T03:30:58Z",
+                            "email": "redacted-4",
+                            "name": "redacted-5"
+                          },
+                          "statusCheckRollup": {
+                            "state": "SUCCESS"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "deletions": 0,
+                  "headRefOid": "0000000000000000000000000000000000000004",
+                  "id": "ID_000001",
+                  "isDraft": false,
+                  "repository": {
+                    "name": "repo2",
+                    "owner": {
+                      "login": "owner1"
+                    },
+                    "url": "https://github.com/owner1/repo2"
+                  },
+                  "reviewDecision": "REVIEW_REQUIRED",
+                  "reviewRequests": {
+                    "nodes": [
+                      {
+                        "requestedReviewer": {
+                          "login": "user3"
+                        }
+                      },
+                      {
+                        "requestedReviewer": {
+                          "login": "user4"
+                        }
+                      },
+                      {
+                        "requestedReviewer": {
+                          "login": "me"
+                        }
+                      }
+                    ]
+                  },
+                  "reviewThreads": {
+                    "edges": [
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user5"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": false,
+                          "isOutdated": false,
+                          "isResolved": false,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user5"
+                                },
+                                "createdAt": "2025-01-01T01:28:32Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo2/pull/4#discussion_r15"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user6"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": false,
+                          "isOutdated": false,
+                          "isResolved": false,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user6"
+                                },
+                                "createdAt": "2025-01-05T03:40:45Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo2/pull/4#discussion_r16"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user6"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": false,
+                          "isOutdated": true,
+                          "isResolved": false,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user6"
+                                },
+                                "createdAt": "2025-01-05T03:43:26Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo2/pull/4#discussion_r17"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "firstComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user6"
+                                }
+                              }
+                            ]
+                          },
+                          "isCollapsed": false,
+                          "isOutdated": true,
+                          "isResolved": false,
+                          "lastComment": {
+                            "nodes": [
+                              {
+                                "author": {
+                                  "login": "user6"
+                                },
+                                "createdAt": "2025-01-05T03:44:38Z",
+                                "reactions": {
+                                  "edges": []
+                                },
+                                "url": "https://github.com/owner1/repo2/pull/4#discussion_r18"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "pageInfo": {
+                      "endCursor": "cursor2",
+                      "hasNextPage": false
+                    },
+                    "totalCount": 4
+                  },
+                  "reviews": {
+                    "edges": [
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user5"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2024-12-22T04:13:10Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-19"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user1"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2024-12-23T04:37:14Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-20"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user5"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-01-01T01:28:32Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-21"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user5"
+                          },
+                          "state": "DISMISSED",
+                          "submittedAt": "2025-01-01T01:28:46Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-22"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user6"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-01-05T03:40:45Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-23"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user6"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-01-05T03:43:26Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-24"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user6"
+                          },
+                          "state": "COMMENTED",
+                          "submittedAt": "2025-01-05T03:44:38Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-25"
+                        }
+                      },
+                      {
+                        "node": {
+                          "author": {
+                            "login": "user6"
+                          },
+                          "state": "DISMISSED",
+                          "submittedAt": "2025-01-05T03:46:24Z",
+                          "url": "https://github.com/owner1/repo2/pull/4#pullrequestreview-26"
+                        }
+                      }
+                    ]
+                  },
+                  "title": "redacted-8",
+                  "updatedAt": "2025-03-10T21:39:57Z",
+                  "url": "https://github.com/owner1/repo2/pull/4"
+                }
+              }
+            ]
+          }
+        },
+        "errors": [
+          {
+            "extensions": {
+              "ip_allow_list_failure": false,
+              "saml_failure": false
+            },
+            "locations": [
+              {
+                "column": 15,
+                "line": 11
+              }
+            ],
+            "message": "redacted-9",
+            "path": [
+              "redacted-10",
+              "redacted-11",
+              0,
+              "redacted-12",
+              "redacted-13",
+              "redacted-14",
+              0,
+              "redacted-15"
+            ],
+            "type": "FORBIDDEN"
+          }
+        ]
+      },
+      "status": 200
+    },
+    {
+      "request": {
+        "query": "query($ids: [ID!]!) {\n  nodes(ids: $ids) {\n    ... on PullRequest {\n      id\n      mergeable\n      mergeStateStatus\n    }\n  }\n}",
+        "variables": {
+          "ids": [
+            "ID_000004"
+          ]
+        }
+      },
+      "response": {
+        "data": {
+          "nodes": [
+            {
+              "id": "ID_000004",
+              "mergeStateStatus": "BLOCKED",
+              "mergeable": "MERGEABLE"
+            }
+          ]
+        }
+      },
+      "status": 200
+    }
+  ],
+  "pollTime": "2025-05-25T09:10:44Z"
+}

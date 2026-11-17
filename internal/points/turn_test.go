@@ -200,3 +200,21 @@ func TestTurnOfNeverPointsCheckAtApprove(t *testing.T) {
 		t.Errorf("turn %+v", turn)
 	}
 }
+
+// An own PR whose only request went to a team the token cannot read is
+// waiting on that team, not on the user to add a reviewer.
+func TestTurnOf_OwnPRAskingAHiddenTeamWaitsOnOthers(t *testing.T) {
+	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "me", ReviewRequestedFromUsers: []string{"@hidden"}, LastUpdated: time.Now()}
+	if got := TurnOf(pr, "me", time.Now()); got.Group != GroupOnOthers {
+		t.Fatalf("got %+v, want On others", got)
+	}
+}
+
+// A PR the review-requested search returned is the user's to review even
+// when the reviewer list does not name them: the request went to a team.
+func TestTurnOf_RequestedThroughATeamIsYours(t *testing.T) {
+	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "them", ReviewRequestedOfUser: true, LastUpdated: time.Now()}
+	if got := TurnOf(pr, "me", time.Now()); got.Group != GroupWaiting || got.Verb != "Review" {
+		t.Fatalf("got %+v, want Review in Waiting for you", got)
+	}
+}

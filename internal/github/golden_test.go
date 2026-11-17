@@ -345,3 +345,23 @@ func Test_Poll1_PinnedWiring(t *testing.T) {
 		}
 	})
 }
+
+// A review asked only of a team the token cannot read, as poll-3 replays it:
+// the reviewer list holds just the hidden team, and the PR is still the
+// user's to review.
+func Test_Recordings_TeamOnlyRequestIsTheUsers(t *testing.T) {
+	rec := loadRecording(t, filepath.Join(recordingsDir, "poll-3.json"))
+	for _, g := range replay(t, rec).Prs {
+		if !strings.HasSuffix(g.Pr.Url, "/repo1/pull/2") {
+			continue
+		}
+		if !slices.Equal(g.Pr.ReviewRequestedFromUsers, []string{"@hidden"}) {
+			t.Fatalf("reviewers %q, want only the hidden team", g.Pr.ReviewRequestedFromUsers)
+		}
+		if turn := points.TurnOf(g.Pr, "me", rec.PollTime); turn.Group != points.GroupWaiting || turn.Verb != "Review" {
+			t.Fatalf("turn %+v, want Review in Waiting for you", turn)
+		}
+		return
+	}
+	t.Fatal("repo1/pull/2 is not in poll-3")
+}

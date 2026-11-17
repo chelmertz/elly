@@ -476,7 +476,19 @@ func record(dir string, owners []string, verbose bool, dbPath, baseURL string, l
 	if !found {
 		return "", errors.New("no token stored; set one up in elly first")
 	}
-	out, err := github.Record(baseURL, pat.Token, pat.Username, owners, logger)
+	// An owner with its own token is polled with that token, so -record
+	// uses it too: the main token may not see that owner's PRs at all.
+	token := pat.Token
+	if len(owners) == 1 {
+		o, found, err := storage.ReadOwnerPAT(dbPath, owners[0])
+		if err != nil {
+			return "", fmt.Errorf("could not read the owner token: %w", err)
+		}
+		if found {
+			token = o.Token
+		}
+	}
+	out, err := github.Record(baseURL, token, pat.Username, owners, logger)
 	if err != nil {
 		return "", err
 	}

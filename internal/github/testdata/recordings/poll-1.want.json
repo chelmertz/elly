@@ -28,6 +28,7 @@
         "Mergeable": "MERGEABLE",
         "MergeStateStatus": "CLEAN",
         "HeadRefOid": "0000000000000000000000000000000000000001",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -67,6 +68,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000002",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -106,6 +108,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000003",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -144,6 +147,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000004",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -182,6 +186,7 @@
         "Mergeable": "MERGEABLE",
         "MergeStateStatus": "BLOCKED",
         "HeadRefOid": "0000000000000000000000000000000000000005",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -224,6 +229,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000006",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -264,6 +270,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000007",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -300,6 +307,7 @@
         "Mergeable": "MERGEABLE",
         "MergeStateStatus": "BLOCKED",
         "HeadRefOid": "0000000000000000000000000000000000000008",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -339,6 +347,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000009",
+        "ReviewRequestedOfUser": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -377,6 +386,7 @@
         "Mergeable": "CONFLICTING",
         "MergeStateStatus": "DIRTY",
         "HeadRefOid": "0000000000000000000000000000000000000010",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -416,6 +426,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000011",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -455,6 +466,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000012",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -494,6 +506,7 @@
         "Mergeable": "MERGEABLE",
         "MergeStateStatus": "BLOCKED",
         "HeadRefOid": "0000000000000000000000000000000000000013",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -530,6 +543,7 @@
         "Mergeable": "MERGEABLE",
         "MergeStateStatus": "BLOCKED",
         "HeadRefOid": "0000000000000000000000000000000000000014",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -567,6 +581,7 @@
         "Mergeable": "MERGEABLE",
         "MergeStateStatus": "BLOCKED",
         "HeadRefOid": "0000000000000000000000000000000000000015",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -606,6 +621,7 @@
         "Mergeable": "MERGEABLE",
         "MergeStateStatus": "BLOCKED",
         "HeadRefOid": "0000000000000000000000000000000000000016",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -644,6 +660,7 @@
         "Mergeable": "MERGEABLE",
         "MergeStateStatus": "CLEAN",
         "HeadRefOid": "0000000000000000000000000000000000000017",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -682,6 +699,7 @@
         "Mergeable": "CONFLICTING",
         "MergeStateStatus": "DIRTY",
         "HeadRefOid": "0000000000000000000000000000000000000018",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -720,6 +738,7 @@
         "Mergeable": "MERGEABLE",
         "MergeStateStatus": "BLOCKED",
         "HeadRefOid": "0000000000000000000000000000000000000019",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -758,6 +777,7 @@
         "Mergeable": "MERGEABLE",
         "MergeStateStatus": "BEHIND",
         "HeadRefOid": "0000000000000000000000000000000000000020",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -796,6 +816,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000021",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -833,6 +854,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000022",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -871,6 +893,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000023",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -908,6 +931,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000024",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -944,6 +968,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000025",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -980,6 +1005,7 @@
         "Mergeable": "MERGEABLE",
         "MergeStateStatus": "BLOCKED",
         "HeadRefOid": "0000000000000000000000000000000000000026",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1020,6 +1046,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000027",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1056,6 +1083,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000028",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1095,6 +1123,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000029",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1132,6 +1161,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000030",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1168,6 +1198,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000031",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1204,6 +1235,7 @@
         "Mergeable": "",
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000032",
+        "ReviewRequestedOfUser": false,
         "RawJsonResponse": null,
         "Annotations": null
       },

@@ -93,6 +93,12 @@ type ViewPr struct {
 	// consumer tells "new commits pushed" apart from "new comments on the
 	// same commits"; elly itself does not read it.
 	HeadRefOid      string
+	// ReviewRequestedOfUser is true when github's review-requested search
+	// returned the PR: the user was asked, by name or through a team. A team
+	// request names the team, not the user, and a token that cannot read the
+	// org's teams gets the team as an empty node, so the reviewer list alone
+	// cannot say the user was asked.
+	ReviewRequestedOfUser bool
 	RawJsonResponse json.RawMessage
 	// Annotations are what other local tools say about the PR, unexpired
 	// only. They are stored apart from the PR, which is replaced every fetch.

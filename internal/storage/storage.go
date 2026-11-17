@@ -162,6 +162,7 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 		`alter table prs add column merge_state_status text not null default ''`,
 		`alter table prs add column head_ref_oid text not null default ''`,
 		`alter table prs add column reviewed_by text not null default ''`,
+		`alter table prs add column review_requested_of_user boolean not null default 0`,
 		`alter table pat add column owner text not null default ''`,
 	} {
 		if _, err := db.ExecContext(ctx, alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
@@ -255,6 +256,7 @@ func (s *DbStorage) Prs() StoredState {
 			Mergeable:                dbPr.Mergeable,
 			MergeStateStatus:         dbPr.MergeStateStatus,
 			HeadRefOid:               dbPr.HeadRefOid,
+			ReviewRequestedOfUser:    dbPr.ReviewRequestedOfUser,
 			RawJsonResponse:          dbPr.RawJsonResponse,
 		})
 	}
@@ -351,6 +353,7 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 			Mergeable:                pr.Mergeable,
 			MergeStateStatus:         pr.MergeStateStatus,
 			HeadRefOid:               pr.HeadRefOid,
+			ReviewRequestedOfUser:    pr.ReviewRequestedOfUser,
 			RawJsonResponse:          pr.RawJsonResponse,
 		})
 		if err != nil {
@@ -533,6 +536,25 @@ func ReadPAT(dbPath string) (StoredPAT, bool, error) {
 	}
 	defer db.Close() //nolint:errcheck // read-only handle, nothing to flush
 	return (&DbStorage{db: New(db), rawDb: db}).GetPAT()
+}
+
+// ReadOwnerPAT returns owner's token, read-only like ReadPAT, for -record.
+func ReadOwnerPAT(dbPath, owner string) (OwnerPAT, bool, error) {
+	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=ro&_pragma=busy_timeout(5000)", dbPath))
+	if err != nil {
+		return OwnerPAT{}, false, fmt.Errorf("could not open database: %w", err)
+	}
+	defer db.Close() //nolint:errcheck // read-only handle, nothing to flush
+	owners, err := (&DbStorage{db: New(db), rawDb: db}).OwnerPATs()
+	if err != nil {
+		return OwnerPAT{}, false, err
+	}
+	for _, o := range owners {
+		if strings.EqualFold(o.Owner, owner) {
+			return o, true, nil
+		}
+	}
+	return OwnerPAT{}, false, nil
 }
 
 // ClearPAT deletes the PAT and deletes the PRs it fetched, so

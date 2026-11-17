@@ -185,7 +185,10 @@ type requestedReviewerGraphQl struct {
 }
 
 // label returns the reviewer's name, "@"-prefixed for a team so it cannot be
-// confused with a user, and "" for a node github left empty.
+// confused with a user. A node github left empty is a reviewer the token may
+// not see, in practice a team in an org whose teams it cannot read: it is
+// still a request, so it is labelled rather than dropped, or an own PR asking
+// only that team reads as asking nobody.
 func (r requestedReviewerGraphQl) label() string {
 	if r.Login != "" {
 		return r.Login
@@ -193,8 +196,11 @@ func (r requestedReviewerGraphQl) label() string {
 	if r.Name != "" {
 		return "@" + r.Name
 	}
-	return ""
+	return hiddenReviewer
 }
+
+// hiddenReviewer labels a requested reviewer github did not disclose.
+const hiddenReviewer = "@hidden"
 
 type prReviewThreadGraphQl struct {
 	IsResolved  bool
@@ -605,6 +611,16 @@ func (a api) poll(username string) ([]types.ViewPr, []types.Degradation, error) 
 			Seen: time.Now(),
 		}
 	}
+	// Only this search knows the user was asked through a team: the
+	// request names the team, and the node is empty when the token cannot
+	// read the org's teams.
+	requestedOfUser := make(map[string]bool, len(requested))
+	for _, e := range requested {
+		var pr struct{ Url string }
+		if json.Unmarshal(e.Node, &pr) == nil {
+			requestedOfUser[pr.Url] = true
+		}
+	}
 	edges = append(edges, requested...)
 
 	viewPrs := make([]types.ViewPr, 0)
@@ -712,6 +728,7 @@ func (a api) poll(username string) ([]types.ViewPr, []types.Degradation, error) 
 			ChecksFailing:            checksFailing,
 			ChecksComplete:           checksComplete,
 			HeadRefOid:               pr.HeadRefOid,
+			ReviewRequestedOfUser:    requestedOfUser[pr.Url],
 			RawJsonResponse:          prEdge.Node,
 		}
 		logger.Debug("fetched a pr", slog.Any("pr", viewPr))
