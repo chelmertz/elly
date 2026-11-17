@@ -329,7 +329,7 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
                     {{if $r.PrHref}}<a class="num" href="{{$r.PrHref}}">#{{$r.Number}}</a>{{else}}<span class="num">#{{$r.Number}}</span>{{end}}
                     <button type="button" class="toggle" aria-expanded="false" aria-controls="{{$r.Anchor}}-panel">
                         <span class="title" title="{{$r.Title}}">{{$r.Title}}</span>
-                        {{with $r.Tag}}<span class="tag {{.Class}}">claude {{.Symbol}} {{.Word}}</span>{{end}}
+                        {{with $r.Tag}}<span class="tag {{.Class}}">claude {{.Word}}</span>{{end}}
                         <span class="who">{{$r.Repo}} · {{$r.Author}}</span>
                         <span class="wait {{if eq $r.Bucket "week+"}}week{{else}}{{$r.Bucket}}{{end}}" title="since the last activity by someone else">{{$r.Bucket}}</span>
                     </button>

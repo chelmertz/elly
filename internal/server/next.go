@@ -132,14 +132,14 @@ type nextRow struct {
 	// Help is an annotation's `?` link: it shows on the row, not in the panel.
 	Help      template.URL
 	HelpTitle string
-	BuryUrl string
-	Buried  bool
+	BuryUrl   string
+	Buried    bool
 }
 
+// nextTag is claude-review's state on the row: its word, coloured by class.
 type nextTag struct {
-	Symbol string
-	Word   string
-	Class  string
+	Word  string
+	Class string
 }
 
 type nextEvent struct {
@@ -472,13 +472,13 @@ func reviewTag(pr types.ViewPr) *nextTag {
 		}
 		switch a.State {
 		case types.AnnotationRunning:
-			return &nextTag{"●", "running", "running"}
+			return &nextTag{"running", "running"}
 		case types.AnnotationStuck:
-			return &nextTag{"!", "stuck", "stuck"}
+			return &nextTag{"stuck", "stuck"}
 		case types.AnnotationNeedsYou:
-			return &nextTag{"?", "needs you", "needs-you"}
+			return &nextTag{"needs you", "needs-you"}
 		case types.AnnotationHandled:
-			return &nextTag{"✓", "handled", "handled"}
+			return &nextTag{"handled", "handled"}
 		}
 	}
 	return nil

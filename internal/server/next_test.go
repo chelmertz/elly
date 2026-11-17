@@ -205,7 +205,7 @@ func TestNextShowsWhatNeedsTheUserUnderTheRow(t *testing.T) {
 	for _, want := range []string{
 		`<div class="ask">the round has a question for you: &lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt; &amp; &#34;quotes&#34;</div>`,
 		`<div class="ask">a post was refused over the limit</div>`,
-		`<span class="tag stuck">claude ! stuck</span>`,
+		`<span class="tag stuck">claude stuck</span>`,
 		`<div class="note">started by a click</div>`,
 		`<div class="note">round posted its review</div>`,
 	} {
