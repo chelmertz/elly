@@ -163,14 +163,13 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 		`alter table prs add column head_ref_oid text not null default ''`,
 		`alter table prs add column reviewed_by text not null default ''`,
 		`alter table prs add column review_requested_of_user boolean not null default 0`,
-		`alter table pat add column owner text not null default ''`,
 	} {
 		if _, err := db.ExecContext(ctx, alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			check(err)
 		}
 	}
 	check(widenAnnotationStates(ctx, db))
-	check(dropInactivePATs(ctx, db))
+	check(migrateTokens(ctx, db))
 
 	return &DbStorage{
 		db:     New(db),
@@ -179,16 +178,88 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 	}
 }
 
-// dropInactivePATs deletes the tokens that elly before this version only
-// deactivated, after recording the newest one's login, which the login-change
-// check in StorePAT reads.
-func dropInactivePATs(ctx context.Context, db *sql.DB) error {
-	if _, err := db.ExecContext(ctx, `insert or ignore into meta (key, value)
-		select 'last_login', username from pat order by rowid desc limit 1`); err != nil {
-		return fmt.Errorf("could not record the last login: %w", err)
+// tokenSchemaVersion is the PRAGMA user_version from which tokens live in
+// the token table. Below it, pat and owner_pat may hold them.
+const tokenSchemaVersion = 1
+
+// migrateTokens moves tokens from pat, owner_pat and meta's
+// rate_limit_until into token, once: user_version gates it, so a later open
+// never touches the old tables, which schema.sql no longer creates. It runs
+// in one transaction; nothing is dropped before the copy commits. Org rows
+// whose login is not the main token's, or with no main token, are dropped
+// rather than carried over: they could never have been polled. A downgrade
+// to an elly from before this is unsupported. The WAL is checkpointed after,
+// so the old tables' pages do not linger in elly.db-wal.
+func migrateTokens(ctx context.Context, db *sql.DB) error {
+	var version int
+	if err := db.QueryRowContext(ctx, `pragma user_version`).Scan(&version); err != nil {
+		return fmt.Errorf("could not read the schema version: %w", err)
 	}
-	if _, err := db.ExecContext(ctx, `delete from pat where active = 0`); err != nil {
-		return fmt.Errorf("could not delete inactive PATs: %w", err)
+	if version >= tokenSchemaVersion {
+		return nil
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
+	has := func(table string) (bool, error) {
+		var n int
+		err := tx.QueryRowContext(ctx, `select count(*) from sqlite_master where type = 'table' and name = ?`, table).Scan(&n)
+		return n > 0, err
+	}
+	hasPat, err := has("pat")
+	if err != nil {
+		return fmt.Errorf("could not look for the old token tables: %w", err)
+	}
+	hasOwner, err := has("owner_pat")
+	if err != nil {
+		return fmt.Errorf("could not look for the old token tables: %w", err)
+	}
+	var steps []string
+	if hasPat {
+		var hasOwnerCol int
+		if err := tx.QueryRowContext(ctx, `select count(*) from pragma_table_info('pat') where name = 'owner'`).Scan(&hasOwnerCol); err != nil {
+			return fmt.Errorf("could not read the old token table: %w", err)
+		}
+		owner := "''"
+		if hasOwnerCol > 0 {
+			owner = "owner"
+		}
+		steps = append(steps,
+			// The login-change check in StorePAT reads last_login.
+			`insert or ignore into meta (key, value) select 'last_login', username from pat order by rowid desc limit 1`,
+			`insert into token (kind, owner, pat, username, set_at, expires_at, rate_limited_until)
+			select 'main', `+owner+`, pat, username, set_at, expires_at,
+				coalesce((select value from meta where key = 'rate_limit_until'), '')
+			from pat where active = 1 order by rowid desc limit 1`,
+		)
+	}
+	if hasOwner {
+		steps = append(steps, `insert into token (kind, owner, pat, username, set_at, expires_at, last_success, rate_limited_until, refused)
+			select 'org', o.owner, o.pat, o.username, o.set_at, o.expires_at, o.last_success, o.rate_limited_until, o.refused
+			from owner_pat o join token m on m.kind = 'main' and m.username = o.username collate nocase`)
+	}
+	if hasPat {
+		steps = append(steps, `drop table pat`)
+	}
+	if hasOwner {
+		steps = append(steps, `drop table owner_pat`)
+	}
+	steps = append(steps, `delete from meta where key = 'rate_limit_until'`,
+		fmt.Sprintf(`pragma user_version = %d`, tokenSchemaVersion))
+	for i, stmt := range steps {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("could not move tokens to the token table (step %d): %w", i+1, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("could not commit the token move: %w", err)
+	}
+	if hasPat || hasOwner {
+		if _, err := db.ExecContext(ctx, `pragma wal_checkpoint(TRUNCATE)`); err != nil {
+			return fmt.Errorf("could not checkpoint after the token move: %w", err)
+		}
 	}
 	return nil
 }
@@ -393,8 +464,8 @@ func (s *DbStorage) SetRateLimitUntil(t time.Time) error {
 
 func (s *DbStorage) IsRateLimitActive(now time.Time) bool {
 	val, err := s.db.GetRateLimitUntil(context.Background())
-	if errors.Is(err, sql.ErrNoRows) {
-		// "clear rate limit" deletes row, so this means we're not rate limited
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && val == "") {
+		// No main token, or one that is not limited.
 		return false
 	}
 	if err != nil {
@@ -411,7 +482,7 @@ func (s *DbStorage) IsRateLimitActive(now time.Time) bool {
 	}
 
 	// rate limit expired, clear it (ignore errors - stale value will be checked again next tick)
-	_ = s.db.ClearRateLimitUntil(context.Background())
+	_ = s.db.StoreRateLimitUntil(context.Background(), "")
 	s.logger.Info("no longer rate limited")
 	return false
 }
@@ -462,12 +533,9 @@ func (s *DbStorage) StorePAT(token, username string, expiresAt time.Time) error 
 		}
 	}
 
-	// A new token is a new quota: the old one's rate limit does not hold it.
-	if err := qtx.ClearRateLimitUntil(ctx); err != nil {
-		return fmt.Errorf("could not clear the rate limit: %w", err)
-	}
 	// Deleted, not deactivated: a replaced token is still a live credential
-	// until it expires, and secure_delete overwrites its bytes.
+	// until it expires, and secure_delete overwrites its bytes. The new row
+	// starts with no rate limit: a new token is a new quota.
 	if err := qtx.DeleteAllPATs(ctx); err != nil {
 		return fmt.Errorf("could not delete the previous PAT: %w", err)
 	}

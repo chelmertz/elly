@@ -446,6 +446,12 @@ func TestRateLimit(t *testing.T) {
 	if store.IsRateLimitActive(now) || !store.GetRateLimitUntil().IsZero() {
 		t.Fatal("a fresh database is rate limited")
 	}
+	if err := store.StorePAT("github_pat_main", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if store.IsRateLimitActive(now) {
+		t.Fatal("a new token is rate limited")
+	}
 	until := now.Add(time.Hour)
 	if err := store.SetRateLimitUntil(until); err != nil {
 		t.Fatal(err)
@@ -459,11 +465,23 @@ func TestRateLimit(t *testing.T) {
 	if !store.GetRateLimitUntil().IsZero() {
 		t.Error("an expired limit was not cleared")
 	}
+	if err := store.SetRateLimitUntil(until); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.StorePAT("github_pat_next", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if store.IsRateLimitActive(now) {
+		t.Error("a new token inherited the old one's limit")
+	}
 }
 
 func TestRateLimitUnreadableCountsAsActive(t *testing.T) {
 	store := setupTestStorage(t)
-	if _, err := store.rawDb.Exec(`replace into meta (key, value) values ('rate_limit_until', 'garbage')`); err != nil {
+	if err := store.StorePAT("github_pat_main", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.rawDb.Exec(`update token set rate_limited_until = 'garbage' where kind = 'main'`); err != nil {
 		t.Fatal(err)
 	}
 	if !store.IsRateLimitActive(time.Now()) {
@@ -777,30 +795,48 @@ func TestReplacedAndClearedTokensLeaveNoCopyOnDisk(t *testing.T) {
 	}
 }
 
-// A database from before tokens were deleted keeps deactivated ones; opening
-// it deletes them and keeps the newest login, so a token for another login
-// still starts empty.
-func TestOpeningAnOldDatabaseDropsDeactivatedTokens(t *testing.T) {
+// oldTokenTables is pat and owner_pat as elly created them before the
+// token table, with pat's owner column from 2026-11-05.
+const oldTokenTables = `
+create table pat (pat text primary key, set_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+	expires_at text not null, username text not null, active integer not null check (active in (0, 1)),
+	owner text not null default '');
+create table owner_pat (owner text not null primary key collate nocase, pat text not null, username text not null,
+	set_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), expires_at text not null,
+	last_success text not null default '', rate_limited_until text not null default '', refused text not null default '');
+pragma user_version = 0;`
+
+// oldDatabase is a database in the shape elly kept before the token table:
+// NewStorage's tables, with pat and owner_pat put back and stmts run.
+func oldDatabase(t *testing.T, stmts ...string) string {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "elly.db")
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	old := NewStorage(logger, path)
-	for _, stmt := range []string{
-		`insert into pat (pat, expires_at, username, active) values ('github_pat_old', '', 'someone', 0)`,
-		`insert into pat (pat, expires_at, username, active) values ('github_pat_me', '', 'me', 1)`,
-		`delete from meta where key = 'last_login'`,
-	} {
-		if _, err := old.rawDb.Exec(stmt); err != nil {
+	s := NewStorage(logger, path)
+	if err := s.StoreRepoPrs([]types.ViewPr{{Url: "https://github.com/o/r/pull/1", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range append([]string{`drop table token`, oldTokenTables}, stmts...) {
+		if _, err := s.rawDb.Exec(stmt); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := old.StoreRepoPrs([]types.ViewPr{{Url: "https://github.com/o/r/pull/1", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
-		t.Fatal(err)
-	}
-	old.rawDb.Close() //nolint:errcheck
+	s.rawDb.Close() //nolint:errcheck
+	return path
+}
 
-	store := NewStorage(logger, path)
+// A database from before tokens were deleted keeps deactivated ones;
+// opening it moves only the active one and keeps the newest login, so a
+// token for another login still starts empty.
+func TestOpeningAnOldDatabaseDropsDeactivatedTokens(t *testing.T) {
+	path := oldDatabase(t,
+		`insert into pat (pat, expires_at, username, active) values ('github_pat_old', '', 'someone', 0)`,
+		`insert into pat (pat, expires_at, username, active) values ('github_pat_me', '', 'me', 1)`,
+		`delete from meta where key = 'last_login'`,
+	)
+	store := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
 	var left string
-	if err := store.rawDb.QueryRow(`select group_concat(pat) from pat`).Scan(&left); err != nil || left != "github_pat_me" {
+	if err := store.rawDb.QueryRow(`select group_concat(pat) from token`).Scan(&left); err != nil || left != "github_pat_me" {
 		t.Fatalf("tokens left %q, %v", left, err)
 	}
 	if err := store.StorePAT("github_pat_other", "other", time.Time{}); err != nil {
@@ -808,6 +844,109 @@ func TestOpeningAnOldDatabaseDropsDeactivatedTokens(t *testing.T) {
 	}
 	if got := store.Prs().Prs; len(got) != 0 {
 		t.Errorf("another login inherited %v", got)
+	}
+}
+
+// Opening a database from before the token table moves both kinds of token,
+// with the main token's rate limit and every org token's poll state, into
+// token; drops an org token of another login; keeps last_fetched in meta;
+// and leaves nothing of the old tables. A second open changes nothing.
+func TestOpeningAnOldDatabaseMovesTokens(t *testing.T) {
+	path := oldDatabase(t,
+		`insert into pat (pat, set_at, expires_at, username, active, owner) values ('github_pat_main', '2026-11-16T09:38:27Z', '2027-11-17T09:35:55Z', 'me', 1, 'acme')`,
+		`replace into meta (key, value) values ('rate_limit_until', '2026-11-18T13:00:00Z'), ('last_fetched', '2026-11-18T12:00:00Z')`,
+		`insert into owner_pat (owner, pat, username, set_at, expires_at, last_success, rate_limited_until, refused) values
+			('Org', 'github_pat_org', 'Me', '2026-11-16T12:44:31Z', '2027-11-06T23:53:34Z', '2026-11-18T12:00:00Z', '2026-11-18T14:00:00Z', 'owner_token_refused'),
+			('stray', 'github_pat_stray', 'someone', '2026-11-01T00:00:00Z', '', '', '', '')`,
+	)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	for open := range 2 {
+		store := NewStorage(logger, path)
+		main, found, err := store.GetPAT()
+		if err != nil || !found || main.Token != "github_pat_main" || main.Username != "me" || main.Owner != "acme" ||
+			main.SetAt.Format(time.RFC3339) != "2026-11-16T09:38:27Z" || main.ExpiresAt.Format(time.RFC3339) != "2027-11-17T09:35:55Z" {
+			t.Fatalf("open %d: main %+v %v %v", open, main, found, err)
+		}
+		if got := store.GetRateLimitUntil().Format(time.RFC3339); got != "2026-11-18T13:00:00Z" {
+			t.Errorf("open %d: main rate limit %s", open, got)
+		}
+		orgs, err := store.OwnerPATs()
+		if err != nil || len(orgs) != 1 {
+			t.Fatalf("open %d: orgs %+v %v", open, orgs, err)
+		}
+		o := orgs[0]
+		if o.Owner != "Org" || o.Token != "github_pat_org" || o.Refused != "owner_token_refused" ||
+			o.LastSuccess.Format(time.RFC3339) != "2026-11-18T12:00:00Z" || o.RateLimitedUntil.Format(time.RFC3339) != "2026-11-18T14:00:00Z" ||
+			o.ExpiresAt.Format(time.RFC3339) != "2027-11-06T23:53:34Z" {
+			t.Errorf("open %d: org %+v", open, o)
+		}
+		var fetched string
+		var old int
+		if err := store.rawDb.QueryRow(`select value from meta where key = 'last_fetched'`).Scan(&fetched); err != nil || fetched != "2026-11-18T12:00:00Z" {
+			t.Errorf("open %d: last_fetched %q %v", open, fetched, err)
+		}
+		if err := store.rawDb.QueryRow(`select count(*) from sqlite_master where name in ('pat', 'owner_pat')
+			union all select count(*) from meta where key = 'rate_limit_until'`).Scan(&old); err != nil || old != 0 {
+			t.Errorf("open %d: old tables or keys left: %d %v", open, old, err)
+		}
+		store.rawDb.Close() //nolint:errcheck
+	}
+}
+
+// The main token and org tokens share the table; nothing aimed at one kind
+// reaches the other, and an org row can never take the main row's place.
+func TestTokenKindsStayApart(t *testing.T) {
+	store := setupTestStorage(t)
+	if err := store.StorePAT("github_pat_main", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutOwnerPAT("acme", "github_pat_main", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if orgs, _ := store.OwnerPATs(); len(orgs) != 1 || orgs[0].Owner != "acme" {
+		t.Fatalf("OwnerPATs listed the main token: %+v", orgs)
+	}
+	// The same token in both kinds: an expiry or owner found for the main
+	// token stays on the main row.
+	exp := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	if err := store.SetPATExpiry("github_pat_main", exp); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetPATOwner("github_pat_main", "me"); err != nil {
+		t.Fatal(err)
+	}
+	if orgs, _ := store.OwnerPATs(); !orgs[0].ExpiresAt.IsZero() || orgs[0].Owner != "acme" {
+		t.Errorf("a main-token write reached the org row: %+v", orgs[0])
+	}
+	if err := store.SetRateLimitUntil(exp); err != nil {
+		t.Fatal(err)
+	}
+	if orgs, _ := store.OwnerPATs(); !orgs[0].RateLimitedUntil.IsZero() {
+		t.Errorf("the main rate limit reached the org row: %+v", orgs[0])
+	}
+	if err := store.PutOwnerPAT("", "github_pat_x", "me", time.Time{}); err == nil {
+		t.Error("an org token with no owner was stored")
+	}
+	if gone, err := store.DeleteOwnerPAT(""); err != nil || gone {
+		t.Errorf("deleting org '' removed something: %v %v", gone, err)
+	}
+	if _, found, _ := store.GetPAT(); !found {
+		t.Fatal("an org-side call removed the main token")
+	}
+	if err := store.StorePAT("github_pat_rotated", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if orgs, _ := store.OwnerPATs(); len(orgs) != 1 {
+		t.Errorf("rotating the main token removed org tokens: %+v", orgs)
+	}
+	if err := store.ClearPAT(); err != nil {
+		t.Fatal(err)
+	}
+	if orgs, _ := store.OwnerPATs(); len(orgs) != 1 {
+		t.Errorf("ClearPAT removed org tokens: %+v", orgs)
+	}
+	if _, err := store.rawDb.Exec(`insert into token (kind, pat, username, expires_at) values ('main', 'a', 'me', ''), ('main', 'b', 'me', '')`); err == nil {
+		t.Error("two main tokens were stored")
 	}
 }
 

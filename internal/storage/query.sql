@@ -55,22 +55,19 @@ replace into meta (key, value) values ('last_fetched', ?);
 select value from meta where key = 'last_fetched' limit 1;
 
 -- name: StoreRateLimitUntil :exec
-replace into meta (key, value) values ('rate_limit_until', ?);
+update token set rate_limited_until = ? where kind = 'main';
 
 -- name: GetRateLimitUntil :one
-select value from meta where key = 'rate_limit_until' limit 1;
-
--- name: ClearRateLimitUntil :exec
-delete from meta where key = 'rate_limit_until';
+select rate_limited_until from token where kind = 'main';
 
 -- name: GetActivePAT :one
-select pat, set_at, expires_at, username, owner from pat where active = 1 limit 1;
+select pat, set_at, expires_at, username, owner from token where kind = 'main';
 
 -- name: DeleteAllPATs :exec
-delete from pat;
+delete from token where kind = 'main';
 
 -- name: InsertPAT :exec
-insert or replace into pat (pat, expires_at, username, active) values (?, ?, ?, 1);
+insert into token (kind, pat, expires_at, username) values ('main', ?, ?, ?);
 
 
 -- name: StoreDegradations :exec
@@ -116,29 +113,29 @@ delete from annotations;
 
 -- name: ListOwnerPATs :many
 select owner, pat, username, set_at, expires_at, last_success, rate_limited_until, refused
-from owner_pat order by owner;
+from token where kind = 'org' order by owner;
 
 -- name: PutOwnerPAT :exec
-insert into owner_pat (owner, pat, username, expires_at) values (?, ?, ?, ?)
-on conflict (owner) do update set owner = excluded.owner, pat = excluded.pat,
+insert into token (kind, owner, pat, username, expires_at) values ('org', ?, ?, ?, ?)
+on conflict (owner) where kind = 'org' do update set owner = excluded.owner, pat = excluded.pat,
     username = excluded.username, expires_at = excluded.expires_at,
     set_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), rate_limited_until = '', refused = '';
 
 -- name: DeleteOwnerPAT :execrows
-delete from owner_pat where owner = ?;
+delete from token where kind = 'org' and owner = ?;
 
 -- name: DeleteAllOwnerPATs :exec
-delete from owner_pat;
+delete from token where kind = 'org';
 
 -- name: SetOwnerPollState :exec
-update owner_pat set last_success = ?, rate_limited_until = ?, refused = ?
-where owner = ? and pat = ?;
+update token set last_success = ?, rate_limited_until = ?, refused = ?
+where kind = 'org' and owner = ? and pat = ?;
 
 -- name: SetPATExpiry :exec
-update pat set expires_at = ? where pat = ?;
+update token set expires_at = ? where kind = 'main' and pat = ?;
 
 -- name: SetPATOwner :exec
-update pat set owner = ? where pat = ?;
+update token set owner = ? where kind = 'main' and pat = ?;
 
 -- name: SetOwnerPATExpiry :exec
-update owner_pat set expires_at = ? where owner = ? and pat = ?;
+update token set expires_at = ? where kind = 'org' and owner = ? and pat = ?;

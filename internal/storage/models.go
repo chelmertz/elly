@@ -19,26 +19,6 @@ type Meta struct {
 	Value string
 }
 
-type OwnerPat struct {
-	Owner            string
-	Pat              string
-	Username         string
-	SetAt            string
-	ExpiresAt        string
-	LastSuccess      string
-	RateLimitedUntil string
-	Refused          string
-}
-
-type Pat struct {
-	Pat       string
-	SetAt     string
-	ExpiresAt string
-	Username  string
-	Active    int64
-	Owner     string
-}
-
 type Pr struct {
 	Url                      string
 	ReviewStatus             string
@@ -66,4 +46,16 @@ type Pr struct {
 	HeadRefOid               string
 	ReviewRequestedOfUser    bool
 	RawJsonResponse          []byte
+}
+
+type Token struct {
+	Kind             string
+	Owner            string
+	Pat              string
+	Username         string
+	SetAt            string
+	ExpiresAt        string
+	LastSuccess      string
+	RateLimitedUntil string
+	Refused          string
 }

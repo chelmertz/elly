@@ -32,30 +32,30 @@ create table if not exists meta (
     value text not null
 );
 
-create table if not exists pat (
-    pat text primary key,
-    set_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    expires_at text not null,
-    username text not null,
-    active integer not null check (active in (0, 1)),
-    -- The token's resource owner as GitHub spells it, '' until elly finds it.
-    owner text not null default ''
-);
-
--- One token per repo owner whose PRs the primary token (pat) cannot see,
--- such as an org that takes only fine-grained tokens. Its login must be the
--- primary's. refused is '' while usable, else the degradation kind that
--- stopped it; last_success and rate_limited_until are RFC3339 or ''.
-create table if not exists owner_pat (
-    owner text not null primary key collate nocase,
+-- Every GitHub token elly holds. kind 'main' is the one the user's login
+-- and PR search come from (at most one); kind 'org' is one per repo owner
+-- the main token cannot see, such as an org that takes only fine-grained
+-- tokens, and its login must be the main one's. owner is the token's
+-- resource owner as GitHub spells it: for an org row the org, for the main
+-- row '' until elly finds it. refused is '' while usable, else the
+-- degradation kind that stopped it (main-token trouble is reported in
+-- meta.degradations instead). last_success is an org row's last poll (the
+-- main token's is meta.last_fetched, which belongs to the stored PRs).
+-- Times are RFC3339 or ''; '' in rate_limited_until means not limited.
+create table if not exists token (
+    kind text not null check (kind in ('main', 'org')),
+    owner text not null default '' collate nocase,
     pat text not null,
     username text not null,
     set_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     expires_at text not null,
     last_success text not null default '',
     rate_limited_until text not null default '',
-    refused text not null default ''
+    refused text not null default '',
+    check (kind = 'main' or owner <> '')
 );
+create unique index if not exists token_one_main on token (kind) where kind = 'main';
+create unique index if not exists token_one_per_org on token (owner) where kind = 'org';
 
 -- Kept apart from prs, which is replaced on every fetch. expires_at is
 -- returned exactly as written; expires_unix is what expiry compares.

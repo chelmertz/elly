@@ -68,15 +68,6 @@ func (q *Queries) ClearNotifySeen(ctx context.Context) error {
 	return err
 }
 
-const clearRateLimitUntil = `-- name: ClearRateLimitUntil :exec
-delete from meta where key = 'rate_limit_until'
-`
-
-func (q *Queries) ClearRateLimitUntil(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, clearRateLimitUntil)
-	return err
-}
-
 const createPr = `-- name: CreatePr :one
 insert into prs (
     url,
@@ -210,7 +201,7 @@ func (q *Queries) DeleteAllAnnotations(ctx context.Context) error {
 }
 
 const deleteAllOwnerPATs = `-- name: DeleteAllOwnerPATs :exec
-delete from owner_pat
+delete from token where kind = 'org'
 `
 
 func (q *Queries) DeleteAllOwnerPATs(ctx context.Context) error {
@@ -219,7 +210,7 @@ func (q *Queries) DeleteAllOwnerPATs(ctx context.Context) error {
 }
 
 const deleteAllPATs = `-- name: DeleteAllPATs :exec
-delete from pat
+delete from token where kind = 'main'
 `
 
 func (q *Queries) DeleteAllPATs(ctx context.Context) error {
@@ -242,7 +233,7 @@ func (q *Queries) DeleteAnnotation(ctx context.Context, arg DeleteAnnotationPara
 }
 
 const deleteOwnerPAT = `-- name: DeleteOwnerPAT :execrows
-delete from owner_pat where owner = ?
+delete from token where kind = 'org' and owner = ?
 `
 
 func (q *Queries) DeleteOwnerPAT(ctx context.Context, owner string) (int64, error) {
@@ -263,7 +254,7 @@ func (q *Queries) DeletePrs(ctx context.Context) error {
 }
 
 const getActivePAT = `-- name: GetActivePAT :one
-select pat, set_at, expires_at, username, owner from pat where active = 1 limit 1
+select pat, set_at, expires_at, username, owner from token where kind = 'main'
 `
 
 type GetActivePATRow struct {
@@ -359,18 +350,18 @@ func (q *Queries) GetPr(ctx context.Context, url string) (Pr, error) {
 }
 
 const getRateLimitUntil = `-- name: GetRateLimitUntil :one
-select value from meta where key = 'rate_limit_until' limit 1
+select rate_limited_until from token where kind = 'main'
 `
 
 func (q *Queries) GetRateLimitUntil(ctx context.Context) (string, error) {
 	row := q.db.QueryRowContext(ctx, getRateLimitUntil)
-	var value string
-	err := row.Scan(&value)
-	return value, err
+	var rate_limited_until string
+	err := row.Scan(&rate_limited_until)
+	return rate_limited_until, err
 }
 
 const insertPAT = `-- name: InsertPAT :exec
-insert or replace into pat (pat, expires_at, username, active) values (?, ?, ?, 1)
+insert into token (kind, pat, expires_at, username) values ('main', ?, ?, ?)
 `
 
 type InsertPATParams struct {
@@ -397,18 +388,29 @@ func (q *Queries) LastLogin(ctx context.Context) (string, error) {
 
 const listOwnerPATs = `-- name: ListOwnerPATs :many
 select owner, pat, username, set_at, expires_at, last_success, rate_limited_until, refused
-from owner_pat order by owner
+from token where kind = 'org' order by owner
 `
 
-func (q *Queries) ListOwnerPATs(ctx context.Context) ([]OwnerPat, error) {
+type ListOwnerPATsRow struct {
+	Owner            string
+	Pat              string
+	Username         string
+	SetAt            string
+	ExpiresAt        string
+	LastSuccess      string
+	RateLimitedUntil string
+	Refused          string
+}
+
+func (q *Queries) ListOwnerPATs(ctx context.Context) ([]ListOwnerPATsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listOwnerPATs)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []OwnerPat
+	var items []ListOwnerPATsRow
 	for rows.Next() {
-		var i OwnerPat
+		var i ListOwnerPATsRow
 		if err := rows.Scan(
 			&i.Owner,
 			&i.Pat,
@@ -568,8 +570,8 @@ func (q *Queries) PutAnnotation(ctx context.Context, arg PutAnnotationParams) er
 }
 
 const putOwnerPAT = `-- name: PutOwnerPAT :exec
-insert into owner_pat (owner, pat, username, expires_at) values (?, ?, ?, ?)
-on conflict (owner) do update set owner = excluded.owner, pat = excluded.pat,
+insert into token (kind, owner, pat, username, expires_at) values ('org', ?, ?, ?, ?)
+on conflict (owner) where kind = 'org' do update set owner = excluded.owner, pat = excluded.pat,
     username = excluded.username, expires_at = excluded.expires_at,
     set_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), rate_limited_until = '', refused = ''
 `
@@ -601,7 +603,7 @@ func (q *Queries) SetLastLogin(ctx context.Context, value string) error {
 }
 
 const setOwnerPATExpiry = `-- name: SetOwnerPATExpiry :exec
-update owner_pat set expires_at = ? where owner = ? and pat = ?
+update token set expires_at = ? where kind = 'org' and owner = ? and pat = ?
 `
 
 type SetOwnerPATExpiryParams struct {
@@ -616,8 +618,8 @@ func (q *Queries) SetOwnerPATExpiry(ctx context.Context, arg SetOwnerPATExpiryPa
 }
 
 const setOwnerPollState = `-- name: SetOwnerPollState :exec
-update owner_pat set last_success = ?, rate_limited_until = ?, refused = ?
-where owner = ? and pat = ?
+update token set last_success = ?, rate_limited_until = ?, refused = ?
+where kind = 'org' and owner = ? and pat = ?
 `
 
 type SetOwnerPollStateParams struct {
@@ -640,7 +642,7 @@ func (q *Queries) SetOwnerPollState(ctx context.Context, arg SetOwnerPollStatePa
 }
 
 const setPATExpiry = `-- name: SetPATExpiry :exec
-update pat set expires_at = ? where pat = ?
+update token set expires_at = ? where kind = 'main' and pat = ?
 `
 
 type SetPATExpiryParams struct {
@@ -654,7 +656,7 @@ func (q *Queries) SetPATExpiry(ctx context.Context, arg SetPATExpiryParams) erro
 }
 
 const setPATOwner = `-- name: SetPATOwner :exec
-update pat set owner = ? where pat = ?
+update token set owner = ? where kind = 'main' and pat = ?
 `
 
 type SetPATOwnerParams struct {
@@ -695,11 +697,11 @@ func (q *Queries) StoreNotifySeen(ctx context.Context, value string) error {
 }
 
 const storeRateLimitUntil = `-- name: StoreRateLimitUntil :exec
-replace into meta (key, value) values ('rate_limit_until', ?)
+update token set rate_limited_until = ? where kind = 'main'
 `
 
-func (q *Queries) StoreRateLimitUntil(ctx context.Context, value string) error {
-	_, err := q.db.ExecContext(ctx, storeRateLimitUntil, value)
+func (q *Queries) StoreRateLimitUntil(ctx context.Context, rateLimitedUntil string) error {
+	_, err := q.db.ExecContext(ctx, storeRateLimitUntil, rateLimitedUntil)
 	return err
 }
 
