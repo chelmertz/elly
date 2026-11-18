@@ -621,3 +621,15 @@ func TestNextHelpLinkIsOnTheRow(t *testing.T) {
 		t.Error("a ? naming another PR sits on the row")
 	}
 }
+
+// The page carries its own icon as a data URI, which the CSP admits, so a
+// browser never asks for /favicon.ico.
+func TestThePageHasAnInlineIcon(t *testing.T) {
+	page := renderNext(t, NextData{})
+	if !strings.Contains(page, `<link rel="icon" href="data:image/svg+xml,`) {
+		t.Error("the page has no inline icon")
+	}
+	if !strings.Contains(contentSecurityPolicy, "; img-src data:;") {
+		t.Errorf("the CSP does not admit a data: icon: %s", contentSecurityPolicy)
+	}
+}
