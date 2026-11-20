@@ -165,6 +165,34 @@ func checkRow(a types.Annotation) error {
 	return nil
 }
 
+// countPut counts a claude-review row: carrying actions, or with an approve
+// or attach link that names none and so leans on its label. A fallback is
+// logged by PR and verb, never the link, whose query may hold a live token.
+func countPut(cfg HttpServerConfig, prUrl string, a types.Annotation) {
+	if a.Source != "claude-review" {
+		return
+	}
+	fallback, actions := "", false
+	for _, l := range a.Links {
+		if l.Action != "" {
+			actions = true
+			continue
+		}
+		if verb, ok := types.ClaudeReviewVerb(prUrl, l.Url); ok && (verb == "approve" || verb == "attach") {
+			fallback = verb
+		}
+	}
+	if fallback == "" && !actions {
+		return
+	}
+	if fallback != "" {
+		cfg.logger().Info("a claude-review link names no action; its verb decides", "pr", prUrl, "verb", fallback)
+	}
+	if err := cfg.Store.CountAnnotationPut(fallback != ""); err != nil {
+		cfg.logger().Warn("could not count an annotation write", "error", err)
+	}
+}
+
 func plainText(s string, max int) error {
 	if utf8.RuneCountInString(s) > max {
 		return fmt.Errorf("at most %d characters", max)
@@ -269,6 +297,7 @@ func registerAnnotationRoutes(mux *http.ServeMux, cfg HttpServerConfig) {
 			http.Error(w, "could not store annotation", http.StatusInternalServerError)
 			return
 		}
+		countPut(cfg, u, a)
 		w.WriteHeader(http.StatusNoContent)
 	})
 

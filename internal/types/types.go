@@ -100,7 +100,7 @@ type ViewPr struct {
 	// HeadRefOid is the SHA of the PR's head commit. A change in it is how a
 	// consumer tells "new commits pushed" apart from "new comments on the
 	// same commits"; elly itself does not read it.
-	HeadRefOid      string
+	HeadRefOid string
 	// ReviewRequestedOfUser is true when github's review-requested search
 	// returned the PR: the user was asked, by name or through a team. A team
 	// request names the team, not the user, and a token that cannot read the

@@ -162,9 +162,9 @@ func (s *StorageDemo) OwnerPATs() ([]OwnerPAT, error) {
 
 func (s *StorageDemo) DeleteOwnerPAT(owner string) (bool, error) { return false, nil }
 
-func (s *StorageDemo) SetOwnerPollState(o OwnerPAT) error { return nil }
-func (s *StorageDemo) SetPATExpiry(string, time.Time) error  { return nil }
-func (s *StorageDemo) SetPATOwner(string, string) error       { return nil }
+func (s *StorageDemo) SetOwnerPollState(o OwnerPAT) error   { return nil }
+func (s *StorageDemo) SetPATExpiry(string, time.Time) error { return nil }
+func (s *StorageDemo) SetPATOwner(string, string) error     { return nil }
 func (s *StorageDemo) SetOwnerPATExpiry(string, string, time.Time) error {
 	return nil
 }
@@ -181,3 +181,7 @@ func (s *StorageDemo) NotifySeen() map[string][]string { return nil }
 func (s *StorageDemo) PutAnnotation(string, types.Annotation, time.Time) error { return nil }
 
 func (s *StorageDemo) DeleteAnnotation(string, string) error { return nil }
+
+func (s *StorageDemo) CountAnnotationPut(bool) error { return nil }
+
+func (s *StorageDemo) AnnotationPutCounts() (int, int, error) { return 0, 0, nil }

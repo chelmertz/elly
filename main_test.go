@@ -82,14 +82,16 @@ func (s *testStorage) NotifySeen() map[string][]string           { return nil }
 func (s *testStorage) PutAnnotation(string, types.Annotation, time.Time) error {
 	return nil
 }
-func (s *testStorage) DeleteAnnotation(string, string) error { return nil }
+func (s *testStorage) DeleteAnnotation(string, string) error  { return nil }
+func (s *testStorage) CountAnnotationPut(bool) error          { return nil }
+func (s *testStorage) AnnotationPutCounts() (int, int, error) { return 0, 0, nil }
 func (s *testStorage) PutOwnerPAT(string, string, string, time.Time) error {
 	return nil
 }
 func (s *testStorage) OwnerPATs() ([]storage.OwnerPAT, error)     { return nil, nil }
 func (s *testStorage) DeleteOwnerPAT(string) (bool, error)        { return false, nil }
 func (s *testStorage) SetOwnerPollState(o storage.OwnerPAT) error { return nil }
-func (s *testStorage) SetPATExpiry(string, time.Time) error        { return nil }
+func (s *testStorage) SetPATExpiry(string, time.Time) error       { return nil }
 func (s *testStorage) SetPATOwner(token, owner string) error {
 	if s.pat.Token == token {
 		s.pat.Owner = owner

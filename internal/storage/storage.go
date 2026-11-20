@@ -111,6 +111,12 @@ type Storage interface {
 	// Expired annotations are purged on every write.
 	PutAnnotation(prUrl string, a types.Annotation, expiresAt time.Time) error
 	DeleteAnnotation(prUrl, source string) error
+	// CountAnnotationPut counts a claude-review PUT: one leaning on a
+	// label for an approve or attach link (fallback), or one carrying
+	// actions. Kept across restarts.
+	CountAnnotationPut(fallback bool) error
+	// AnnotationPutCounts are those counts.
+	AnnotationPutCounts() (actionPuts, fallbacks int, err error)
 }
 
 type DbStorage struct {
@@ -876,4 +882,41 @@ func (s *DbStorage) liveAnnotations(now time.Time) map[string][]types.Annotation
 		out[r.PrUrl] = append(out[r.PrUrl], a)
 	}
 	return out
+}
+
+// The counters live in meta, so a restart neither resets nor flips them.
+const (
+	metaActionPuts = "annotation_action_puts"
+	metaFallbacks  = "annotation_fallbacks"
+)
+
+func (s *DbStorage) CountAnnotationPut(fallback bool) error {
+	key := metaActionPuts
+	if fallback {
+		key = metaFallbacks
+	}
+	_, err := s.rawDb.Exec(`insert into meta (key, value) values (?, '1')
+		on conflict (key) do update set value = cast(cast(value as integer) + 1 as text)`, key)
+	return err
+}
+
+func (s *DbStorage) AnnotationPutCounts() (actionPuts, fallbacks int, err error) {
+	rows, err := s.rawDb.Query(`select key, cast(value as integer) from meta where key in (?, ?)`, metaActionPuts, metaFallbacks)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var k string
+		var n int
+		if err := rows.Scan(&k, &n); err != nil {
+			return 0, 0, err
+		}
+		if k == metaFallbacks {
+			fallbacks = n
+		} else {
+			actionPuts = n
+		}
+	}
+	return actionPuts, fallbacks, rows.Err()
 }

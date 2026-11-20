@@ -287,3 +287,52 @@ func TestValidateAnnotationChecksClaudeReviewRows(t *testing.T) {
 		}
 	}
 }
+
+// Every claude-review PUT is counted: one carrying actions, or one whose
+// approve or attach link still leans on its label (the fallback elly drops
+// once claude-review has sent actions long enough). The counts persist and
+// /health reports them with elly's version.
+func TestHealthCountsActionPutsAndFallbacks(t *testing.T) {
+	store := storage.NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), filepath.Join(t.TempDir(), "elly.db"))
+	const prUrl = "https://github.com/o/r/pull/1"
+	if err := store.StoreRepoPrs([]types.ViewPr{{Url: prUrl, LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := HttpServerConfig{Store: store, Version: "abc1234", AnnotationToken: "secret", AnnotationSchemes: []string{"claude-review"},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	mux := routes(cfg)
+	put := func(link string) {
+		t.Helper()
+		b := `{"state":"running","links":[` + link + `],"expiresAt":"` + time.Now().Add(15*time.Minute).Format(time.RFC3339) + `"}`
+		r := httptest.NewRequest("PUT", "/api/v0/prs/"+base64.StdEncoding.EncodeToString([]byte(prUrl))+"/annotations/claude-review", strings.NewReader(b))
+		r.Header.Set("Authorization", "Bearer secret")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("PUT %s: %d %s", link, w.Code, w.Body)
+		}
+	}
+	put(`{"label":"Open Claude","url":"claude-review://o/r/1/attach","action":"open"}`)
+	put(`{"label":"Open Claude","url":"claude-review://o/r/1/attach","action":"open"}`)
+	put(`{"label":"Open Claude","url":"claude-review://o/r/1/attach"}`)
+	put(`{"label":"?","url":"claude-review://o/r/1/states"}`) // neither: no approve or attach
+	r := httptest.NewRequest("GET", "/health", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	var h struct {
+		Version    string `json:"version"`
+		ActionPuts int    `json:"actionPuts"`
+		Fallbacks  int    `json:"fallbacks"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &h); err != nil || w.Code != http.StatusOK {
+		t.Fatalf("health %d %q: %v", w.Code, w.Body, err)
+	}
+	if h.Version != "abc1234" || h.ActionPuts != 2 || h.Fallbacks != 1 {
+		t.Errorf("health %+v", h)
+	}
+	var keys map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &keys)
+	if len(keys) != 3 {
+		t.Errorf("health keys %v, want version, actionPuts, fallbacks", keys)
+	}
+}

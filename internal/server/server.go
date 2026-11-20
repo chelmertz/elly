@@ -310,9 +310,20 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 
 	mux.Handle("GET /metrics", promhttp.Handler())
 
+	// version, and the claude-review PUTs that carry actions against those
+	// still leaning on a label: the fallback goes once the second stays
+	// put while the first grows. No PR, source or link.
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "ok") //nolint:errcheck // best-effort response body
+		actions, fallbacks, err := webConfig.Store.AnnotationPutCounts()
+		if err != nil {
+			webConfig.Logger.Warn("could not read the annotation counts", slog.Any("error", err))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(struct {
+			Version    string `json:"version"`
+			ActionPuts int    `json:"actionPuts"`
+			Fallbacks  int    `json:"fallbacks"`
+		}{webConfig.Version, actions, fallbacks})
 	})
 
 	// One validation at a time: each costs GitHub requests, and a second

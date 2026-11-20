@@ -146,7 +146,7 @@ func TestPatRoutesRefuseBadInput(t *testing.T) {
 
 func TestPageAndHealth(t *testing.T) {
 	w := newRoutes(t, "")
-	if rec := w.do("GET", "/health", ""); rec.Code != http.StatusOK || rec.Body.String() != "ok" {
+	if rec := w.do("GET", "/health", ""); rec.Code != http.StatusOK || !strings.HasPrefix(rec.Body.String(), `{"version":`) {
 		t.Errorf("health: %d %q", rec.Code, rec.Body)
 	}
 	rec := w.do("GET", "/", "")
