@@ -12,7 +12,11 @@ export async function openPage(chromium, url, init = "") {
         "--user-data-dir=" + mkdtempSync(join(tmpdir(), "elly-page-")), "about:blank",
     ], { stdio: ["ignore", "ignore", "pipe"] });
     const fail = (msg) => { console.log(msg); process.exitCode = 1; };
-    const timer = setTimeout(() => { fail("timed out"); browser.kill(); process.exit(1); }, 30000);
+    // CI runners have taken 12s for what runs in 3s here, and one ran past
+    // 30s; the limit catches a hang, not a slow machine. The message names the
+    // last step that finished, so a real hang says where.
+    let step = "starting chromium";
+    const timer = setTimeout(() => { fail(`timed out after: ${step}`); browser.kill(); process.exit(1); }, 120000);
 
     const wsUrl = await new Promise((resolve, reject) => {
         let buf = "";
@@ -24,6 +28,7 @@ export async function openPage(chromium, url, init = "") {
         browser.on("exit", () => reject(new Error("chromium exited: " + buf)));
     });
 
+    step = "chromium listening";
     const ws = new WebSocket(wsUrl);
     await new Promise((r) => ws.addEventListener("open", r));
     let id = 0;
@@ -56,11 +61,13 @@ export async function openPage(chromium, url, init = "") {
     const loaded = next("Page.loadEventFired");
     await s("Page.navigate", { url });
     await loaded;
+    step = "page loaded";
 
     const value = async (expr) => (await s("Runtime.evaluate", { expression: expr, returnByValue: true, awaitPromise: true })).result.value;
     const expect = async (what, expr, want) => {
         const got = await value(expr);
         if (JSON.stringify(got) !== JSON.stringify(want)) fail(`${what}: got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
+        step = what;
     };
     const close = () => { clearTimeout(timer); ws.close(); browser.kill(); };
     return { s, value, expect, fail, close };

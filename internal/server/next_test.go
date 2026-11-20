@@ -428,7 +428,7 @@ func runPageScript(t *testing.T, script string, changes *Changes) {
 	srv.Config.Handler = guard(srv.Listener.Addr().String(), nil, w.mux)
 	srv.Start()
 	defer srv.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute) // past cdp.mjs's own 120s, so its message wins
 	defer cancel()
 	out, err := exec.CommandContext(ctx, node, script, browser, srv.URL+"/").CombinedOutput()
 	if err != nil {
