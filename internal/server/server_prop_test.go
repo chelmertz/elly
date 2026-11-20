@@ -54,7 +54,7 @@ func TestPropAnnotationExpiryBounds(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		ttl := time.Duration(rapid.Int64Range(-int64(48*time.Hour), int64(48*time.Hour)).Draw(t, "ttl")).Truncate(time.Second)
 		b := `{"state":"handled","expiresAt":"` + testNow.Add(ttl).Format(time.RFC3339) + `"}`
-		_, _, err := validateAnnotation("t", strings.NewReader(b), nil, testNow)
+		_, _, err := validateAnnotation("t", testPrUrl, strings.NewReader(b), nil, testNow)
 		want := ttl >= minAnnotationTTL && ttl <= maxAnnotationTTL
 		if (err == nil) != want {
 			t.Fatalf("ttl %v: err %v", ttl, err)

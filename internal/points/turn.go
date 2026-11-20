@@ -114,7 +114,7 @@ func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
 		// never it: this case is reached on a red PR, where approving is
 		// not the action.
 		for _, l := range needsYou.Links {
-			if l.Primary && types.LinkNamesPr(pr.Url, l.Url) && !approves(l) {
+			if l.Primary && types.LinkNamesPr(pr.Url, l.Url) && !looksLikeApprove(l) {
 				t.VerbUrl = l.Url
 				if l.Label != "" {
 					t.Verb = l.Label
@@ -164,6 +164,16 @@ func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
 	}
 }
 
+// looksLikeApprove: anything that may approve, from any source, by action,
+// label or path; kept off the button wherever approving is not the action.
+func looksLikeApprove(l types.AnnotationLink) bool {
+	if l.Action == types.ActionApprove || strings.EqualFold(strings.TrimSpace(l.Label), "approve") {
+		return true
+	}
+	u, err := url.Parse(l.Url)
+	return err == nil && strings.EqualFold(u.Path[strings.LastIndexByte(u.Path, '/')+1:], "approve")
+}
+
 // ClaudeReviewSource is the source claude-review writes its annotations
 // under (annotationSource in its elly.go); its handed-over PRs get a group.
 const ClaudeReviewSource = "claude-review"
@@ -177,15 +187,13 @@ func annotationVerdict(pr types.ViewPr) (needsYou *types.Annotation, approveUrl 
 			needsYou = &pr.Annotations[i]
 		}
 		for _, l := range a.Links {
-			if approveUrl == "" && approves(l) && types.LinkNamesPr(pr.Url, l.Url) {
+			if approveUrl == "" && types.LinkDoes(a.Source, pr.Url, l, types.ActionApprove) {
 				approveUrl = l.Url
 			}
 		}
 	}
 	return needsYou, approveUrl
 }
-
-func approves(l types.AnnotationLink) bool { return linkDoes(l, "approve") }
 
 // attachUrl is the first link of claude-review's annotation that attaches to
 // its session, or "".
@@ -195,21 +203,12 @@ func attachUrl(pr types.ViewPr) string {
 			continue
 		}
 		for _, l := range a.Links {
-			if linkDoes(l, "attach") && types.LinkNamesPr(pr.Url, l.Url) {
+			if types.LinkDoes(a.Source, pr.Url, l, types.ActionOpen) {
 				return l.Url
 			}
 		}
 	}
 	return ""
-}
-
-// linkDoes: the link is labelled verb, or its path ends in /verb.
-func linkDoes(l types.AnnotationLink, verb string) bool {
-	if strings.EqualFold(strings.TrimSpace(l.Label), verb) {
-		return true
-	}
-	u, err := url.Parse(l.Url)
-	return err == nil && strings.EqualFold(u.Path[strings.LastIndexByte(u.Path, '/')+1:], verb)
 }
 
 // Rank orders PRs as the /next page does: by group, then by points, then

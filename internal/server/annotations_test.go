@@ -60,10 +60,19 @@ func TestValidateAnnotation(t *testing.T) {
 		{"expiry not RFC 3339", "t", body("tomorrow", ""), schemes, false},
 		{"one primary link", "t", `{"state":"info","links":[{"label":"Start","url":"claude-review://o/r/1?from=elly","primary":true},{"label":"x","url":"https://a.example"}],"expiresAt":"` + in15 + `"}`, schemes, true},
 		{"two primary links", "t", `{"state":"info","links":[{"label":"Start","url":"claude-review://o/r/1","primary":true},{"label":"x","url":"https://a.example","primary":true}],"expiresAt":"` + in15 + `"}`, schemes, false},
+		{"an action from claude-review", "claude-review", action("approve", "claude-review://o/r/1/approve?at="+strings.Repeat("a", 40)+"&token="+strings.Repeat("b", 48)), schemes, true},
+		{"open is the attach verb", "claude-review", action("open", "claude-review://o/r/1/attach"), schemes, true},
+		{"start is the bare link", "claude-review", action("start", "claude-review://o/r/1?from=elly"), schemes, true},
+		{"help is the states verb", "claude-review", action("help", "claude-review://o/r/1/states"), schemes, true},
+		{"an action from another source", "t", action("approve", "claude-review://o/r/1/approve"), schemes, false},
+		{"an action on an https link", "claude-review", action("approve", "https://github.com/o/r/pull/1"), schemes, false},
+		{"an action on another verb", "claude-review", action("approve", "claude-review://o/r/1/attach"), schemes, false},
+		{"an action on another PR", "claude-review", action("open", "claude-review://o/r/2/attach"), schemes, false},
+		{"an unknown action", "claude-review", action("merge", "claude-review://o/r/1/merge"), schemes, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, _, err := validateAnnotation(c.source, strings.NewReader(c.body), c.schemes, testNow)
+			_, _, err := validateAnnotation(c.source, testPrUrl, strings.NewReader(c.body), c.schemes, testNow)
 			if (err == nil) != c.ok {
 				t.Errorf("err = %v, want ok=%v", err, c.ok)
 			}
@@ -73,7 +82,7 @@ func TestValidateAnnotation(t *testing.T) {
 
 func TestValidateAnnotationKeepsExpiresAtAsWritten(t *testing.T) {
 	expires := testNow.Add(time.Hour).In(time.FixedZone("CET", 3600)).Format(time.RFC3339)
-	a, at, err := validateAnnotation("t", strings.NewReader(body(expires, "")), []string{"claude-review"}, testNow)
+	a, at, err := validateAnnotation("t", testPrUrl, strings.NewReader(body(expires, "")), []string{"claude-review"}, testNow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +204,7 @@ func TestRefusedAnnotationNeverEchoesAToken(t *testing.T) {
 	}
 	for name, b := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, _, err := validateAnnotation("claude-review", strings.NewReader(b), nil, testNow)
+			_, _, err := validateAnnotation("claude-review", testPrUrl, strings.NewReader(b), nil, testNow)
 			if err == nil {
 				t.Fatal("accepted")
 			}
@@ -204,7 +213,7 @@ func TestRefusedAnnotationNeverEchoesAToken(t *testing.T) {
 			}
 		})
 	}
-	_, _, err := validateAnnotation("claude-review", strings.NewReader(cases["second link refused"]), []string{"claude-review"}, testNow)
+	_, _, err := validateAnnotation("claude-review", testPrUrl, strings.NewReader(cases["second link refused"]), []string{"claude-review"}, testNow)
 	if err == nil || !strings.HasPrefix(err.Error(), "links[1]: ") {
 		t.Errorf("err = %v, want it to name links[1]", err)
 	}
@@ -217,4 +226,12 @@ func TestTokensAreHex(t *testing.T) {
 			t.Fatalf("%q is not hex", r)
 		}
 	}
+}
+
+// testPrUrl is the PR the validation cases annotate.
+const testPrUrl = "https://github.com/o/r/pull/1"
+
+// action is a needs_you body with one link naming its action.
+func action(name, url string) string {
+	return `{"state":"needs_you","links":[{"label":"x","url":"` + url + `","action":"` + name + `"}],"expiresAt":"` + testNow.Add(15*time.Minute).Format(time.RFC3339) + `"}`
 }

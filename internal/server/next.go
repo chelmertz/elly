@@ -256,7 +256,7 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 				}
 				// A tool's `?` explains the row; it sits on the row, by the
 				// button, where it is found without opening the panel.
-				if l.Label == helpLabel && row.Help == "" && types.LinkNamesPr(pr.Url, l.Url) && allowedLink(l.Url, schemes) {
+				if (l.Label == helpLabel || l.Action == types.ActionHelp) && row.Help == "" && types.LinkNamesPr(pr.Url, l.Url) && allowedLink(l.Url, schemes) {
 					row.Help, row.HelpTitle = href(l.Url), a.Source+" · what this row means · "+l.Url
 					continue
 				}

@@ -130,18 +130,19 @@ func TestOnYouAndFoldedSplitAfterUnblock(t *testing.T) {
 	}
 }
 
-// An unlabelled link is still the attach link when its path ends in /attach.
+// An unlabelled link is still claude-review's attach link when its path is
+// that verb on its own scheme; an https path ending in /attach is not.
 func TestLinkDoesMatchesThePathsLastSegment(t *testing.T) {
 	for _, c := range []struct {
 		url  string
 		want bool
 	}{
 		{"claude-review://o/r/1/attach", true},
-		{"https://example.com/rounds/ATTACH", true},
+		{"https://example.com/rounds/ATTACH", false},
 		{"claude-review://o/r/1/attachment", false},
 		{"claude-review://o/r/attach/1", false},
 	} {
-		if got := linkDoes(types.AnnotationLink{Url: c.url}, "attach"); got != c.want {
+		if got := types.LinkDoes(ClaudeReviewSource, "https://github.com/o/r/pull/1", types.AnnotationLink{Url: c.url}, types.ActionOpen); got != c.want {
 			t.Errorf("%s: got %v, want %v", c.url, got, c.want)
 		}
 	}
@@ -170,7 +171,9 @@ func TestTurnVerbFollowsOnlyALinkToThisPr(t *testing.T) {
 		{"approve on another number", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "claude-review://acme/widget/12/approve"}, false},
 		{"approve on another host", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://evil.example/login"}, false},
 		{"approve on github, another PR", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://github.com/acme/widget/pull/12"}, false},
-		{"approve on github, this PR's files", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://github.com/acme/widget/pull/1/files#diff"}, true},
+		// Only claude-review's own scheme approves: an https link labelled
+		// Approve is no one-click approve, even to this PR.
+		{"approve on github, this PR's files", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://github.com/acme/widget/pull/1/files#diff"}, false},
 		{"github path that climbs out", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://github.com/acme/widget/pull/1/../../../evil/pull/1"}, false},
 		{"github lookalike host", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://github.com.evil.example/acme/widget/pull/1"}, false},
 		{"github with userinfo", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://x@github.com/acme/widget/pull/1"}, false},
@@ -216,5 +219,37 @@ func TestTurnOf_RequestedThroughATeamIsYours(t *testing.T) {
 	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "them", ReviewRequestedOfUser: true, Asked: types.AskedRequested, LastUpdated: time.Now()}
 	if got := TurnOf(pr, "me", time.Now()); got.Group != GroupWaiting || got.Verb != "Review" {
 		t.Fatalf("got %+v, want Review in Waiting for you", got)
+	}
+}
+
+// Only claude-review says a link approves or opens its session, and only on
+// its own scheme: another source's "Approve", or an https link labelled
+// so, is no one-click Approve. A link names what it does by its action;
+// until claude-review writes actions, its label or path still says it.
+func TestOnlyClaudeReviewsOwnLinksApproveOrOpen(t *testing.T) {
+	row := func(source string, l types.AnnotationLink) types.ViewPr {
+		return types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a",
+			Annotations: []types.Annotation{{Source: source, State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{l}}}}
+	}
+	for name, c := range map[string]struct {
+		pr      types.ViewPr
+		approve bool
+		open    bool
+	}{
+		"claude-review, by action":       {row("claude-review", types.AnnotationLink{Label: "Yes", Url: "claude-review://o/r/1/approve", Action: types.ActionApprove}), true, false},
+		"claude-review, by label":        {row("claude-review", types.AnnotationLink{Label: "Approve", Url: "claude-review://o/r/1/approve"}), true, false},
+		"claude-review, open by action":  {row("claude-review", types.AnnotationLink{Label: "Open Claude", Url: "claude-review://o/r/1/attach", Action: types.ActionOpen}), false, true},
+		"another source's Approve":       {row("other", types.AnnotationLink{Label: "Approve", Url: "claude-review://o/r/1/approve"}), false, false},
+		"an https Approve":               {row("claude-review", types.AnnotationLink{Label: "Approve", Url: "https://github.com/o/r/pull/1/approve"}), false, false},
+		"another source's attach":        {row("other", types.AnnotationLink{Label: "attach", Url: "claude-review://o/r/1/attach"}), false, false},
+		"an action that is not the verb": {row("claude-review", types.AnnotationLink{Label: "Approve", Url: "claude-review://o/r/1/attach", Action: types.ActionApprove}), false, false},
+	} {
+		_, approveUrl := annotationVerdict(c.pr)
+		if (approveUrl != "") != c.approve {
+			t.Errorf("%s: approve %q", name, approveUrl)
+		}
+		if (attachUrl(c.pr) != "") != c.open {
+			t.Errorf("%s: open %q", name, attachUrl(c.pr))
+		}
 	}
 }

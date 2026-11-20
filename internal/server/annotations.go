@@ -63,7 +63,7 @@ func WriteAnnotationToken(path string) (string, error) {
 // validateAnnotation parses a PUT body and checks it against the limits. It
 // returns the annotation as stored and the parsed expiry. Its errors go back
 // to the writer and never quote a link: one may carry a live token.
-func validateAnnotation(source string, body io.Reader, schemes []string, now time.Time) (types.Annotation, time.Time, error) {
+func validateAnnotation(source, prUrl string, body io.Reader, schemes []string, now time.Time) (types.Annotation, time.Time, error) {
 	var req struct {
 		State string `json:"state"`
 		Note  string `json:"note"`
@@ -71,6 +71,7 @@ func validateAnnotation(source string, body io.Reader, schemes []string, now tim
 			Label   string `json:"label"`
 			Url     string `json:"url"`
 			Primary bool   `json:"primary"`
+			Action  string `json:"action"`
 		} `json:"links"`
 		ExpiresAt string `json:"expiresAt"`
 	}
@@ -106,7 +107,14 @@ func validateAnnotation(source string, body io.Reader, schemes []string, now tim
 		if !allowedLink(l.Url, schemes) {
 			return types.Annotation{}, time.Time{}, fmt.Errorf("links[%d]: https, or a scheme named in -annotation-schemes, at most %d characters", i, maxLinkUrl)
 		}
-		a.Links = append(a.Links, types.AnnotationLink{Label: l.Label, Url: l.Url, Primary: l.Primary})
+		if l.Action != "" {
+			want, known := types.ActionVerbs[l.Action]
+			verb, ours := types.ClaudeReviewVerb(prUrl, l.Url)
+			if source != "claude-review" || !known || !ours || verb != want {
+				return types.Annotation{}, time.Time{}, fmt.Errorf("links[%d]: an action only from claude-review, on its own link to this PR with the action's verb", i)
+			}
+		}
+		a.Links = append(a.Links, types.AnnotationLink{Label: l.Label, Url: l.Url, Primary: l.Primary, Action: l.Action})
 	}
 
 	expires, err := time.Parse(time.RFC3339, req.ExpiresAt)
@@ -204,7 +212,7 @@ func registerAnnotationRoutes(mux *http.ServeMux, cfg HttpServerConfig) {
 		if !ok {
 			return
 		}
-		a, expires, err := validateAnnotation(r.PathValue("source"), http.MaxBytesReader(w, r.Body, maxAnnotationBody), cfg.AnnotationSchemes, time.Now())
+		a, expires, err := validateAnnotation(r.PathValue("source"), u, http.MaxBytesReader(w, r.Body, maxAnnotationBody), cfg.AnnotationSchemes, time.Now())
 		if err != nil {
 			var tooLarge *http.MaxBytesError
 			if errors.As(err, &tooLarge) {

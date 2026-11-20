@@ -139,6 +139,48 @@ type AnnotationLink struct {
 	// how an add-on offers an action (claude-review's Start). One per
 	// annotation.
 	Primary bool `json:"primary,omitempty"`
+	// Action is what the link does, one of the Action* names; only
+	// claude-review's own links on its scheme may carry one (validated on
+	// PUT), and elly reads it, never the label.
+	Action string `json:"action,omitempty"`
+}
+
+// The action table. claude-review's actionVerbs (in its elly.go) names the
+// same pairs; each side pins them in a test. The verb is the link's last
+// path segment, "" for the bare PR link that starts a review.
+const (
+	ActionApprove = "approve"
+	ActionOpen    = "open"
+	ActionStart   = "start"
+	ActionHelp    = "help"
+)
+
+var ActionVerbs = map[string]string{ActionApprove: "approve", ActionOpen: "attach", ActionStart: "", ActionHelp: "states"}
+
+// ClaudeReviewVerb is the verb of a claude-review:// link naming prUrl ("" for
+// the bare link), and whether it is one.
+func ClaudeReviewVerb(prUrl, link string) (string, bool) {
+	u, err := url.Parse(link)
+	if err != nil || !strings.EqualFold(u.Scheme, "claude-review") || !LinkNamesPr(prUrl, link) {
+		return "", false
+	}
+	segments := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
+	if len(segments) == 3 {
+		return segments[2], true
+	}
+	return "", true
+}
+
+// LinkDoes: the link, on an annotation from source, does action to prUrl.
+// Only claude-review's own scheme counts, from source claude-review: by the
+// link's Action, or, on a link without one (claude-review before it wrote
+// actions), by its verb.
+func LinkDoes(source, prUrl string, l AnnotationLink, action string) bool {
+	verb, ok := ClaudeReviewVerb(prUrl, l.Url)
+	if source != "claude-review" || !ok || !strings.EqualFold(verb, ActionVerbs[action]) {
+		return false
+	}
+	return l.Action == action || l.Action == ""
 }
 
 const (
