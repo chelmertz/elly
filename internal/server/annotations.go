@@ -61,7 +61,8 @@ func WriteAnnotationToken(path string) (string, error) {
 }
 
 // validateAnnotation parses a PUT body and checks it against the limits. It
-// returns the annotation as stored and the parsed expiry.
+// returns the annotation as stored and the parsed expiry. Its errors go back
+// to the writer and never quote a link: one may carry a live token.
 func validateAnnotation(source string, body io.Reader, schemes []string, now time.Time) (types.Annotation, time.Time, error) {
 	var req struct {
 		State string `json:"state"`
@@ -93,17 +94,17 @@ func validateAnnotation(source string, body io.Reader, schemes []string, now tim
 	}
 	a := types.Annotation{Source: source, State: req.State, Note: req.Note, ExpiresAt: req.ExpiresAt, Links: []types.AnnotationLink{}}
 	primaries := 0
-	for _, l := range req.Links {
+	for i, l := range req.Links {
 		if l.Primary {
 			if primaries++; primaries > 1 {
 				return types.Annotation{}, time.Time{}, errors.New("at most one primary link")
 			}
 		}
 		if err := plainText(l.Label, maxLinkLabel); err != nil {
-			return types.Annotation{}, time.Time{}, fmt.Errorf("label: %w", err)
+			return types.Annotation{}, time.Time{}, fmt.Errorf("links[%d].label: %w", i, err)
 		}
 		if !allowedLink(l.Url, schemes) {
-			return types.Annotation{}, time.Time{}, fmt.Errorf("link %q: https, or a scheme named in -annotation-schemes, at most %d characters", l.Url, maxLinkUrl)
+			return types.Annotation{}, time.Time{}, fmt.Errorf("links[%d]: https, or a scheme named in -annotation-schemes, at most %d characters", i, maxLinkUrl)
 		}
 		a.Links = append(a.Links, types.AnnotationLink{Label: l.Label, Url: l.Url, Primary: l.Primary})
 	}

@@ -177,3 +177,44 @@ func TestPlainTextRefusesFormatCharacters(t *testing.T) {
 		t.Errorf("ordinary text refused: %v", err)
 	}
 }
+
+// A refused body may hold a live Approve token; elly's error must not carry
+// it back to the writer's logs. Tokens are hex, which %q, JSON and URL
+// encoding leave as they are, so the raw value covers every form.
+func TestRefusedAnnotationNeverEchoesAToken(t *testing.T) {
+	const token = "9f86d081884c7d659a2feaa0c55ad015"
+	in15 := testNow.Add(15 * time.Minute).Format(time.RFC3339)
+	link := `{"label":"Approve","url":"claude-review://o/r/1/approve?token=` + token + `"}`
+	cases := map[string]string{
+		"scheme not allowed": `{"state":"needs_you","links":[` + link + `],"expiresAt":"` + in15 + `"}`,
+		"second link refused": `{"state":"needs_you","links":[{"label":"x","url":"https://a.example"},` + strings.Replace(link, "claude-review:", "evil:", 1) + `],"expiresAt":"` + in15 + `"}`,
+		"unknown field":       `{"state":"needs_you","links":[` + link + `],"extra":"` + token + `","expiresAt":"` + in15 + `"}`,
+		"wrong-typed state":   `{"state":1,"links":[` + link + `],"expiresAt":"` + in15 + `"}`,
+		"note with token":     `{"state":"needs_you","note":"` + strings.Repeat("n", 301) + token + `","expiresAt":"` + in15 + `"}`,
+		"truncated":           `{"state":"needs_you","links":[` + link,
+	}
+	for name, b := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := validateAnnotation("claude-review", strings.NewReader(b), nil, testNow)
+			if err == nil {
+				t.Fatal("accepted")
+			}
+			if strings.Contains(err.Error(), token) {
+				t.Errorf("error carries the token: %v", err)
+			}
+		})
+	}
+	_, _, err := validateAnnotation("claude-review", strings.NewReader(cases["second link refused"]), []string{"claude-review"}, testNow)
+	if err == nil || !strings.HasPrefix(err.Error(), "links[1]: ") {
+		t.Errorf("err = %v, want it to name links[1]", err)
+	}
+}
+
+func TestTokensAreHex(t *testing.T) {
+	// The no-echo tests rely on encodings leaving hex alone.
+	for _, r := range "9f86d081884c7d659a2feaa0c55ad015" {
+		if !strings.ContainsRune("0123456789abcdef", r) {
+			t.Fatalf("%q is not hex", r)
+		}
+	}
+}
