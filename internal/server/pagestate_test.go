@@ -74,7 +74,7 @@ func TestPageStateWalk(t *testing.T) {
 	}
 	now := time.Now()
 	unrelated := types.ViewPr{Url: "https://github.com/o/r/pull/1", Title: "t", Author: "someone", LastUpdated: now, RawJsonResponse: []byte("{}")}
-	asked := types.ViewPr{Url: "https://github.com/o/r/pull/2", Title: "t", Author: "someone", ReviewRequestedOfUser: true, LastUpdated: now, RawJsonResponse: []byte("{}")}
+	asked := types.ViewPr{Url: "https://github.com/o/r/pull/2", Title: "t", Author: "someone", ReviewRequestedOfUser: true, Asked: types.AskedRequested, LastUpdated: now, RawJsonResponse: []byte("{}")}
 
 	check(stateNoToken)
 	if err := store.StorePAT("ghp_x", "me", time.Time{}); err != nil {

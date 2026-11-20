@@ -27,6 +27,7 @@
         "MergeStateStatus": "BLOCKED",
         "HeadRefOid": "0000000000000000000000000000000000000001",
         "ReviewRequestedOfUser": false,
+        "Asked": "not_asked",
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -67,6 +68,7 @@
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000002",
         "ReviewRequestedOfUser": true,
+        "Asked": "requested",
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -106,6 +108,7 @@
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000003",
         "ReviewRequestedOfUser": false,
+        "Asked": "not_asked",
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -151,6 +154,7 @@
         "MergeStateStatus": "",
         "HeadRefOid": "0000000000000000000000000000000000000004",
         "ReviewRequestedOfUser": true,
+        "Asked": "requested",
         "RawJsonResponse": null,
         "Annotations": null
       },

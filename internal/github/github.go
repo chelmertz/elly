@@ -73,7 +73,10 @@ type prEdgeGraphQl struct {
 type querySearchPrsInvolvingMeGraphQl struct {
 	Data struct {
 		Search struct {
-			Edges []prEdgeGraphQl
+			// IssueCount is every match; more than the edges read means the
+			// search was cut short at its page.
+			IssueCount int
+			Edges      []prEdgeGraphQl
 		}
 	}
 }
@@ -573,19 +576,20 @@ func (a api) poll(username string) ([]types.ViewPr, []types.Degradation, error) 
 	// Using json.RawMessage for the response, so that we can store the raw
 	// JSON (not the parsed response) of each PR, for debugging reasons.
 	// Debugging > efficiency, in this case.
-	search := func(qualifier string) ([]prEdgeGraphQl, error) {
+	search := func(qualifier string) ([]prEdgeGraphQl, bool, error) {
 		respBody, err := a.request(querySearchPrs(qualifier, username))
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		var rawResponse querySearchPrsInvolvingMeGraphQl
 		if err := json.Unmarshal(respBody, &rawResponse); err != nil {
-			return nil, fmt.Errorf("could not unmarshal github response: %w", err)
+			return nil, false, fmt.Errorf("could not unmarshal github response: %w", err)
 		}
-		return rawResponse.Data.Search.Edges, nil
+		s := rawResponse.Data.Search
+		return s.Edges, s.IssueCount <= len(s.Edges), nil
 	}
 
-	edges, err := search(qualifierInvolves)
+	edges, _, err := search(qualifierInvolves)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not query github for PRs: %w", err)
 	}
@@ -593,7 +597,17 @@ func (a api) poll(username string) ([]types.ViewPr, []types.Degradation, error) 
 	// A PR can match both searches; the loop below keeps the first sighting.
 	// Losing this search costs only the PRs we have never spoken on, so it is
 	// reported rather than allowed to sink the whole poll.
-	requested, err := search(qualifierReviewRequested)
+	requested, requestsComplete, err := search(qualifierReviewRequested)
+	// Whether "not returned by that search" may be read as "not asked".
+	requestsKnown := err == nil && requestsComplete
+	if err == nil && !requestsComplete {
+		degradations["review_requests_unreadable"] = types.Degradation{
+			Kind:    "review_requests_unreadable",
+			Message: "The search for review requests matched more PRs than one page holds.",
+			Remedy:  "PRs past the page keep whether you were asked as of the last full poll.",
+			Seen:    time.Now(),
+		}
+	}
 	if err != nil {
 		// Rate limiting is the one failure that must not be absorbed: the
 		// caller backs off on it, and a degradation would keep the poll
@@ -729,6 +743,7 @@ func (a api) poll(username string) ([]types.ViewPr, []types.Degradation, error) 
 			ChecksComplete:           checksComplete,
 			HeadRefOid:               pr.HeadRefOid,
 			ReviewRequestedOfUser:    requestedOfUser[pr.Url],
+			Asked:                    asked(pr.Author.Login, username, requestedOfUser[pr.Url], requestsKnown, reviewUsers),
 			RawJsonResponse:          prEdge.Node,
 		}
 		logger.Debug("fetched a pr", slog.Any("pr", viewPr))
@@ -770,6 +785,24 @@ func (a api) poll(username string) ([]types.ViewPr, []types.Degradation, error) 
 
 // reviewedBy names everyone but the user and bots who submitted a review, in
 // the order they first did.
+// asked is whether the user owes the PR a review: never on their own PR;
+// requested when the review-requested search returned it (by name or
+// through a team) or the reviewer list names them, logins compared without
+// case; not asked only when that search read every match. Otherwise ""
+// (unknown): the reviewer list cannot name a team, so its silence proves
+// nothing, and storage keeps the last poll's value.
+func asked(author, username string, requestedOfUser, requestsComplete bool, reviewers []string) string {
+	switch {
+	case username == "" || strings.EqualFold(author, username):
+		return types.AskedNotAsked
+	case requestedOfUser || slices.ContainsFunc(reviewers, func(r string) bool { return strings.EqualFold(r, username) }):
+		return types.AskedRequested
+	case requestsComplete:
+		return types.AskedNotAsked
+	}
+	return ""
+}
+
 func reviewedBy(pr prSearchResultGraphQl, myUsername string) []string {
 	out := []string{}
 	for _, r := range pr.Reviews.Edges {
@@ -1325,7 +1358,8 @@ func querySearchPrs(qualifier, username string) graphqlQuery {
 // if everything is too high, github will complain with a
 // MAX_NODE_LIMIT_EXCEEDED error.
 const searchPrsQuery = `query($search: String!) {
-  search(type: ISSUE, query: $search, first: 100) {    edges {
+  search(type: ISSUE, query: $search, first: 100) {    issueCount
+    edges {
       node {
         ... on PullRequest {
           id

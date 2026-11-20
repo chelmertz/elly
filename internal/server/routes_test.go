@@ -208,7 +208,7 @@ func TestGetPrsTurnYouMatchesThePage(t *testing.T) {
 	}
 	now := time.Now()
 	if err := w.store.StoreRepoPrs([]types.ViewPr{
-		{Url: "https://github.com/o/r/pull/1", Title: "asked", Author: "a", ReviewRequestedFromUsers: []string{"me"}, LastUpdated: now, RawJsonResponse: []byte("{}")},
+		{Url: "https://github.com/o/r/pull/1", Title: "asked", Author: "a", ReviewRequestedFromUsers: []string{"me"}, Asked: types.AskedRequested, LastUpdated: now, RawJsonResponse: []byte("{}")},
 		{Url: "https://github.com/o/r/pull/2", Title: "iced own", Author: "me", Additions: 10, LastUpdated: now.Add(-30 * 24 * time.Hour), RawJsonResponse: []byte("{}")},
 		{Url: "https://github.com/o/r/pull/3", Title: "someone's", Author: "a", Additions: 10, LastUpdated: now, RawJsonResponse: []byte("{}")},
 	}); err != nil {

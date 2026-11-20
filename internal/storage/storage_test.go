@@ -1097,3 +1097,60 @@ func TestStorageWaitsOutALockedDatabase(t *testing.T) {
 		t.Errorf("busy_timeout %d, %v", timeout, err)
 	}
 }
+
+// A poll whose request search could not say leaves Asked "" and storage
+// keeps the last poll's answer, so a team request does not flap to "not
+// asked" on one failed search; a PR it never saw asked reads not asked.
+// Rows from before the column read their old bool.
+func TestStoreRepoPrs_UnknownAskedKeepsTheLastPollsAnswer(t *testing.T) {
+	store := setupTestStorage(t)
+	pr := func(url, asked string) types.ViewPr {
+		return types.ViewPr{Url: url, Title: "t", Author: "adam", RepoName: "r", RepoOwner: "o", Asked: asked,
+			ReviewRequestedFromUsers: []string{}, RereviewFrom: []string{}, RawJsonResponse: []byte("{}")}
+	}
+	asked, fresh := "https://github.com/o/r/pull/1", "https://github.com/o/r/pull/2"
+	if err := store.StoreRepoPrs([]types.ViewPr{pr(asked, types.AskedRequested)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.StoreRepoPrs([]types.ViewPr{pr(asked, ""), pr(fresh, "")}); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, p := range store.Prs().Prs {
+		got[p.Url] = p.Asked
+	}
+	if got[asked] != types.AskedRequested || got[fresh] != types.AskedNotAsked {
+		t.Errorf("after an unreadable search: %v", got)
+	}
+	if err := store.StoreRepoPrs([]types.ViewPr{pr(asked, types.AskedNotAsked)}); err != nil {
+		t.Fatal(err)
+	}
+	if p := store.Prs().Prs[0]; p.Asked != types.AskedNotAsked {
+		t.Errorf("a withdrawn request stuck: %q", p.Asked)
+	}
+}
+
+func TestNewStorage_SeedsAskedFromTheOldColumn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "elly.db")
+	old, err := sql.Open("sqlite", "file:"+path+"?mode=rwc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(strings.Replace(ddl, "    asked text not null default '',\n", "", 1)); err != nil {
+		t.Fatal(err)
+	}
+	for n, requested := range map[string]int{"1": 1, "2": 0} {
+		if _, err := old.Exec(`insert into prs (url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, buried, review_requested_of_user, raw_json_response)
+			values ('https://github.com/o/r/pull/`+n+`', '', 't', 'adam', 'r', 'o', 'https://github.com/o/r', 0, '2026-09-08T10:00:00Z', '', 0, 0, 1, 1, '', 0, ?, '{}')`, requested); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = old.Close()
+	got := map[string]string{}
+	for _, p := range NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path).Prs().Prs {
+		got[p.Url[len(p.Url)-1:]] = p.Asked
+	}
+	if got["1"] != types.AskedRequested || got["2"] != types.AskedNotAsked {
+		t.Errorf("seeded %v", got)
+	}
+}

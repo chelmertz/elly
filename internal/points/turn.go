@@ -90,9 +90,10 @@ const icebox = 14 * 24 * time.Hour
 //   - A stuck annotation is needs_you that nothing but the user will move.
 //   - With no username (no token yet), no PR is the user's own.
 func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
-	own := username != "" && pr.Author == username
-	asked := !own && username != "" &&
-		(pr.ReviewRequestedOfUser || slices.Contains(pr.ReviewRequestedFromUsers, username) || slices.Contains(pr.RereviewFrom, username))
+	own := username != "" && strings.EqualFold(pr.Author, username)
+	// Asked is decided once, at the poll (github.asked), and resolved by
+	// storage when the request search could not say.
+	asked := !own && username != "" && pr.Asked == types.AskedRequested
 	needsYou, approveUrl := annotationVerdict(pr)
 	handled := needsYou == nil && HandedOver(pr, "")
 	withClaude := needsYou == nil && !own && HandedOver(pr, ClaudeReviewSource)

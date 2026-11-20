@@ -355,7 +355,7 @@ func TestBuryStillHidesANeedsYouPr(t *testing.T) {
 
 func TestRunningDropsReviewOwedReasons(t *testing.T) {
 	now := time.Now()
-	pr := types.ViewPr{Author: "author", Additions: 10, ThreadsActionable: 2, ReviewRequestedFromUsers: []string{"me"}, LastUpdated: now}
+	pr := types.ViewPr{Author: "author", Additions: 10, ThreadsActionable: 2, ReviewRequestedFromUsers: []string{"me"}, Asked: types.AskedRequested, LastUpdated: now}
 	if p := StandardPrPoints(annotated(pr, types.AnnotationRunning), "me", now); p.Total > 0 {
 		t.Errorf("a PR with a round running still counts: %d %v", p.Total, p.Reasons)
 	}

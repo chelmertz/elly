@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/chelmertz/elly/anonymise"
+	"github.com/chelmertz/elly/internal/types"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"time"
@@ -1331,5 +1332,62 @@ func Test_LogBodyKeepsTheStart(t *testing.T) {
 	}
 	if got := logBody([]byte(at + "b")); got != at+"…" {
 		t.Errorf("513 bytes: %q", got)
+	}
+}
+
+// Asked is computed once, here: requested by name or through a team, never
+// on the user's own PR, logins compared without case; and when the request
+// search failed or was cut short, unknown (""), which storage resolves from
+// the last poll, never "not asked" (a team request names no user).
+func Test_QueryGithub_Asked(t *testing.T) {
+	noRetryPause(t)
+	pr := func(n, author, reviewer string) string {
+		return fmt.Sprintf(`{"node":{
+			"id":"PR_%s","url":"https://github.com/o/r/pull/%s","title":"t%s","author":{"login":%q},
+			"updatedAt":"2026-09-08T10:00:00Z","repository":{"url":"https://github.com/o/r","name":"r","owner":{"login":"o"}},
+			"reviewRequests":{"nodes":[{"requestedReviewer":{"login":%q}}]},
+			"comments":{"edges":[]},
+			"reviewThreads":{"totalCount":0,"pageInfo":{"hasNextPage":false},"edges":[]}
+		}}`, n, n, n, author, reviewer)
+	}
+	involves := strings.Join([]string{pr("1", "adam", "Me"), pr("2", "me", "adam"), pr("3", "adam", "bea"), pr("4", "adam", "bea")}, ",")
+	for _, c := range []struct {
+		name      string
+		requested func(w http.ResponseWriter)
+		want      map[string]string
+	}{
+		{"complete", func(w http.ResponseWriter) {
+			_, _ = fmt.Fprintf(w, `{"data":{"search":{"issueCount":1,"edges":[%s]}}}`, pr("4", "adam", "bea"))
+		}, map[string]string{"1": types.AskedRequested, "2": types.AskedNotAsked, "3": types.AskedNotAsked, "4": types.AskedRequested}},
+		{"unreadable", func(w http.ResponseWriter) { w.WriteHeader(http.StatusInternalServerError) },
+			map[string]string{"1": types.AskedRequested, "2": types.AskedNotAsked, "3": "", "4": ""}},
+		{"truncated", func(w http.ResponseWriter) {
+			_, _ = fmt.Fprintf(w, `{"data":{"search":{"issueCount":150,"edges":[%s]}}}`, pr("4", "adam", "bea"))
+		}, map[string]string{"1": types.AskedRequested, "2": types.AskedNotAsked, "3": "", "4": types.AskedRequested}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				switch {
+				case strings.Contains(string(body), "nodes(ids:"):
+					_, _ = fmt.Fprint(w, `{"data":{"nodes":[]}}`)
+				case strings.Contains(string(body), "review-requested:"):
+					c.requested(w)
+				default:
+					_, _ = fmt.Fprintf(w, `{"data":{"search":{"issueCount":4,"edges":[%s]}}}`, involves)
+				}
+			}))
+			t.Cleanup(srv.Close)
+			prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, p := range prs {
+				n := p.Url[strings.LastIndex(p.Url, "/")+1:]
+				if p.Asked != c.want[n] {
+					t.Errorf("pull/%s asked %q, want %q", n, p.Asked, c.want[n])
+				}
+			}
+		})
 	}
 }

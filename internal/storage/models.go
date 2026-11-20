@@ -45,6 +45,7 @@ type Pr struct {
 	MergeStateStatus         string
 	HeadRefOid               string
 	ReviewRequestedOfUser    bool
+	Asked                    string
 	RawJsonResponse          []byte
 }
 

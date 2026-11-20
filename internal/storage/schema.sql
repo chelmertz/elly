@@ -24,6 +24,7 @@ create table if not exists prs (
     merge_state_status text not null default '',
     head_ref_oid text not null default '',
     review_requested_of_user boolean not null default 0,
+    asked text not null default '',
     raw_json_response blob not null
 );
 

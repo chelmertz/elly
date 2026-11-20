@@ -27,6 +27,7 @@ func nextFixture(now time.Time) []types.ViewPr {
 	merge.ReviewStatus = "APPROVED"
 	review := pr("2", "a")
 	review.ReviewRequestedFromUsers = []string{"me"}
+	review.Asked = types.AskedRequested
 	red := pr("3", "me")
 	red.ChecksState = "FAILURE"
 	waiting := pr("4", "me")
@@ -38,6 +39,7 @@ func nextFixture(now time.Time) []types.ViewPr {
 	buried.Buried = true
 	handedOver := pr("8", "a")
 	handedOver.ReviewRequestedFromUsers = []string{"me"}
+	handedOver.Asked = types.AskedRequested
 	handedOver.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning, Note: "started by tick"}}
 	return []types.ViewPr{buried, iced, involved, waiting, red, review, merge, handedOver}
 }
@@ -223,7 +225,7 @@ func TestNextShowsWhatNeedsTheUserUnderTheRow(t *testing.T) {
 
 func TestNextAttachVerbFollowsTheAnnotationLink(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
-	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now, ReviewRequestedFromUsers: []string{"me"},
+	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now, ReviewRequestedFromUsers: []string{"me"}, Asked: types.AskedRequested,
 		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning,
 			Links: []types.AnnotationLink{{Label: "Attach", Url: "claude-review://o/r/1/attach"}}}}}
 	data := buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"})
@@ -329,7 +331,7 @@ func colourTokens(page, opener string) map[string]bool {
 func TestNextPrimaryLinkBecomesTheVerb(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	asked := func(url string) types.ViewPr {
-		return types.ViewPr{Url: url, Author: "a", LastUpdated: now, ReviewRequestedFromUsers: []string{"me"}}
+		return types.ViewPr{Url: url, Author: "a", LastUpdated: now, ReviewRequestedFromUsers: []string{"me"}, Asked: types.AskedRequested}
 	}
 	offered := asked("https://github.com/o/r/pull/1")
 	offered.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationInfo, Links: []types.AnnotationLink{
@@ -441,7 +443,7 @@ func runPageScript(t *testing.T, script string, changes *Changes) {
 func TestNextOrdersRowsByPointsInsideAGroup(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	asked := func(n string, loc int) types.ViewPr {
-		return types.ViewPr{Url: "https://github.com/o/r/pull/" + n, Author: "a", Additions: loc, LastUpdated: now, ReviewRequestedFromUsers: []string{"me"}}
+		return types.ViewPr{Url: "https://github.com/o/r/pull/" + n, Author: "a", Additions: loc, LastUpdated: now, ReviewRequestedFromUsers: []string{"me"}, Asked: types.AskedRequested}
 	}
 	data := buildNext([]types.ViewPr{asked("1", 400), asked("2", 200), asked("3", 100), asked("4", 10)}, "me", now, nil)
 	var got []string
@@ -509,7 +511,7 @@ func TestStateFacts(t *testing.T) {
 		want string
 	}{
 		{"bare PR of someone else", types.ViewPr{Author: "a"}, "no checks"},
-		{"everything at once", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{"me"}, RereviewFrom: []string{"b"}, ReviewedBy: []string{"c"},
+		{"everything at once", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{"me"}, Asked: types.AskedRequested, RereviewFrom: []string{"b"}, ReviewedBy: []string{"c"},
 			ChecksState: "SUCCESS", MergeStateStatus: "BEHIND", ThreadsActionable: 2, ThreadsWaiting: 1, IsDraft: true, LastPrCommenter: "d",
 			Annotations: []types.Annotation{{Source: "t", State: types.AnnotationNeedsYou, Note: "look"}, {Source: "u", State: types.AnnotationHandled}}},
 			"review requested: me|reviewed before the latest change: b|reviewed by c|CI green|behind the base branch|" +

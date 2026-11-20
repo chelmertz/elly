@@ -163,11 +163,16 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 		`alter table prs add column head_ref_oid text not null default ''`,
 		`alter table prs add column reviewed_by text not null default ''`,
 		`alter table prs add column review_requested_of_user boolean not null default 0`,
+		`alter table prs add column asked text not null default ''`,
 	} {
 		if _, err := db.ExecContext(ctx, alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			check(err)
 		}
 	}
+	// Rows stored before asked existed read their old bool until the next
+	// poll rewrites them.
+	_, err = db.ExecContext(ctx, `update prs set asked = case when review_requested_of_user then 'requested' else 'not_asked' end where asked = ''`)
+	check(err)
 	check(widenAnnotationStates(ctx, db))
 	check(migrateTokens(ctx, db))
 
@@ -328,6 +333,7 @@ func (s *DbStorage) Prs() StoredState {
 			MergeStateStatus:         dbPr.MergeStateStatus,
 			HeadRefOid:               dbPr.HeadRefOid,
 			ReviewRequestedOfUser:    dbPr.ReviewRequestedOfUser,
+			Asked:                    dbPr.Asked,
 			RawJsonResponse:          dbPr.RawJsonResponse,
 		})
 	}
@@ -384,6 +390,27 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 		}
 	}
 
+	// A poll whose request search could not say leaves Asked ""; the PR
+	// keeps the last poll's answer, and one never seen asked is not asked.
+	if prev, err := s.db.PrAskeds(context.Background()); err != nil {
+		s.logger.Error("could not read the last poll's asked, unknown reads not asked", slog.Any("err", err))
+	} else {
+		last := make(map[string]string, len(prev))
+		for _, p := range prev {
+			last[p.Url] = p.Asked
+		}
+		for i := range orderedPrs {
+			if orderedPrs[i].Asked == "" {
+				orderedPrs[i].Asked = last[orderedPrs[i].Url]
+			}
+		}
+	}
+	for i := range orderedPrs {
+		if orderedPrs[i].Asked != types.AskedRequested {
+			orderedPrs[i].Asked = types.AskedNotAsked
+		}
+	}
+
 	// One transaction, so a reader never sees the table emptied and half
 	// refilled, and a failed insert leaves the previous list in place.
 	ctx := context.Background()
@@ -425,6 +452,7 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 			MergeStateStatus:         pr.MergeStateStatus,
 			HeadRefOid:               pr.HeadRefOid,
 			ReviewRequestedOfUser:    pr.ReviewRequestedOfUser,
+			Asked:                    pr.Asked,
 			RawJsonResponse:          pr.RawJsonResponse,
 		})
 		if err != nil {

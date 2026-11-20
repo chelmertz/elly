@@ -28,9 +28,10 @@ insert into prs (
     merge_state_status,
     head_ref_oid,
     review_requested_of_user,
+    asked,
     raw_json_response
 ) values (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 ) returning *;
 
 -- name: DeletePrs :exec
@@ -44,6 +45,9 @@ update prs set buried = true where url = ?;
 
 -- name: Unbury :exec
 update prs set buried = false where url = ?;
+
+-- name: PrAskeds :many
+select url, asked from prs;
 
 -- name: BuriedPrs :many
 select url, last_updated from prs where buried = true;

@@ -95,10 +95,11 @@ insert into prs (
     merge_state_status,
     head_ref_oid,
     review_requested_of_user,
+    asked,
     raw_json_response
 ) values (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-) returning url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, rereview_from, reviewed_by, buried, checks_state, checks_failing, checks_complete, mergeable, merge_state_status, head_ref_oid, review_requested_of_user, raw_json_response
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+) returning url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, rereview_from, reviewed_by, buried, checks_state, checks_failing, checks_complete, mergeable, merge_state_status, head_ref_oid, review_requested_of_user, asked, raw_json_response
 `
 
 type CreatePrParams struct {
@@ -127,6 +128,7 @@ type CreatePrParams struct {
 	MergeStateStatus         string
 	HeadRefOid               string
 	ReviewRequestedOfUser    bool
+	Asked                    string
 	RawJsonResponse          []byte
 }
 
@@ -157,6 +159,7 @@ func (q *Queries) CreatePr(ctx context.Context, arg CreatePrParams) (Pr, error) 
 		arg.MergeStateStatus,
 		arg.HeadRefOid,
 		arg.ReviewRequestedOfUser,
+		arg.Asked,
 		arg.RawJsonResponse,
 	)
 	var i Pr
@@ -186,6 +189,7 @@ func (q *Queries) CreatePr(ctx context.Context, arg CreatePrParams) (Pr, error) 
 		&i.MergeStateStatus,
 		&i.HeadRefOid,
 		&i.ReviewRequestedOfUser,
+		&i.Asked,
 		&i.RawJsonResponse,
 	)
 	return i, err
@@ -312,7 +316,7 @@ func (q *Queries) GetNotifySeen(ctx context.Context) (string, error) {
 }
 
 const getPr = `-- name: GetPr :one
-select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, rereview_from, reviewed_by, buried, checks_state, checks_failing, checks_complete, mergeable, merge_state_status, head_ref_oid, review_requested_of_user, raw_json_response from prs where url = ? limit 1
+select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, rereview_from, reviewed_by, buried, checks_state, checks_failing, checks_complete, mergeable, merge_state_status, head_ref_oid, review_requested_of_user, asked, raw_json_response from prs where url = ? limit 1
 `
 
 func (q *Queries) GetPr(ctx context.Context, url string) (Pr, error) {
@@ -344,6 +348,7 @@ func (q *Queries) GetPr(ctx context.Context, url string) (Pr, error) {
 		&i.MergeStateStatus,
 		&i.HeadRefOid,
 		&i.ReviewRequestedOfUser,
+		&i.Asked,
 		&i.RawJsonResponse,
 	)
 	return i, err
@@ -435,7 +440,7 @@ func (q *Queries) ListOwnerPATs(ctx context.Context) ([]ListOwnerPATsRow, error)
 }
 
 const listPrs = `-- name: ListPrs :many
-select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, rereview_from, reviewed_by, buried, checks_state, checks_failing, checks_complete, mergeable, merge_state_status, head_ref_oid, review_requested_of_user, raw_json_response from prs
+select url, review_status, title, author, repo_name, repo_owner, repo_url, is_draft, last_updated, last_pr_commenter, threads_actionable, threads_waiting, additions, deletions, review_requested_from_users, rereview_from, reviewed_by, buried, checks_state, checks_failing, checks_complete, mergeable, merge_state_status, head_ref_oid, review_requested_of_user, asked, raw_json_response from prs
 `
 
 func (q *Queries) ListPrs(ctx context.Context) ([]Pr, error) {
@@ -473,6 +478,7 @@ func (q *Queries) ListPrs(ctx context.Context) ([]Pr, error) {
 			&i.MergeStateStatus,
 			&i.HeadRefOid,
 			&i.ReviewRequestedOfUser,
+			&i.Asked,
 			&i.RawJsonResponse,
 		); err != nil {
 			return nil, err
@@ -519,6 +525,38 @@ func (q *Queries) LiveAnnotations(ctx context.Context, expiresUnix int64) ([]Liv
 			&i.Links,
 			&i.ExpiresAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const prAskeds = `-- name: PrAskeds :many
+select url, asked from prs
+`
+
+type PrAskedsRow struct {
+	Url   string
+	Asked string
+}
+
+func (q *Queries) PrAskeds(ctx context.Context) ([]PrAskedsRow, error) {
+	rows, err := q.db.QueryContext(ctx, prAskeds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PrAskedsRow
+	for rows.Next() {
+		var i PrAskedsRow
+		if err := rows.Scan(&i.Url, &i.Asked); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

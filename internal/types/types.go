@@ -43,6 +43,14 @@ func (d Degradation) TokenLimitation() bool {
 	return d.Kind == DegradationChecksUnreadable
 }
 
+// The two resolved values of ViewPr.Asked. They cross GET /api/v0/prs, and
+// claude-review names the same literals (askedRequested, askedNotAsked in
+// its decide.go); each side pins them in a test.
+const (
+	AskedRequested = "requested"
+	AskedNotAsked  = "not_asked"
+)
+
 type ViewPr struct {
 	ReviewStatus             string
 	Url                      string
@@ -99,6 +107,12 @@ type ViewPr struct {
 	// org's teams gets the team as an empty node, so the reviewer list alone
 	// cannot say the user was asked.
 	ReviewRequestedOfUser bool
+	// Asked is whether the user owes this PR a review: AskedRequested or
+	// AskedNotAsked, the one place that is decided. Between a poll and
+	// storing it, "" means the request search could not say (it failed or
+	// was cut short); storage resolves that to the last poll's value, so
+	// nothing outside elly ever sees it.
+	Asked           string
 	RawJsonResponse json.RawMessage
 	// Annotations are what other local tools say about the PR, unexpired
 	// only. They are stored apart from the PR, which is replaced every fetch.

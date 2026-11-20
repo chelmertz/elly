@@ -30,7 +30,7 @@ func fuzzWorld(t *testing.T, githubURL string) (http.Handler, *storage.DbStorage
 		t.Fatal(err)
 	}
 	if err := store.StoreRepoPrs([]types.ViewPr{
-		{Url: "https://github.com/o/r/pull/1", Title: "one", Author: "someone", ReviewRequestedFromUsers: []string{"me"}, LastUpdated: now, RawJsonResponse: []byte("{}")},
+		{Url: "https://github.com/o/r/pull/1", Title: "one", Author: "someone", ReviewRequestedFromUsers: []string{"me"}, Asked: types.AskedRequested, LastUpdated: now, RawJsonResponse: []byte("{}")},
 		{Url: "https://github.com/o/r/pull/2", Title: "two", Author: "me", LastUpdated: now, RawJsonResponse: []byte("{}")},
 	}); err != nil {
 		t.Fatal(err)

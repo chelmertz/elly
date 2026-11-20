@@ -33,24 +33,24 @@ func TestTurnOf(t *testing.T) {
 		{"own draft is nobody's", types.ViewPr{Author: me, IsDraft: true, ReviewStatus: "APPROVED", LastUpdated: fresh}, GroupNobody, "GitHub"},
 		{"reply owed on someone else's PR", types.ViewPr{Author: "a", ThreadsActionable: 2, LastUpdated: fresh}, GroupWaiting, "Reply"},
 		{"reply owed on own PR", types.ViewPr{Author: me, ThreadsActionable: 1, ReviewRequestedFromUsers: []string{"a"}, LastUpdated: fresh}, GroupWaiting, "Reply"},
-		{"review requested", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, LastUpdated: fresh}, GroupWaiting, "Review"},
-		{"re-review from me", types.ViewPr{Author: "a", RereviewFrom: []string{me}, LastUpdated: fresh}, GroupWaiting, "Review"},
+		{"review requested", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Asked: types.AskedRequested, LastUpdated: fresh}, GroupWaiting, "Review"},
+		{"re-review from me", types.ViewPr{Author: "a", RereviewFrom: []string{me}, Asked: types.AskedRequested, LastUpdated: fresh}, GroupWaiting, "Review"},
 		// the score gives a small PR +50; being merely involved is still nobody's turn
 		{"involved only, however small", types.ViewPr{Author: "a", Additions: 1, LastUpdated: fresh}, GroupNobody, "GitHub"},
 		{"a team request is not a request of me", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{"@team"}, LastUpdated: fresh}, GroupNobody, "GitHub"},
-		{"someone else's red PR is on them", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, ChecksState: "FAILURE", LastUpdated: fresh}, GroupOnOthers, "GitHub"},
+		{"someone else's red PR is on them", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Asked: types.AskedRequested, ChecksState: "FAILURE", LastUpdated: fresh}, GroupOnOthers, "GitHub"},
 		{"they owe replies to my threads", types.ViewPr{Author: "a", ThreadsWaiting: 3, LastUpdated: fresh}, GroupOnOthers, "GitHub"},
 		{"needs_you's primary link labels the button", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{{Label: "Fork with prod data", Url: "claude-review://o/r/1/fork"}, {Label: "Answer", Url: "claude-review://o/r/1/attach", Primary: true}}}}, LastUpdated: fresh}, GroupWaiting, "Answer"},
 		{"needs_you without a primary link opens the PR", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{{Label: "Answer", Url: "claude-review://o/r/1/attach"}}}}, LastUpdated: fresh}, GroupWaiting, "Check"},
 		{"needs_you annotation waits for me", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou}}, LastUpdated: fresh}, GroupWaiting, "Check"},
-		{"approve link is one click", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupOneClick, "Approve"},
+		{"approve link is one click", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Asked: types.AskedRequested, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupOneClick, "Approve"},
 		{"approve link on a red PR is not one click", types.ViewPr{Author: "a", ChecksState: "FAILURE", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupWaiting, "Check"},
-		{"another tool's handled drops the review request", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Annotations: []types.Annotation{{Source: "x", State: types.AnnotationHandled}}, LastUpdated: fresh}, GroupOnOthers, "GitHub"},
+		{"another tool's handled drops the review request", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Asked: types.AskedRequested, Annotations: []types.Annotation{{Source: "x", State: types.AnnotationHandled}}, LastUpdated: fresh}, GroupOnOthers, "GitHub"},
 		{"an info annotation leaves a reply owed", types.ViewPr{Author: "a", ThreadsActionable: 2, Annotations: []types.Annotation{{Source: "x", State: types.AnnotationInfo}}, LastUpdated: fresh}, GroupWaiting, "Reply"},
-		{"an info annotation leaves a review owed", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Annotations: []types.Annotation{{Source: "x", State: types.AnnotationInfo}}, LastUpdated: fresh}, GroupWaiting, "Review"},
+		{"an info annotation leaves a review owed", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Asked: types.AskedRequested, Annotations: []types.Annotation{{Source: "x", State: types.AnnotationInfo}}, LastUpdated: fresh}, GroupWaiting, "Review"},
 		{"another tool's running drops replies owed", types.ViewPr{Author: "a", ThreadsActionable: 2, Annotations: []types.Annotation{{Source: "x", State: types.AnnotationRunning}}, LastUpdated: fresh}, GroupOnOthers, "GitHub"},
-		{"handed over and handled is with claude", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, ThreadsActionable: 1, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationHandled}}, LastUpdated: fresh}, GroupWithClaude, "GitHub"},
-		{"handed over and running is with claude", types.ViewPr{Author: "a", RereviewFrom: []string{me}, ThreadsActionable: 3, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning, Links: attachLink}}, LastUpdated: fresh}, GroupWithClaude, "Attach"},
+		{"handed over and handled is with claude", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Asked: types.AskedRequested, ThreadsActionable: 1, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationHandled}}, LastUpdated: fresh}, GroupWithClaude, "GitHub"},
+		{"handed over and running is with claude", types.ViewPr{Author: "a", RereviewFrom: []string{me}, Asked: types.AskedRequested, ThreadsActionable: 3, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning, Links: attachLink}}, LastUpdated: fresh}, GroupWithClaude, "Attach"},
 		{"handed over while CI runs is with claude", types.ViewPr{Author: "a", ChecksState: "PENDING", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning}}, LastUpdated: fresh}, GroupWithClaude, "GitHub"},
 		{"handed over and red is the author's", types.ViewPr{Author: "a", ChecksState: "FAILURE", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationHandled}}, LastUpdated: fresh}, GroupOnOthers, "GitHub"},
 		{"own approved PR with a round running is still a merge", types.ViewPr{Author: me, ReviewStatus: "APPROVED", ReviewedBy: []string{"a"}, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning}}, LastUpdated: fresh}, GroupOneClick, "Merge"},
@@ -59,7 +59,7 @@ func TestTurnOf(t *testing.T) {
 		{"stuck is never iced", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationStuck}}, LastUpdated: old}, GroupWaiting, "Check"},
 		{"untouched two weeks is iced", types.ViewPr{Author: "a", ThreadsWaiting: 1, LastUpdated: old}, GroupIcebox, "GitHub"},
 		{"own approved untouched two weeks is iced", types.ViewPr{Author: me, ReviewStatus: "APPROVED", LastUpdated: old}, GroupIcebox, "GitHub"},
-		{"asked is never iced", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, LastUpdated: old}, GroupWaiting, "Review"},
+		{"asked is never iced", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Asked: types.AskedRequested, LastUpdated: old}, GroupWaiting, "Review"},
 		{"a live annotation is never iced", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "x", State: types.AnnotationNeedsYou}}, LastUpdated: old}, GroupWaiting, "Check"},
 		{"buried stays buried when old", types.ViewPr{Author: "a", Buried: true, LastUpdated: old}, GroupBuried, "GitHub"},
 		{"no username owns nothing", types.ViewPr{Author: "", ReviewStatus: "APPROVED", LastUpdated: fresh}, GroupNobody, "GitHub"},
@@ -86,7 +86,7 @@ func TestRankOrdersByGroupBeforePoints(t *testing.T) {
 		// nobody's turn, scores +50 for being small
 		{Url: "small", Author: "a", Additions: 1, LastUpdated: now},
 		// waiting for me, scores +10 for a big review
-		{Url: "asked", Author: "a", Additions: 1000, ReviewRequestedFromUsers: []string{"me"}, LastUpdated: now},
+		{Url: "asked", Author: "a", Additions: 1000, ReviewRequestedFromUsers: []string{"me"}, Asked: types.AskedRequested, LastUpdated: now},
 	}
 	if StandardPrPoints(prs[0], "me", now).Total <= StandardPrPoints(prs[1], "me", now).Total {
 		t.Fatal("the test needs the lower group to score higher")
@@ -213,7 +213,7 @@ func TestTurnOf_OwnPRAskingAHiddenTeamWaitsOnOthers(t *testing.T) {
 // A PR the review-requested search returned is the user's to review even
 // when the reviewer list does not name them: the request went to a team.
 func TestTurnOf_RequestedThroughATeamIsYours(t *testing.T) {
-	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "them", ReviewRequestedOfUser: true, LastUpdated: time.Now()}
+	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "them", ReviewRequestedOfUser: true, Asked: types.AskedRequested, LastUpdated: time.Now()}
 	if got := TurnOf(pr, "me", time.Now()); got.Group != GroupWaiting || got.Verb != "Review" {
 		t.Fatalf("got %+v, want Review in Waiting for you", got)
 	}
