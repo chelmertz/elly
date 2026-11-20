@@ -2,12 +2,15 @@ package server
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -195,7 +198,7 @@ func TestRefusedAnnotationNeverEchoesAToken(t *testing.T) {
 	in15 := testNow.Add(15 * time.Minute).Format(time.RFC3339)
 	link := `{"label":"Approve","url":"claude-review://o/r/1/approve?token=` + token + `"}`
 	cases := map[string]string{
-		"scheme not allowed": `{"state":"needs_you","links":[` + link + `],"expiresAt":"` + in15 + `"}`,
+		"scheme not allowed":  `{"state":"needs_you","links":[` + link + `],"expiresAt":"` + in15 + `"}`,
 		"second link refused": `{"state":"needs_you","links":[{"label":"x","url":"https://a.example"},` + strings.Replace(link, "claude-review:", "evil:", 1) + `],"expiresAt":"` + in15 + `"}`,
 		"unknown field":       `{"state":"needs_you","links":[` + link + `],"extra":"` + token + `","expiresAt":"` + in15 + `"}`,
 		"wrong-typed state":   `{"state":1,"links":[` + link + `],"expiresAt":"` + in15 + `"}`,
@@ -234,4 +237,53 @@ const testPrUrl = "https://github.com/o/r/pull/1"
 // action is a needs_you body with one link naming its action.
 func action(name, url string) string {
 	return `{"state":"needs_you","links":[{"label":"x","url":"` + url + `","action":"` + name + `"}],"expiresAt":"` + testNow.Add(15*time.Minute).Format(time.RFC3339) + `"}`
+}
+
+// claudeReviewRows is the fixture claude-review generates from its table
+// (its testdata/rows.json); the rules elly enforces must be exactly it.
+func TestClaudeReviewRowsMatchTheFixture(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "claude-review-rows.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture map[string]rowRule
+	if err := json.Unmarshal(b, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(fixture, claudeReviewRows) {
+		t.Errorf("claudeReviewRows %v, fixture %v", claudeReviewRows, fixture)
+	}
+	// The security-relevant rules, asserted here so a widened fixture
+	// cannot widen them unreviewed.
+	for state, r := range claudeReviewRows {
+		if slices.Contains(r.Offered, types.ActionApprove) != (state == types.AnnotationNeedsYou) {
+			t.Errorf("approve on %s: %v", state, r.Offered)
+		}
+		if slices.Contains(r.Offered, types.ActionOpen) != slices.Contains([]string{types.AnnotationRunning, types.AnnotationNeedsYou, types.AnnotationStuck, types.AnnotationHandled}, state) {
+			t.Errorf("open on %s: %v", state, r.Offered)
+		}
+		if len(r.Primary) > 0 && !slices.Contains([]string{types.AnnotationInfo, types.AnnotationNeedsYou, types.AnnotationStuck}, state) {
+			t.Errorf("a primary on %s", state)
+		}
+	}
+}
+
+// A claude-review row whose links break its state's rules is refused.
+func TestValidateAnnotationChecksClaudeReviewRows(t *testing.T) {
+	exp := testNow.Add(15 * time.Minute).Format(time.RFC3339)
+	for name, c := range map[string]struct {
+		body string
+		ok   bool
+	}{
+		"approve on needs_you": {`{"state":"needs_you","links":[{"label":"Approve","url":"claude-review://o/r/1/approve?at=` + strings.Repeat("a", 40) + `&token=` + strings.Repeat("b", 48) + `","action":"approve","primary":true}],"expiresAt":"` + exp + `"}`, true},
+		"approve on handled":   {`{"state":"handled","links":[{"label":"Approve","url":"claude-review://o/r/1/approve?at=` + strings.Repeat("a", 40) + `&token=` + strings.Repeat("b", 48) + `","action":"approve"}],"expiresAt":"` + exp + `"}`, false},
+		"a primary on running": {`{"state":"running","links":[{"label":"Open Claude","url":"claude-review://o/r/1/attach","action":"open","primary":true}],"expiresAt":"` + exp + `"}`, false},
+		"open on running":      {`{"state":"running","links":[{"label":"Open Claude","url":"claude-review://o/r/1/attach","action":"open"}],"expiresAt":"` + exp + `"}`, true},
+		"start on handled":     {`{"state":"handled","links":[{"label":"Start","url":"claude-review://o/r/1?from=elly","action":"start"}],"expiresAt":"` + exp + `"}`, false},
+	} {
+		_, _, err := validateAnnotation("claude-review", testPrUrl, strings.NewReader(c.body), []string{"claude-review"}, testNow)
+		if (err == nil) != c.ok {
+			t.Errorf("%s: err %v, want ok=%v", name, err, c.ok)
+		}
+	}
 }

@@ -116,6 +116,9 @@ func validateAnnotation(source, prUrl string, body io.Reader, schemes []string, 
 		}
 		a.Links = append(a.Links, types.AnnotationLink{Label: l.Label, Url: l.Url, Primary: l.Primary, Action: l.Action})
 	}
+	if err := checkRow(a); err != nil {
+		return types.Annotation{}, time.Time{}, err
+	}
 
 	expires, err := time.Parse(time.RFC3339, req.ExpiresAt)
 	if err != nil {
@@ -125,6 +128,41 @@ func validateAnnotation(source, prUrl string, body io.Reader, schemes []string, 
 		return types.Annotation{}, time.Time{}, fmt.Errorf("expiresAt must be between %v and %v from now", minAnnotationTTL, maxAnnotationTTL)
 	}
 	return a, expires, nil
+}
+
+// rowRule is, for one annotation state, the actions a claude-review row may
+// make primary and the actions it may offer.
+type rowRule struct {
+	Primary []string `json:"primary"`
+	Offered []string `json:"offered"`
+}
+
+// claudeReviewRows are the rules claude-review's table produces, equal to
+// the fixture it generates (testdata/claude-review-rows.json, a copy of its
+// testdata/rows.json); TestClaudeReviewRowsMatchTheFixture holds them
+// together.
+var claudeReviewRows = map[string]rowRule{
+	types.AnnotationHandled:  {Primary: []string{}, Offered: []string{types.ActionHelp, types.ActionOpen}},
+	types.AnnotationInfo:     {Primary: []string{types.ActionStart}, Offered: []string{types.ActionStart}},
+	types.AnnotationNeedsYou: {Primary: []string{types.ActionApprove, types.ActionOpen, types.ActionStart}, Offered: []string{types.ActionApprove, types.ActionHelp, types.ActionOpen, types.ActionStart}},
+	types.AnnotationRunning:  {Primary: []string{}, Offered: []string{types.ActionHelp, types.ActionOpen}},
+	types.AnnotationStuck:    {Primary: []string{types.ActionOpen, types.ActionStart}, Offered: []string{types.ActionHelp, types.ActionOpen, types.ActionStart}},
+}
+
+// checkRow refuses a row whose links name actions its state does not
+// allow, or make one primary that may not be: a claude-review annotation
+// can add a need, never one its own table does not have.
+func checkRow(a types.Annotation) error {
+	rule := claudeReviewRows[a.State]
+	for i, l := range a.Links {
+		if l.Action == "" {
+			continue
+		}
+		if !slices.Contains(rule.Offered, l.Action) || l.Primary && !slices.Contains(rule.Primary, l.Action) {
+			return fmt.Errorf("links[%d]: %s is not offered that way on a %s row", i, l.Action, a.State)
+		}
+	}
+	return nil
 }
 
 func plainText(s string, max int) error {

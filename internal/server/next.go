@@ -23,9 +23,9 @@ type NextData struct {
 	Degradations           []types.Degradation
 	SetupMode              bool
 	// State is what the page says before any row; see pageState.
-	State pageState
-	OnYou                  int
-	OnOthers               int
+	State    pageState
+	OnYou    int
+	OnOthers int
 	// OldestOnYou is the longest wait among the PRs on the user, as a
 	// bucket-free duration like "6 d", or "" when nothing is on the user.
 	OldestOnYou string
