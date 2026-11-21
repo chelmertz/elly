@@ -112,11 +112,28 @@ type ViewPr struct {
 	// storing it, "" means the request search could not say (it failed or
 	// was cut short); storage resolves that to the last poll's value, so
 	// nothing outside elly ever sees it.
-	Asked           string
-	RawJsonResponse json.RawMessage
+	Asked string
+	// Mentions are the comments that @-mention the user and wait on them
+	// (github.mentions has the rule). No text crosses the API: the read
+	// endpoint is open to local processes, and a consumer reads the body
+	// from GitHub by Url.
+	Mentions []Mention
+	// MentionsReadable is false when the poll could not see every review
+	// thread of the PR, so an open mention may be missing from Mentions.
+	MentionsReadable bool
+	RawJsonResponse  json.RawMessage
 	// Annotations are what other local tools say about the PR, unexpired
 	// only. They are stored apart from the PR, which is replaced every fetch.
 	Annotations []Annotation
+}
+
+// Mention is one open @-mention of the user. BodyHash changes when the
+// comment is edited.
+type Mention struct {
+	Url      string
+	Author   string
+	At       time.Time
+	BodyHash string
 }
 
 // Annotation is a note another local tool attaches to a PR: whether the PR

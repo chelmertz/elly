@@ -46,6 +46,8 @@ type Pr struct {
 	HeadRefOid               string
 	ReviewRequestedOfUser    bool
 	Asked                    string
+	Mentions                 string
+	MentionsReadable         bool
 	RawJsonResponse          []byte
 }
 

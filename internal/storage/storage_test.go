@@ -1154,3 +1154,29 @@ func TestNewStorage_SeedsAskedFromTheOldColumn(t *testing.T) {
 		t.Errorf("seeded %v", got)
 	}
 }
+
+// Mentions round-trip, and a stored list elly cannot read reports the PR
+// unreadable rather than free of mentions.
+func TestStoreRepoPrs_MentionsRoundTrip(t *testing.T) {
+	store := setupTestStorage(t)
+	at := time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC)
+	m := types.Mention{Url: "https://github.com/o/r/pull/1#issuecomment-9", Author: "adam", At: at, BodyHash: "ab"}
+	pr := types.ViewPr{
+		Url: "https://github.com/o/r/pull/1", Title: "t", Author: "me",
+		RepoName: "r", RepoOwner: "o", LastUpdated: time.Now(),
+		RawJsonResponse: []byte("{}"), Mentions: []types.Mention{m}, MentionsReadable: true,
+	}
+	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+		t.Fatal(err)
+	}
+	got := store.Prs().Prs[0]
+	if len(got.Mentions) != 1 || got.Mentions[0] != m || !got.MentionsReadable {
+		t.Fatalf("got %+v readable %v", got.Mentions, got.MentionsReadable)
+	}
+	if _, err := store.rawDb.Exec(`update prs set mentions = 'garbage'`); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Prs().Prs[0]; got.MentionsReadable || len(got.Mentions) != 0 {
+		t.Errorf("an unreadable list: %+v readable %v", got.Mentions, got.MentionsReadable)
+	}
+}

@@ -1143,13 +1143,7 @@ func Test_RereviewFrom_OnlyTheUsersCommentsCount(t *testing.T) {
 	review.Node.Author.Login, review.Node.State, review.Node.SubmittedAt = "adam", "COMMENTED", "2026-09-01T10:00:00Z"
 	pr.Reviews.Edges = append(pr.Reviews.Edges, review)
 	comment := func(login, at string) {
-		var c struct {
-			Node struct {
-				UpdatedAt string
-				Author    struct{ Login string }
-				Url       string
-			}
-		}
+		var c struct{ Node prCommentGraphQl }
 		c.Node.Author.Login, c.Node.UpdatedAt = login, at
 		pr.Comments.Edges = append(pr.Comments.Edges, c)
 	}

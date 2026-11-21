@@ -25,6 +25,8 @@ create table if not exists prs (
     head_ref_oid text not null default '',
     review_requested_of_user boolean not null default 0,
     asked text not null default '',
+    mentions text not null default '[]',
+    mentions_readable boolean not null default 0,
     raw_json_response blob not null
 );
 

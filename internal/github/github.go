@@ -138,13 +138,7 @@ type prSearchResultGraphQl struct {
 	HeadRefOid string
 	Comments   struct {
 		Edges []struct {
-			Node struct {
-				UpdatedAt string
-				Author    struct {
-					Login string
-				}
-				Url string
-			}
+			Node prCommentGraphQl
 		}
 	}
 	Commits struct {
@@ -223,9 +217,24 @@ type prReviewThreadCommentGraphQl struct {
 	Author struct {
 		Login string
 	}
-	Url       string
-	CreatedAt string // only fetched for the last comment
-	Reactions prReviewThreadCommentReactionGraphQl
+	Url               string
+	CreatedAt         string // only fetched for the last comment
+	Body              string // only fetched for the last comment
+	AuthorAssociation string // only fetched for the last comment
+	Reactions         prReviewThreadCommentReactionGraphQl
+}
+
+// prCommentGraphQl is one of a PR's last five PR-level comments.
+type prCommentGraphQl struct {
+	UpdatedAt string
+	CreatedAt string
+	Author    struct {
+		Login string
+	}
+	Url               string
+	Body              string
+	AuthorAssociation string
+	Reactions         prReviewThreadCommentReactionGraphQl
 }
 
 type prReviewThreadCommentReactionGraphQl struct {
@@ -668,7 +677,9 @@ func (a api) poll(username string) ([]types.ViewPr, []types.Degradation, error) 
 			lastPrCommenter = c.Node.Author.Login
 		}
 
+		threadsComplete := true
 		if err := a.fetchRemainingReviewThreads(&pr); err != nil {
+			threadsComplete = false
 			// the poll goes on with what the search returned; the count for
 			// this PR is a lower bound until the next poll succeeds
 			logger.Warn("could not fetch all review threads", slog.String("pr_url", pr.Url), slog.Any("err", err))
@@ -744,7 +755,9 @@ func (a api) poll(username string) ([]types.ViewPr, []types.Degradation, error) 
 			HeadRefOid:               pr.HeadRefOid,
 			ReviewRequestedOfUser:    requestedOfUser[pr.Url],
 			Asked:                    asked(pr.Author.Login, username, requestedOfUser[pr.Url], requestsKnown, reviewUsers),
-			RawJsonResponse:          prEdge.Node,
+			Mentions:                 mentions(pr, username),
+			MentionsReadable:         threadsComplete,
+			RawJsonResponse:          withoutBodies(prEdge.Node),
 		}
 		logger.Debug("fetched a pr", slog.Any("pr", viewPr))
 		viewPrs = append(viewPrs, viewPr)
@@ -1264,6 +1277,8 @@ const reviewThreadFields = `
                     }
                     url
                     createdAt
+                    body
+                    authorAssociation
                     reactions(first: 7) {
                         edges {
                             node {
@@ -1400,10 +1415,23 @@ const searchPrsQuery = `query($search: String!) {
             edges {
               node {
                 updatedAt
+                createdAt
                 author {
                   login
                 }
                 url
+                body
+                authorAssociation
+                reactions(first: 7) {
+                  edges {
+                    node {
+                      content
+                      user {
+                        login
+                      }
+                    }
+                  }
+                }
               }
             }
           }

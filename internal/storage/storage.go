@@ -170,6 +170,8 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 		`alter table prs add column reviewed_by text not null default ''`,
 		`alter table prs add column review_requested_of_user boolean not null default 0`,
 		`alter table prs add column asked text not null default ''`,
+		`alter table prs add column mentions text not null default '[]'`,
+		`alter table prs add column mentions_readable boolean not null default 0`,
 	} {
 		if _, err := db.ExecContext(ctx, alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			check(err)
@@ -311,6 +313,7 @@ func (s *DbStorage) Prs() StoredState {
 	check(err)
 	prs := make([]types.ViewPr, 0)
 	for _, dbPr := range dbPrs {
+		mentions, mentionsOk := s.decodeMentions(dbPr.Url, dbPr.Mentions)
 		lastUpdated, err := time.Parse(time.RFC3339, dbPr.LastUpdated)
 		check(err)
 		prs = append(prs, types.ViewPr{
@@ -340,6 +343,8 @@ func (s *DbStorage) Prs() StoredState {
 			HeadRefOid:               dbPr.HeadRefOid,
 			ReviewRequestedOfUser:    dbPr.ReviewRequestedOfUser,
 			Asked:                    dbPr.Asked,
+			Mentions:                 mentions,
+			MentionsReadable:         dbPr.MentionsReadable && mentionsOk,
 			RawJsonResponse:          dbPr.RawJsonResponse,
 		})
 	}
@@ -459,6 +464,8 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 			HeadRefOid:               pr.HeadRefOid,
 			ReviewRequestedOfUser:    pr.ReviewRequestedOfUser,
 			Asked:                    pr.Asked,
+			Mentions:                 encodeMentions(pr.Mentions),
+			MentionsReadable:         pr.MentionsReadable,
 			RawJsonResponse:          pr.RawJsonResponse,
 		})
 		if err != nil {
@@ -919,4 +926,25 @@ func (s *DbStorage) AnnotationPutCounts() (actionPuts, fallbacks int, err error)
 		}
 	}
 	return actionPuts, fallbacks, rows.Err()
+}
+
+func encodeMentions(m []types.Mention) string {
+	if len(m) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+// decodeMentions reads a stored mention list; ok false when it cannot, and
+// the row then reports MentionsReadable false, never "no mentions".
+func (s *DbStorage) decodeMentions(url, raw string) (m []types.Mention, ok bool) {
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		s.logger.Error("could not read stored mentions", slog.String("pr_url", url), slog.Any("err", err))
+		return nil, false
+	}
+	return m, true
 }

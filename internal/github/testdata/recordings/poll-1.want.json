@@ -30,6 +30,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000001",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -71,6 +73,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000002",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -112,6 +116,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000003",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -152,6 +158,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000004",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -192,6 +200,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000005",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -236,6 +246,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000006",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -278,6 +290,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000007",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -316,6 +330,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000008",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -357,6 +373,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000009",
         "ReviewRequestedOfUser": true,
         "Asked": "requested",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -397,6 +415,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000010",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -438,6 +458,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000011",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -479,6 +501,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000012",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -520,6 +544,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000013",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -558,6 +584,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000014",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -597,6 +625,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000015",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -638,6 +668,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000016",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -678,6 +710,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000017",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -718,6 +752,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000018",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -758,6 +794,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000019",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -798,6 +836,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000020",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -838,6 +878,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000021",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -877,6 +919,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000022",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -917,6 +961,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000023",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -956,6 +1002,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000024",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -994,6 +1042,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000025",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1032,6 +1082,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000026",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1074,6 +1126,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000027",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1112,6 +1166,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000028",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1153,6 +1209,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000029",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1192,6 +1250,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000030",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1230,6 +1290,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000031",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },
@@ -1268,6 +1330,8 @@
         "HeadRefOid": "0000000000000000000000000000000000000032",
         "ReviewRequestedOfUser": false,
         "Asked": "not_asked",
+        "Mentions": null,
+        "MentionsReadable": true,
         "RawJsonResponse": null,
         "Annotations": null
       },

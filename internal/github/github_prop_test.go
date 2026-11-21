@@ -71,13 +71,7 @@ func genPr(t *rapid.T) prSearchResultGraphQl {
 		pr.Commits.Nodes[0].Commit.Author.Date = genStamp(t, "commit")
 	}
 	for i := range rapid.IntRange(0, 2).Draw(t, "comments") {
-		var e struct {
-			Node struct {
-				UpdatedAt string
-				Author    struct{ Login string }
-				Url       string
-			}
-		}
+		var e struct{ Node prCommentGraphQl }
 		e.Node.Author.Login = rapid.SampledFrom(propLogins).Draw(t, fmt.Sprintf("comment%d", i))
 		e.Node.UpdatedAt = genStamp(t, fmt.Sprintf("comment%dAt", i))
 		pr.Comments.Edges = append(pr.Comments.Edges, e)

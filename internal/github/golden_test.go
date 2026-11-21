@@ -86,6 +86,9 @@ func canonical(t *testing.T, b []byte) any {
 	return v
 }
 
+// lastReplayPrs is what the last replay's poll returned, raw nodes kept.
+var lastReplayPrs []types.ViewPr
+
 // replay serves rec in order, failing on any request that differs from the
 // recorded one, and returns what the poll and the scoring made of it.
 func replay(t *testing.T, rec recording) goldenResult {
@@ -118,6 +121,7 @@ func replay(t *testing.T, rec recording) goldenResult {
 	if next != len(rec.Exchanges) {
 		t.Errorf("the poll made %d of the %d recorded requests", next, len(rec.Exchanges))
 	}
+	lastReplayPrs = prs
 	out := goldenResult{Prs: []goldenPr{}, Degradations: degradations}
 	for _, pr := range prs {
 		pr.RawJsonResponse = nil // the search node again, in the recording already

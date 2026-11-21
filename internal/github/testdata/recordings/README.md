@@ -12,3 +12,6 @@ Each `poll-N.json` is one poll, recorded with `elly -record` and anonymised;
 - 2026-11-20: `issueCount` was added to the two search requests by hand in
   all three, without re-recording: the responses lack it, which reads as a
   search that returned every match, as these did. Re-record when convenient.
+- 2026-11-21: comment `body`, `authorAssociation`, `createdAt` and PR-comment
+  reactions were added to the requests by hand, same way. The responses lack
+  them, so the replays find no mentions; `mentions_test.go` covers the rule.
