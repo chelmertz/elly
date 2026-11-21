@@ -20,7 +20,9 @@ var inlineCode = regexp.MustCompile("`[^`\n]*`")
 
 // mentionedIn says whether body names @user outside quoted lines, code
 // fences and code spans. A login is word-bounded on both sides: "@meow"
-// and "me@me.com" do not name "me".
+// and "me@me.com" do not name "me". claude-review's mentionedIn (its
+// mention.go, for `threads`) is the same rule; each side pins it with the
+// same cases.
 func mentionedIn(body, user string) bool {
 	if user == "" {
 		return false
