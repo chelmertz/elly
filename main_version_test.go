@@ -22,6 +22,8 @@ func TestBuildVersion(t *testing.T) {
 	}{
 		{"nix build", "373b0ab", "373b0ab", info("(devel)", "")},
 		{"go build in a checkout", "", "373b0ab", info("(devel)", "373b0abd61be44eb19a93fc4bd5d5a1df8e0ddb8")},
+		{"a commit of exactly seven characters", "", "373b0ab", info("(devel)", "373b0ab")},
+		{"a commit too short to name", "", "(devel)", info("(devel)", "373b0a")},
 		{"no commit known", "", "(devel)", info("(devel)", "")},
 		{"no build info", "", "unknown", func() (*debug.BuildInfo, bool) { return nil, false }},
 	} {

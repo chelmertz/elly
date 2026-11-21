@@ -1180,3 +1180,17 @@ func TestStoreRepoPrs_MentionsRoundTrip(t *testing.T) {
 		t.Errorf("an unreadable list: %+v readable %v", got.Mentions, got.MentionsReadable)
 	}
 }
+
+// A pat table from before its owner column (2026-11-05) still migrates; the
+// main token gets no owner.
+func TestOpeningAnOldDatabaseWithoutTheOwnerColumn(t *testing.T) {
+	path := oldDatabase(t,
+		`alter table pat drop column owner`,
+		`insert into pat (pat, expires_at, username, active) values ('github_pat_me', '', 'me', 1)`,
+	)
+	store := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
+	var pat, owner string
+	if err := store.rawDb.QueryRow(`select pat, owner from token where kind = 'main'`).Scan(&pat, &owner); err != nil || pat != "github_pat_me" || owner != "" {
+		t.Fatalf("main token %q owner %q, %v", pat, owner, err)
+	}
+}

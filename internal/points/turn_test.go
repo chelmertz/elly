@@ -253,3 +253,22 @@ func TestOnlyClaudeReviewsOwnLinksApproveOrOpen(t *testing.T) {
 		}
 	}
 }
+
+// The path alone marks an approve link: no action and an innocent label.
+func TestLooksLikeApproveByPath(t *testing.T) {
+	cases := []struct {
+		url  string
+		want bool
+	}{
+		{"claude-review://o/r/1/approve", true},
+		{"https://example.test/o/r/APPROVE", true},
+		{"claude-review://o/r/1/attach", false},
+		{"claude-review://o/r/1/disapprove", false},
+		{"%zz", false},
+	}
+	for _, c := range cases {
+		if got := looksLikeApprove(types.AnnotationLink{Label: "Open", Url: c.url}); got != c.want {
+			t.Errorf("looksLikeApprove(%q) = %v, want %v", c.url, got, c.want)
+		}
+	}
+}

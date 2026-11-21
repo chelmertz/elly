@@ -1349,15 +1349,16 @@ func Test_QueryGithub_Asked(t *testing.T) {
 		name      string
 		requested func(w http.ResponseWriter)
 		want      map[string]string
+		degraded  string // in the review_requests_unreadable message, "" for none
 	}{
 		{"complete", func(w http.ResponseWriter) {
 			_, _ = fmt.Fprintf(w, `{"data":{"search":{"issueCount":1,"edges":[%s]}}}`, pr("4", "adam", "bea"))
-		}, map[string]string{"1": types.AskedRequested, "2": types.AskedNotAsked, "3": types.AskedNotAsked, "4": types.AskedRequested}},
+		}, map[string]string{"1": types.AskedRequested, "2": types.AskedNotAsked, "3": types.AskedNotAsked, "4": types.AskedRequested}, ""},
 		{"unreadable", func(w http.ResponseWriter) { w.WriteHeader(http.StatusInternalServerError) },
-			map[string]string{"1": types.AskedRequested, "2": types.AskedNotAsked, "3": "", "4": ""}},
+			map[string]string{"1": types.AskedRequested, "2": types.AskedNotAsked, "3": "", "4": ""}, "Could not search"},
 		{"truncated", func(w http.ResponseWriter) {
 			_, _ = fmt.Fprintf(w, `{"data":{"search":{"issueCount":150,"edges":[%s]}}}`, pr("4", "adam", "bea"))
-		}, map[string]string{"1": types.AskedRequested, "2": types.AskedNotAsked, "3": "", "4": types.AskedRequested}},
+		}, map[string]string{"1": types.AskedRequested, "2": types.AskedNotAsked, "3": "", "4": types.AskedRequested}, "more PRs than one page"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1372,9 +1373,19 @@ func Test_QueryGithub_Asked(t *testing.T) {
 				}
 			}))
 			t.Cleanup(srv.Close)
-			prs, _, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
+			prs, degradations, err := queryGithub(srv.URL, "token", "me", slog.New(slog.NewTextHandler(io.Discard, nil)))
 			if err != nil {
 				t.Fatal(err)
+			}
+			var d types.Degradation
+			ok := false
+			for _, g := range degradations {
+				if g.Kind == "review_requests_unreadable" {
+					d, ok = g, true
+				}
+			}
+			if ok != (c.degraded != "") || !strings.Contains(d.Message, c.degraded) {
+				t.Errorf("degradation %+v (present %v), want one saying %q", d, ok, c.degraded)
 			}
 			for _, p := range prs {
 				n := p.Url[strings.LastIndex(p.Url, "/")+1:]

@@ -635,3 +635,16 @@ func TestThePageHasAnInlineIcon(t *testing.T) {
 		t.Errorf("the CSP does not admit a data: icon: %s", contentSecurityPolicy)
 	}
 }
+
+func TestAnnotationSourceOfNamesTheSourceHoldingTheLink(t *testing.T) {
+	pr := types.ViewPr{Annotations: []types.Annotation{
+		{Source: "other", Links: []types.AnnotationLink{{Url: "https://a.test/1"}}},
+		{Source: "claude-review", Links: []types.AnnotationLink{{Url: "claude-review://o/r/1/approve"}}},
+	}}
+	if got := annotationSourceOf(pr, "claude-review://o/r/1/approve"); got != "claude-review" {
+		t.Errorf("source %q, want claude-review", got)
+	}
+	if got := annotationSourceOf(pr, "https://none.test"); got != "" {
+		t.Errorf("source %q for a link nobody holds, want none", got)
+	}
+}

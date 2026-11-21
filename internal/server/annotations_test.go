@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -298,10 +299,19 @@ func TestHealthCountsActionPutsAndFallbacks(t *testing.T) {
 	if err := store.StoreRepoPrs([]types.ViewPr{{Url: prUrl, LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
 		t.Fatal(err)
 	}
+	var logs bytes.Buffer
 	cfg := HttpServerConfig{Store: store, Version: "abc1234", AnnotationToken: "secret", AnnotationSchemes: []string{"claude-review"},
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+		Logger: slog.New(slog.NewTextHandler(&logs, nil))}
 	mux := routes(cfg)
-	put := func(link string) {
+	counts := func() (int, int) {
+		t.Helper()
+		a, f, err := store.AnnotationPutCounts()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a, f
+	}
+	put := func(link string, wantActions, wantFallbacks int) {
 		t.Helper()
 		b := `{"state":"running","links":[` + link + `],"expiresAt":"` + time.Now().Add(15*time.Minute).Format(time.RFC3339) + `"}`
 		r := httptest.NewRequest("PUT", "/api/v0/prs/"+base64.StdEncoding.EncodeToString([]byte(prUrl))+"/annotations/claude-review", strings.NewReader(b))
@@ -311,11 +321,20 @@ func TestHealthCountsActionPutsAndFallbacks(t *testing.T) {
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("PUT %s: %d %s", link, w.Code, w.Body)
 		}
+		if a, f := counts(); a != wantActions || f != wantFallbacks {
+			t.Fatalf("after PUT %s: actionPuts %d fallbacks %d, want %d %d", link, a, f, wantActions, wantFallbacks)
+		}
 	}
-	put(`{"label":"Open Claude","url":"claude-review://o/r/1/attach","action":"open"}`)
-	put(`{"label":"Open Claude","url":"claude-review://o/r/1/attach","action":"open"}`)
-	put(`{"label":"Open Claude","url":"claude-review://o/r/1/attach"}`)
-	put(`{"label":"?","url":"claude-review://o/r/1/states"}`) // neither: no approve or attach
+	put(`{"label":"Open Claude","url":"claude-review://o/r/1/attach","action":"open"}`, 1, 0)
+	put(`{"label":"Open Claude","url":"claude-review://o/r/1/attach","action":"open"}`, 2, 0)
+	put(`{"label":"?","url":"claude-review://o/r/1/states"}`, 2, 0) // neither: no approve or attach
+	if strings.Contains(logs.String(), "names no action") || strings.Contains(logs.String(), "could not count") {
+		t.Fatalf("logged without a fallback or a failure:\n%s", logs.String())
+	}
+	put(`{"label":"Open Claude","url":"claude-review://o/r/1/attach"}`, 2, 1)
+	if !strings.Contains(logs.String(), "names no action") || !strings.Contains(logs.String(), "verb=attach") {
+		t.Fatalf("a fallback was not logged with its verb:\n%s", logs.String())
+	}
 	r := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, r)
@@ -329,6 +348,9 @@ func TestHealthCountsActionPutsAndFallbacks(t *testing.T) {
 	}
 	if h.Version != "abc1234" || h.ActionPuts != 2 || h.Fallbacks != 1 {
 		t.Errorf("health %+v", h)
+	}
+	if strings.Contains(logs.String(), "could not") {
+		t.Errorf("warned on a run where nothing failed:\n%s", logs.String())
 	}
 	var keys map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &keys)

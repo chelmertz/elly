@@ -21,6 +21,19 @@ import (
 	"github.com/chelmertz/elly/internal/types"
 )
 
+// quietLogger is testLogger for a run where nothing fails: a "could not"
+// warning fails the test.
+func quietLogger(t *testing.T) *slog.Logger {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	t.Cleanup(func() {
+		if strings.Contains(buf.String(), `level=WARN msg="could not`) {
+			t.Errorf("warned on a run where nothing failed:\n%s", buf.String())
+		}
+	})
+	return logger
+}
+
 func testLogger(t *testing.T) *slog.Logger {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{AddSource: true}))
@@ -554,6 +567,27 @@ func TestRefreshLoop_ManualRefreshPollsWithinTheInterval(t *testing.T) {
 	waitFor(t, "a poll on request", func() bool { return calls.Load() > 0 })
 }
 
+// The first good poll with a token whose owner is unknown records it; a
+// classic token is named by its login.
+func TestRefreshLoop_RecordsAnUnknownOwner(t *testing.T) {
+	logger := quietLogger(t)
+	store := storage.NewStorage(logger, t.TempDir()+"/elly.db")
+	if err := store.StorePAT("ghp_x", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	githubAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"search":{"edges":[]}}}`))
+	}))
+	defer githubAPI.Close()
+	tracker := backoff.New(logger, time.Hour)
+	defer tracker.Stop()
+	go startRefreshLoop(store, tracker, githubAPI.URL, nil, logger)
+	waitFor(t, "the owner recorded", func() bool {
+		pat, found, err := store.GetPAT()
+		return err == nil && found && pat.Owner == "me"
+	})
+}
+
 func TestRestrictDBFilesLeavesOnlyTheOwnerAccess(t *testing.T) {
 	db := filepath.Join(t.TempDir(), "elly.db")
 	for _, f := range []string{db, db + "-wal"} {
@@ -598,7 +632,7 @@ func TestInitPAT_BackfillsMissingExpiries(t *testing.T) {
 	}))
 	defer githubAPI.Close()
 
-	logger := testLogger(t)
+	logger := quietLogger(t)
 	store := storage.NewStorage(logger, filepath.Join(t.TempDir(), "elly.db"))
 	if err := store.StorePAT("github_pat_main", "me", time.Time{}); err != nil {
 		t.Fatal(err)
@@ -689,6 +723,7 @@ func TestPollDue(t *testing.T) {
 	}{
 		{4*time.Minute + 55*time.Second, true},
 		{3 * time.Minute, true},
+		{150 * time.Second, true}, // exactly half the interval
 		{time.Minute, false},
 		{0, false},
 		{time.Hour, true},
