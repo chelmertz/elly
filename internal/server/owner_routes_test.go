@@ -56,6 +56,12 @@ func TestOwnerPatPutStoresUnderGitHubsSpelling(t *testing.T) {
 	if !strings.Contains(status, `"owner":"Acme"`) || strings.Contains(status, token) {
 		t.Errorf("status %s", status)
 	}
+	// dotfiles' bin/prom-system-health greps for this literal to tell a
+	// configured elly from one in setup mode; a change here is a false
+	// CredentialExpired alert there.
+	if !strings.Contains(status, `"configured":true`) {
+		t.Errorf("status %s lacks the literal the credential probe reads", status)
+	}
 	if rec := w.do("DELETE", "/api/v0/config/pat/ACME", ""); rec.Code != http.StatusNoContent {
 		t.Errorf("DELETE: %d", rec.Code)
 	}

@@ -447,7 +447,7 @@ func routes(webConfig HttpServerConfig) *http.ServeMux {
 			ownerTokens = append(ownerTokens, m)
 		}
 		response := map[string]any{
-			"configured":   true,
+			"configured":   true, // read by dotfiles bin/prom-system-health; pinned in owner_routes_test.go
 			"username":     storedPat.Username,
 			"stored_at":    storedPat.SetAt.Format(time.RFC3339),
 			"degradations": degradations,
