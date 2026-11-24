@@ -20,9 +20,9 @@ type notifying struct {
 	changed func()
 }
 
-func (n notifying) StoreRepoPrs(prs []types.ViewPr) error {
+func (n notifying) StoreRepoPrs(polled PollTokens, prs []types.ViewPr) error {
 	defer n.changed()
-	return n.Storage.StoreRepoPrs(prs)
+	return n.Storage.StoreRepoPrs(polled, prs)
 }
 
 func (n notifying) Bury(prUrl string) error {

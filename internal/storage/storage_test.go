@@ -19,8 +19,9 @@ import (
 func setupTestStorage(t *testing.T) *DbStorage {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	store := NewStorage(logger, ":memory:")
-	return store
+	// A file, not ":memory:": sqlite cannot put an in-memory database in
+	// WAL, and NewStorage refuses one that is not.
+	return NewStorage(logger, filepath.Join(t.TempDir(), "elly.db"))
 }
 
 func TestStorePAT_InsertsNewPATAsActive(t *testing.T) {
@@ -201,7 +202,7 @@ func TestNewStorage_AddsRereviewColumnToOldDatabase(t *testing.T) {
 	}
 	prs[0].RereviewFrom = []string{"adam", "eve"}
 	prs[0].ReviewedBy = []string{"adam"}
-	if err := store.StoreRepoPrs(prs); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, prs); err != nil {
 		t.Fatal(err)
 	}
 	if got := store.Prs().Prs[0].RereviewFrom; strings.Join(got, ",") != "adam,eve" {
@@ -224,7 +225,7 @@ func TestStoreRepoPrs_BuryPersistsUntilThePrMoves(t *testing.T) {
 			LastUpdated: updated, ReviewRequestedFromUsers: []string{}, RereviewFrom: []string{}, RawJsonResponse: []byte("{}")}
 	}
 	quiet, moved := "https://github.com/o/r/pull/1", "https://github.com/o/r/pull/2"
-	if err := store.StoreRepoPrs([]types.ViewPr{pr(quiet, buried), pr(moved, buried)}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr(quiet, buried), pr(moved, buried)}); err != nil {
 		t.Fatal(err)
 	}
 	for _, url := range []string{quiet, moved} {
@@ -233,7 +234,7 @@ func TestStoreRepoPrs_BuryPersistsUntilThePrMoves(t *testing.T) {
 		}
 	}
 	// next poll: one PR unchanged, one updated after it was buried
-	if err := store.StoreRepoPrs([]types.ViewPr{pr(quiet, buried), pr(moved, buried.Add(time.Hour))}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr(quiet, buried), pr(moved, buried.Add(time.Hour))}); err != nil {
 		t.Fatal(err)
 	}
 	got := map[string]bool{}
@@ -268,7 +269,7 @@ func TestStoreRepoPrs_EmptyListColumnsComeBackEmpty(t *testing.T) {
 		ReviewRequestedFromUsers: []string{}, RereviewFrom: []string{},
 		ChecksFailing: []string{}, RawJsonResponse: []byte("{}"),
 	}
-	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr}); err != nil {
 		t.Fatal(err)
 	}
 	got := store.Prs().Prs[0]
@@ -316,7 +317,7 @@ func TestNewStorage_AddsMergeabilityColumnsToOldDatabase(t *testing.T) {
 	prs[0].Mergeable, prs[0].MergeStateStatus = "CONFLICTING", "DIRTY"
 	prs[0].HeadRefOid = "0123456789abcdef0123456789abcdef01234567"
 	prs[0].ReviewRequestedOfUser = true
-	if err := store.StoreRepoPrs(prs); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, prs); err != nil {
 		t.Fatal(err)
 	}
 	got := store.Prs().Prs[0]
@@ -361,7 +362,7 @@ func TestStoreRepoPrsIsAllOrNothing(t *testing.T) {
 	pr := func(url string) types.ViewPr {
 		return types.ViewPr{Url: url, LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}
 	}
-	if err := store.StoreRepoPrs([]types.ViewPr{pr("old1"), pr("old2")}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr("old1"), pr("old2")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -373,7 +374,7 @@ func TestStoreRepoPrsIsAllOrNothing(t *testing.T) {
 				err = fmt.Errorf("panicked: %v", r)
 			}
 		}()
-		return store.StoreRepoPrs([]types.ViewPr{pr("new1"), broken})
+		return store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr("new1"), broken})
 	}()
 	if err == nil {
 		t.Fatal("a failing insert reported success")
@@ -392,7 +393,7 @@ func TestAnnotations(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	store := NewStorage(logger, filepath.Join(t.TempDir(), "elly.db"))
 	pr := types.ViewPr{Url: "u", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}
-	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr}); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now()
@@ -415,7 +416,7 @@ func TestAnnotations(t *testing.T) {
 		t.Errorf("a second write from the same source: got %+v, want it replaced", got)
 	}
 
-	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr}); err != nil {
 		t.Fatal(err)
 	}
 	if got := store.Prs().Prs[0].Annotations; len(got) != 1 {
@@ -511,7 +512,7 @@ func TestDegradations(t *testing.T) {
 
 func TestGetPr(t *testing.T) {
 	store := setupTestStorage(t)
-	if err := store.StoreRepoPrs([]types.ViewPr{{Url: "u", Title: "t", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{{Url: "u", Title: "t", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
 		t.Fatal(err)
 	}
 	pr, err := store.GetPr("u")
@@ -584,7 +585,7 @@ func TestNewStorage_AcceptsNewStatesOnAnOldAnnotationsTable(t *testing.T) {
 
 			store := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
 			pr := types.ViewPr{Url: "u", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}
-			if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+			if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr}); err != nil {
 				t.Fatal(err)
 			}
 			for _, state := range []string{types.AnnotationRunning, types.AnnotationStuck, types.AnnotationInfo} {
@@ -610,7 +611,7 @@ func TestNewStorage_AcceptsNewStatesOnAnOldAnnotationsTable(t *testing.T) {
 // with an annotation, plus the notification history.
 func seedAccount(t *testing.T, store *DbStorage, url string) {
 	t.Helper()
-	if err := store.StoreRepoPrs([]types.ViewPr{{Url: url, Title: "t", Author: "a", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{Main: "ghp_a"}, []types.ViewPr{{Url: url, Title: "t", Author: "a", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Bury(url); err != nil {
@@ -667,7 +668,7 @@ func TestStorePAT_AnotherAccountStartsEmpty(t *testing.T) {
 					t.Fatal(err)
 				}
 				// a poll can land between the clear and the next token
-				if err := store.StoreRepoPrs([]types.ViewPr{{Url: url, Title: "t", Author: "a", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+				if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{{Url: url, Title: "t", Author: "a", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -688,7 +689,7 @@ func TestStorePAT_AnotherAccountStartsEmpty(t *testing.T) {
 				t.Errorf("another login inherited the notification history %v", seen)
 			}
 			// the PR comes back for the new login: no bury, no annotation
-			if err := store.StoreRepoPrs([]types.ViewPr{{Url: url, Title: "t", Author: "a", LastUpdated: time.Now().Add(-time.Hour), RawJsonResponse: []byte("{}")}}); err != nil {
+			if err := store.StoreRepoPrs(PollTokens{Main: "ghp_b"}, []types.ViewPr{{Url: url, Title: "t", Author: "a", LastUpdated: time.Now().Add(-time.Hour), RawJsonResponse: []byte("{}")}}); err != nil {
 				t.Fatal(err)
 			}
 			if prs := store.Prs().Prs; len(prs) != 1 || prs[0].Buried || len(prs[0].Annotations) != 0 {
@@ -706,13 +707,13 @@ func TestStoreRepoPrs_BuryIsPerPr(t *testing.T) {
 		return types.ViewPr{Url: url, Title: "t", Author: "me", RepoName: "r", RepoOwner: "o", LastUpdated: at, RawJsonResponse: []byte("{}")}
 	}
 	buried, other := "https://github.com/o/r/pull/1", "https://github.com/o/r/pull/2"
-	if err := store.StoreRepoPrs([]types.ViewPr{pr(buried), pr(other)}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr(buried), pr(other)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Bury(buried); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.StoreRepoPrs([]types.ViewPr{pr(buried), pr(other)}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr(buried), pr(other)}); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range store.Prs().Prs {
@@ -730,7 +731,7 @@ func TestPrsReportsWhenTheyWereFetched(t *testing.T) {
 		t.Errorf("before any fetch: LastFetched %v", got)
 	}
 	before := time.Now().Truncate(time.Second)
-	if err := store.StoreRepoPrs(nil); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := store.Prs().LastFetched; got.Before(before) || got.After(time.Now()) {
@@ -813,7 +814,7 @@ func oldDatabase(t *testing.T, stmts ...string) string {
 	path := filepath.Join(t.TempDir(), "elly.db")
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	s := NewStorage(logger, path)
-	if err := s.StoreRepoPrs([]types.ViewPr{{Url: "https://github.com/o/r/pull/1", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+	if err := s.StoreRepoPrs(PollTokens{}, []types.ViewPr{{Url: "https://github.com/o/r/pull/1", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
 		t.Fatal(err)
 	}
 	for _, stmt := range append([]string{`drop table token`, oldTokenTables}, stmts...) {
@@ -1109,10 +1110,10 @@ func TestStoreRepoPrs_UnknownAskedKeepsTheLastPollsAnswer(t *testing.T) {
 			ReviewRequestedFromUsers: []string{}, RereviewFrom: []string{}, RawJsonResponse: []byte("{}")}
 	}
 	asked, fresh := "https://github.com/o/r/pull/1", "https://github.com/o/r/pull/2"
-	if err := store.StoreRepoPrs([]types.ViewPr{pr(asked, types.AskedRequested)}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr(asked, types.AskedRequested)}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.StoreRepoPrs([]types.ViewPr{pr(asked, ""), pr(fresh, "")}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr(asked, ""), pr(fresh, "")}); err != nil {
 		t.Fatal(err)
 	}
 	got := map[string]string{}
@@ -1122,7 +1123,7 @@ func TestStoreRepoPrs_UnknownAskedKeepsTheLastPollsAnswer(t *testing.T) {
 	if got[asked] != types.AskedRequested || got[fresh] != types.AskedNotAsked {
 		t.Errorf("after an unreadable search: %v", got)
 	}
-	if err := store.StoreRepoPrs([]types.ViewPr{pr(asked, types.AskedNotAsked)}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr(asked, types.AskedNotAsked)}); err != nil {
 		t.Fatal(err)
 	}
 	if p := store.Prs().Prs[0]; p.Asked != types.AskedNotAsked {
@@ -1166,7 +1167,7 @@ func TestStoreRepoPrs_MentionsRoundTrip(t *testing.T) {
 		RepoName: "r", RepoOwner: "o", LastUpdated: time.Now(),
 		RawJsonResponse: []byte("{}"), Mentions: []types.Mention{m}, MentionsReadable: true,
 	}
-	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr}); err != nil {
 		t.Fatal(err)
 	}
 	got := store.Prs().Prs[0]
@@ -1193,4 +1194,104 @@ func TestOpeningAnOldDatabaseWithoutTheOwnerColumn(t *testing.T) {
 	if err := store.rawDb.QueryRow(`select pat, owner from token where kind = 'main'`).Scan(&pat, &owner); err != nil || pat != "github_pat_me" || owner != "" {
 		t.Fatalf("main token %q owner %q, %v", pat, owner, err)
 	}
+}
+
+// withStoreRepoPrsHook runs hook inside the next StoreRepoPrs calls, between
+// reading what the stored rows carry over and writing the new ones.
+func withStoreRepoPrsHook(t *testing.T, hook func()) {
+	t.Helper()
+	storeRepoPrsHook = hook
+	t.Cleanup(func() { storeRepoPrsHook = func() {} })
+}
+
+// landsWithin runs write on its own goroutine and waits a little for it: a
+// write that waits for StoreRepoPrs's transaction must not hold it up for
+// good. The returned channel yields write's error once it has run.
+func landsWithin(write func() error) <-chan error {
+	done := make(chan error, 1)
+	go func() { done <- write() }()
+	out := make(chan error, 1)
+	select {
+	case err := <-done:
+		out <- err
+	case <-time.After(300 * time.Millisecond):
+		go func() { out <- <-done }()
+	}
+	return out
+}
+
+// A bury clicked while a poll is being stored is kept. The poll reads the
+// buries in the transaction that writes the PRs, so the click is either
+// read by it or waits for it; read before the transaction, the store wrote
+// the PR back unburied.
+func TestStoreRepoPrs_KeepsABuryThatLandsDuringTheStore(t *testing.T) {
+	store := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), filepath.Join(t.TempDir(), "elly.db"))
+	url := "https://github.com/o/r/pull/1"
+	pr := types.ViewPr{Url: url, Title: "t", Author: "a", RepoName: "r", RepoOwner: "o",
+		LastUpdated: time.Now().UTC().Truncate(time.Second), RawJsonResponse: []byte("{}")}
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr}); err != nil {
+		t.Fatal(err)
+	}
+	var buried <-chan error
+	withStoreRepoPrsHook(t, func() { buried = landsWithin(func() error { return store.Bury(url) }) })
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-buried; err != nil {
+		t.Fatalf("the bury failed: %v", err)
+	}
+	if prs := store.Prs().Prs; len(prs) != 1 || !prs[0].Buried {
+		t.Errorf("a bury that landed during the store was lost: %d PRs, buried %v", len(prs), len(prs) == 1 && prs[0].Buried)
+	}
+}
+
+// Two handles on one database, as elly and a second process (or the page
+// and the poll) are: one reads and then writes in a transaction while the
+// other writes, and both succeed. A deferred transaction read a snapshot
+// the other write then made stale, and its write failed with
+// SQLITE_BUSY_SNAPSHOT, which busy_timeout does not wait out.
+func TestTwoHandlesReadThenWriteWhileTheOtherWrites(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "elly.db")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	a, b := NewStorage(logger, path), NewStorage(logger, path)
+	ctx := t.Context()
+	tx, err := a.rawDb.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
+	var n int
+	if err := tx.QueryRowContext(ctx, `select count(*) from meta`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	other := landsWithin(func() error {
+		_, err := b.rawDb.ExecContext(ctx, `replace into meta (key, value) values ('probe_b', 'b')`)
+		return err
+	})
+	if _, err := tx.ExecContext(ctx, `replace into meta (key, value) values ('probe_a', 'a')`); err != nil {
+		t.Fatalf("the read-then-write transaction failed: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("the read-then-write transaction did not commit: %v", err)
+	}
+	if err := <-other; err != nil {
+		t.Fatalf("the other handle's write failed: %v", err)
+	}
+	if err := a.rawDb.QueryRowContext(ctx, `select count(*) from meta where key in ('probe_a', 'probe_b')`).Scan(&n); err != nil || n != 2 {
+		t.Errorf("%d of the two writes landed, %v", n, err)
+	}
+}
+
+// SQLite may decline the WAL that writePragmas asks for, and then every
+// write that meets another connection fails with SQLITE_BUSY. elly refuses
+// to start on such a database rather than run on it; an in-memory database
+// is one that cannot be WAL.
+func TestNewStorage_RefusesADatabaseThatIsNotWAL(t *testing.T) {
+	defer func() {
+		err, _ := recover().(error)
+		if err == nil || !strings.Contains(err.Error(), "WAL") {
+			t.Fatalf("NewStorage on a database that cannot be WAL: %v", err)
+		}
+	}()
+	NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), ":memory:")
 }

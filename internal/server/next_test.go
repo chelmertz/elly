@@ -123,7 +123,7 @@ func TestNextEscapesPrFields(t *testing.T) {
 
 func TestNextVerbFollowsAnAllowedAnnotationLink(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
-	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now,
+	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", HeadRefOid: strings.Repeat("a", 40), LastUpdated: now,
 		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou,
 			Links: []types.AnnotationLink{{Label: "Approve", Url: "claude-review://o/r/1/approve?at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&token=000000000000000000000000000000000000000000000000"}}}}}
 	page := renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"}))
@@ -406,7 +406,7 @@ func runPageScript(t *testing.T, script string, changes *Changes) {
 	for i := range prs {
 		prs[i].RawJsonResponse = []byte("{}")
 	}
-	if err := store.StoreRepoPrs(prs); err != nil {
+	if err := store.StoreRepoPrs(storage.PollTokens{Main: "ghp_x"}, prs); err != nil {
 		t.Fatal(err)
 	}
 	for _, pr := range prs {

@@ -98,7 +98,7 @@ func TestValidateAnnotationKeepsExpiresAtAsWritten(t *testing.T) {
 func TestAnnotationHandlers(t *testing.T) {
 	store := storage.NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), filepath.Join(t.TempDir(), "elly.db"))
 	const prUrl = "https://github.com/o/r/pull/1"
-	if err := store.StoreRepoPrs([]types.ViewPr{{Url: prUrl, LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+	if err := store.StoreRepoPrs(storage.PollTokens{}, []types.ViewPr{{Url: prUrl, LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
 		t.Fatal(err)
 	}
 	cfg := HttpServerConfig{Store: store, AnnotationToken: "secret", AnnotationSchemes: []string{"claude-review"}}
@@ -296,7 +296,7 @@ func TestValidateAnnotationChecksClaudeReviewRows(t *testing.T) {
 func TestHealthCountsActionPutsAndFallbacks(t *testing.T) {
 	store := storage.NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), filepath.Join(t.TempDir(), "elly.db"))
 	const prUrl = "https://github.com/o/r/pull/1"
-	if err := store.StoreRepoPrs([]types.ViewPr{{Url: prUrl, LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+	if err := store.StoreRepoPrs(storage.PollTokens{}, []types.ViewPr{{Url: prUrl, LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
 		t.Fatal(err)
 	}
 	var logs bytes.Buffer

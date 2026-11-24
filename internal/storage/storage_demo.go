@@ -106,7 +106,7 @@ func (s *StorageDemo) Prs() StoredState {
 	return state
 }
 
-func (s *StorageDemo) StoreRepoPrs(orderedPrs []types.ViewPr) error {
+func (s *StorageDemo) StoreRepoPrs(_ PollTokens, orderedPrs []types.ViewPr) error {
 	return nil
 }
 

@@ -369,26 +369,24 @@ func startRefreshLoop(store storage.Storage, tracker *backoff.Tracker, baseURL s
 				logger.Warn("could not store an owner token's poll state", slog.String("owner", st.Owner), slog.Any("error", err))
 			}
 		}
-		// The token was replaced or cleared while this poll ran: its PRs
-		// belong to the old token's login, so none of them is stored.
-		if current, found, _ := store.GetPAT(); !found || current.Token != storedPat.Token {
-			logger.Info("the token changed during the poll, dropping its result")
+		// A poll whose token was replaced or cleared meanwhile read the old
+		// token's PRs: the store checks the tokens in the transaction that
+		// writes, and stores none of them.
+		err = store.StoreRepoPrs(storage.PollTokens{Main: storedPat.Token, Owners: owners}, prs)
+		if errors.Is(err, storage.ErrTokenChanged) {
+			logger.Info("a token changed during the poll, dropping its result")
 			continue
 		}
-		if current, err := store.OwnerPATs(); err != nil || !sameTokens(owners, current) {
-			logger.Info("an owner token changed during the poll, dropping its result")
+		if err != nil {
+			logger.Error("could not store prs", slog.Any("error", err))
 			continue
 		}
-		// Written on every successful poll, including when the slice is empty,
+		// Written on every stored poll, including when the slice is empty,
 		// so a deficiency that has been fixed stops being reported.
 		if err := store.StoreDegradations(degradations); err != nil {
 			logger.Warn("could not store degradations", slog.Any("error", err))
 		}
 		logDegradations(degradations, announced, logger)
-		if err := store.StoreRepoPrs(prs); err != nil {
-			logger.Error("could not store prs", slog.Any("error", err))
-			continue
-		}
 		if send != nil {
 			notifyChanges(store, storedPat.Username, splitOwners(*workOwners), send, logger)
 		}

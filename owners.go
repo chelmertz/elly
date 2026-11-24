@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"log/slog"
-	"slices"
 	"strings"
 	"time"
 
@@ -135,9 +134,4 @@ func unreachable(o storage.OwnerPAT, carried bool, now time.Time) types.Degradat
 		d.Message += " Its PRs are left out until a poll succeeds."
 	}
 	return d
-}
-
-// sameTokens says whether a and b hold the same token for each owner.
-func sameTokens(a, b []storage.OwnerPAT) bool {
-	return slices.EqualFunc(a, b, func(x, y storage.OwnerPAT) bool { return x.Owner == y.Owner && x.Token == y.Token })
 }

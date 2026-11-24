@@ -14,6 +14,7 @@ import (
 
 	"github.com/chelmertz/elly/internal/backoff"
 	"github.com/chelmertz/elly/internal/notify"
+	"github.com/chelmertz/elly/internal/storage"
 	"github.com/chelmertz/elly/internal/types"
 )
 
@@ -25,7 +26,7 @@ type recordingStorage struct {
 	notifySeen atomic.Int32
 }
 
-func (s *recordingStorage) StoreRepoPrs([]types.ViewPr) error {
+func (s *recordingStorage) StoreRepoPrs(storage.PollTokens, []types.ViewPr) error {
 	s.storedPrs.Add(1)
 	if s.refusePrs {
 		return errors.New("disk full")

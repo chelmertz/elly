@@ -91,7 +91,7 @@ func TestPageStateWalk(t *testing.T) {
 		{[]types.ViewPr{unrelated}, stateClear},
 	}
 	for _, s := range steps {
-		if err := store.StoreRepoPrs(s.prs); err != nil {
+		if err := store.StoreRepoPrs(storage.PollTokens{Main: "ghp_x"}, s.prs); err != nil {
 			t.Fatal(err)
 		}
 		check(s.want)

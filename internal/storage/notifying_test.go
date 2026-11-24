@@ -43,7 +43,7 @@ func TestNotifyingBumpsOnEveryShownWrite(t *testing.T) {
 		"SetPATExpiry":      func() { _ = s.SetPATExpiry("github_pat_a", now) },
 		"SetOwnerPATExpiry": func() { _ = s.SetOwnerPATExpiry("acme", "github_pat_b", now) },
 		"SetPATOwner":       func() { _ = s.SetPATOwner("github_pat_a", "me") },
-		"StoreRepoPrs":      func() { _ = s.StoreRepoPrs([]types.ViewPr{{Url: "https://github.com/a/b/pull/1"}}) },
+		"StoreRepoPrs":      func() { _ = s.StoreRepoPrs(PollTokens{}, []types.ViewPr{{Url: "https://github.com/a/b/pull/1"}}) },
 		"Bury":              func() { _ = s.Bury("https://github.com/a/b/pull/1") },
 		"Unbury":            func() { _ = s.Unbury("https://github.com/a/b/pull/1") },
 		"SetRateLimitUntil": func() { _ = s.SetRateLimitUntil(now) },

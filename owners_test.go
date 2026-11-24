@@ -242,7 +242,53 @@ type signallingStorage struct {
 	stored chan struct{}
 }
 
-func (s *signallingStorage) StoreRepoPrs(prs []types.ViewPr) error {
+func (s *signallingStorage) StoreRepoPrs(polled storage.PollTokens, prs []types.ViewPr) error {
 	defer close(s.stored)
-	return s.DbStorage.StoreRepoPrs(prs)
+	return s.DbStorage.StoreRepoPrs(polled, prs)
+}
+
+// clearingStorage clears the token just before the poll's PRs are stored:
+// the moment after the loop last looked at the token.
+type clearingStorage struct {
+	*storage.DbStorage
+	stored chan error
+}
+
+func (s *clearingStorage) StoreRepoPrs(polled storage.PollTokens, prs []types.ViewPr) error {
+	if err := s.ClearPAT(); err != nil {
+		s.stored <- err
+		return err
+	}
+	err := s.DbStorage.StoreRepoPrs(polled, prs)
+	s.stored <- err
+	return err
+}
+
+// A token cleared while a poll runs keeps none of that poll's PRs, however
+// late the clear lands: the store checks the token in the transaction that
+// writes them. Checked only before the store, a clear in between left the
+// old token's PRs on the page with no token to ever poll them again.
+func TestRefreshLoopDropsAPollWhoseTokenWasClearedBeforeTheStore(t *testing.T) {
+	githubAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(searchWith("mine")))
+	}))
+	t.Cleanup(githubAPI.Close)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	store := storage.NewStorage(logger, filepath.Join(t.TempDir(), "elly.db"))
+	if err := store.StorePAT("ghp_main", "me", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	tracker := backoff.New(logger, time.Hour)
+	clearing := &clearingStorage{DbStorage: store, stored: make(chan error, 1)}
+	go startRefreshLoop(clearing, tracker, githubAPI.URL, nil, logger)
+	select {
+	case err := <-clearing.stored:
+		t.Logf("store returned %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the poll never reached the store")
+	}
+	tracker.Stop()
+	if got := urls(store.Prs().Prs); len(got) != 0 {
+		t.Errorf("a cleared token's poll stored %v", got)
+	}
 }

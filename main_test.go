@@ -82,16 +82,16 @@ func (s *testStorage) ClearPAT() error {
 	return nil
 }
 
-func (s *testStorage) Prs() storage.StoredState                  { return storage.StoredState{} }
-func (s *testStorage) StoreRepoPrs([]types.ViewPr) error         { return nil }
-func (s *testStorage) Bury(string) error                         { return nil }
-func (s *testStorage) Unbury(string) error                       { return nil }
-func (s *testStorage) GetPr(string) (storage.Pr, error)          { return storage.Pr{}, nil }
-func (s *testStorage) SetRateLimitUntil(time.Time) error         { return nil }
-func (s *testStorage) IsRateLimitActive(time.Time) bool          { return false }
-func (s *testStorage) GetRateLimitUntil() time.Time              { return time.Time{} }
-func (s *testStorage) StoreNotifySeen(map[string][]string) error { return nil }
-func (s *testStorage) NotifySeen() map[string][]string           { return nil }
+func (s *testStorage) Prs() storage.StoredState                              { return storage.StoredState{} }
+func (s *testStorage) StoreRepoPrs(storage.PollTokens, []types.ViewPr) error { return nil }
+func (s *testStorage) Bury(string) error                                     { return nil }
+func (s *testStorage) Unbury(string) error                                   { return nil }
+func (s *testStorage) GetPr(string) (storage.Pr, error)                      { return storage.Pr{}, nil }
+func (s *testStorage) SetRateLimitUntil(time.Time) error                     { return nil }
+func (s *testStorage) IsRateLimitActive(time.Time) bool                      { return false }
+func (s *testStorage) GetRateLimitUntil() time.Time                          { return time.Time{} }
+func (s *testStorage) StoreNotifySeen(map[string][]string) error             { return nil }
+func (s *testStorage) NotifySeen() map[string][]string                       { return nil }
 func (s *testStorage) PutAnnotation(string, types.Annotation, time.Time) error {
 	return nil
 }
@@ -386,14 +386,14 @@ func (s *testStorage) Degradations() []types.Degradation { return s.degradations
 
 func TestNotifyChanges_BaselineThenOnePerGainedReason(t *testing.T) {
 	logger := testLogger(t)
-	store := storage.NewStorage(logger, ":memory:")
+	store := storage.NewStorage(logger, filepath.Join(t.TempDir(), "elly.db"))
 	var sent []string
 	send := func(n notify.Notification) { sent = append(sent, n.PrUrl) }
 	pr := types.ViewPr{Url: "https://github.com/work/r/pull/1", RepoOwner: "work", Author: "me", RawJsonResponse: []byte("{}"),
 		LastUpdated: time.Now().UTC().Truncate(time.Second)}
 
 	pr.ReviewStatus = "APPROVED"
-	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+	if err := store.StoreRepoPrs(storage.PollTokens{}, []types.ViewPr{pr}); err != nil {
 		t.Fatal(err)
 	}
 	notifyChanges(store, "me", []string{"work"}, send, logger)
@@ -402,7 +402,7 @@ func TestNotifyChanges_BaselineThenOnePerGainedReason(t *testing.T) {
 	}
 
 	pr.ReviewStatus = "CHANGES_REQUESTED"
-	if err := store.StoreRepoPrs([]types.ViewPr{pr}); err != nil {
+	if err := store.StoreRepoPrs(storage.PollTokens{}, []types.ViewPr{pr}); err != nil {
 		t.Fatal(err)
 	}
 	notifyChanges(store, "me", []string{"work"}, send, logger)
@@ -546,7 +546,7 @@ func TestRefreshLoop_ManualRefreshPollsWithinTheInterval(t *testing.T) {
 	if err := store.StorePAT("ghp_x", "me", time.Time{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.StoreRepoPrs(nil); err != nil { // polled just now
+	if err := store.StoreRepoPrs(storage.PollTokens{Main: "ghp_x"}, nil); err != nil { // polled just now
 		t.Fatal(err)
 	}
 	var calls atomic.Int32

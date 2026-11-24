@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -48,6 +49,18 @@ type OwnerPAT struct {
 	Refused string
 }
 
+// PollTokens are the tokens a poll read with: Main is the primary token, ""
+// for none, and Owners the owner tokens as OwnerPATs returned them.
+type PollTokens struct {
+	Main   string
+	Owners []OwnerPAT
+}
+
+// ErrTokenChanged refuses a poll's PRs because a token it read with was
+// replaced, cleared or added meanwhile: they belong to a token elly no
+// longer holds, and stored, they would be served as the current one's.
+var ErrTokenChanged = errors.New("a token changed during the poll")
+
 // ErrNoPrimary refuses an owner token while there is no primary token: the
 // primary's login is what an owner token must match.
 var ErrNoPrimary = errors.New("no primary token")
@@ -58,7 +71,11 @@ var ErrOtherLogin = errors.New("the token is for another login than the primary 
 
 type Storage interface {
 	Prs() StoredState
-	StoreRepoPrs(orderedPrs []types.ViewPr) error
+	// StoreRepoPrs replaces the stored PRs with a poll's, read with the
+	// tokens polled. It stores nothing and returns ErrTokenChanged when
+	// those are no longer the stored tokens, checked in the transaction
+	// that writes.
+	StoreRepoPrs(polled PollTokens, orderedPrs []types.ViewPr) error
 	Bury(prUrl string) error
 	Unbury(prUrl string) error
 	GetPr(prUrl string) (Pr, error)
@@ -142,14 +159,21 @@ var ddl string
 // by 2026-11-17, annotation PUTs and PR polls alike). WAL lets readers and
 // the writer overlap; busy_timeout waits out the rest. secure_delete: a
 // deleted token's bytes are overwritten, not left in a free page.
-const writePragmas = "mode=rwc&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=secure_delete(1)"
+// _txlock=immediate: every transaction takes the write lock at BEGIN. A
+// deferred one that read first and then wrote failed with
+// SQLITE_BUSY_SNAPSHOT once another connection had committed in between,
+// and busy_timeout does not wait that out; at BEGIN, it waits like any
+// other write.
+const writePragmas = "mode=rwc&_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=secure_delete(1)"
 
 func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 	db, err := sql.Open("sqlite", "file:"+dbPath+"?"+writePragmas)
 	check(err)
 
-	// create tables
 	ctx := context.Background()
+	check(requireWAL(ctx, db))
+
+	// create tables
 	if _, err := db.ExecContext(ctx, ddl); err != nil {
 		// if this fails, we should drop the old file (throwing away buried data, sadly) and retry to create the tables
 
@@ -189,6 +213,22 @@ func NewStorage(logger *slog.Logger, dbPath string) *DbStorage {
 		rawDb:  db,
 		logger: logger,
 	}
+}
+
+// requireWAL refuses a database SQLite did not put in WAL: journal_mode(WAL)
+// is a request, which it declines without an error (an in-memory database,
+// a file system without shared memory). Outside WAL, a reader and a writer
+// do not overlap and every write that meets another connection fails with
+// SQLITE_BUSY, as it did 737 times a day before writePragmas took effect.
+func requireWAL(ctx context.Context, db *sql.DB) error {
+	var mode string
+	if err := db.QueryRowContext(ctx, `pragma journal_mode`).Scan(&mode); err != nil {
+		return fmt.Errorf("could not read the database's journal mode: %w", err)
+	}
+	if !strings.EqualFold(mode, "wal") {
+		return fmt.Errorf("the database runs in journal mode %q, and elly needs WAL: sqlite declined it for this database", mode)
+	}
+	return nil
 }
 
 // tokenSchemaVersion is the PRAGMA user_version from which tokens live in
@@ -366,64 +406,19 @@ func (s *DbStorage) Prs() StoredState {
 	return state
 }
 
-func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
+// storeRepoPrsHook runs in StoreRepoPrs between reading what the stored rows
+// carry over (buries, asked) and writing the new ones. Tests land another
+// write in that window; it does nothing otherwise.
+var storeRepoPrsHook = func() {}
+
+func (s *DbStorage) StoreRepoPrs(polled PollTokens, orderedPrs []types.ViewPr) error {
 	s.logger.Debug("storing prs", slog.Int("prs", len(orderedPrs)))
 
-	buriedPrs, err := s.db.BuriedPrs(context.Background())
-	if err != nil {
-		s.logger.Error("could not fetch buried prs, throwing away old buried-status", slog.Any("err", err))
-	} else {
-		// O(n^2) but n is always small, in my case (and the amount of buried prs is usually super small)
-		for i, pr := range orderedPrs {
-			for _, buriedPr := range buriedPrs {
-				if buriedPr.Url == pr.Url {
-					buriedLastUpdated, err := time.Parse(time.RFC3339, buriedPr.LastUpdated)
-					if err != nil {
-						// just ignore the stored & old last updated time
-						s.logger.Info("unburying pr, old last updated time is invalid", slog.String("pr_url", pr.Url))
-						orderedPrs[i].Buried = false
-						break
-					}
-					if pr.LastUpdated.After(buriedLastUpdated) {
-						// the pr was updated since it was buried
-						s.logger.Info("unburying pr, it was updated since it was buried",
-							slog.String("pr_url", pr.Url),
-							slog.Time("stored_at", buriedLastUpdated),
-							slog.Time("new_updated_at", pr.LastUpdated),
-						)
-						orderedPrs[i].Buried = false
-						break
-					}
-					orderedPrs[i].Buried = true
-					break
-				}
-			}
-		}
-	}
-
-	// A poll whose request search could not say leaves Asked ""; the PR
-	// keeps the last poll's answer, and one never seen asked is not asked.
-	if prev, err := s.db.PrAskeds(context.Background()); err != nil {
-		s.logger.Error("could not read the last poll's asked, unknown reads not asked", slog.Any("err", err))
-	} else {
-		last := make(map[string]string, len(prev))
-		for _, p := range prev {
-			last[p.Url] = p.Asked
-		}
-		for i := range orderedPrs {
-			if orderedPrs[i].Asked == "" {
-				orderedPrs[i].Asked = last[orderedPrs[i].Url]
-			}
-		}
-	}
-	for i := range orderedPrs {
-		if orderedPrs[i].Asked != types.AskedRequested {
-			orderedPrs[i].Asked = types.AskedNotAsked
-		}
-	}
-
 	// One transaction, so a reader never sees the table emptied and half
-	// refilled, and a failed insert leaves the previous list in place.
+	// refilled, and a failed insert leaves the previous list in place. The
+	// token check and what the stored rows carry over (buries, asked) are
+	// read in it too: a bury clicked or a token cleared after a read outside
+	// it was overwritten by the write.
 	ctx := context.Background()
 	tx, err := s.rawDb.BeginTx(ctx, nil)
 	if err != nil {
@@ -431,6 +426,64 @@ func (s *DbStorage) StoreRepoPrs(orderedPrs []types.ViewPr) error {
 	}
 	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
 	q := s.db.WithTx(tx)
+
+	if same, err := sameTokens(ctx, q, polled); err != nil {
+		return err
+	} else if !same {
+		return ErrTokenChanged
+	}
+
+	buriedPrs, err := q.BuriedPrs(ctx)
+	if err != nil {
+		return fmt.Errorf("could not read the buried prs: %w", err)
+	}
+	// O(n^2) but n is always small, in my case (and the amount of buried prs is usually super small)
+	for i, pr := range orderedPrs {
+		for _, buriedPr := range buriedPrs {
+			if buriedPr.Url == pr.Url {
+				buriedLastUpdated, err := time.Parse(time.RFC3339, buriedPr.LastUpdated)
+				if err != nil {
+					// just ignore the stored & old last updated time
+					s.logger.Info("unburying pr, old last updated time is invalid", slog.String("pr_url", pr.Url))
+					orderedPrs[i].Buried = false
+					break
+				}
+				if pr.LastUpdated.After(buriedLastUpdated) {
+					// the pr was updated since it was buried
+					s.logger.Info("unburying pr, it was updated since it was buried",
+						slog.String("pr_url", pr.Url),
+						slog.Time("stored_at", buriedLastUpdated),
+						slog.Time("new_updated_at", pr.LastUpdated),
+					)
+					orderedPrs[i].Buried = false
+					break
+				}
+				orderedPrs[i].Buried = true
+				break
+			}
+		}
+	}
+
+	// A poll whose request search could not say leaves Asked ""; the PR
+	// keeps the last poll's answer, and one never seen asked is not asked.
+	prev, err := q.PrAskeds(ctx)
+	if err != nil {
+		return fmt.Errorf("could not read the last poll's asked: %w", err)
+	}
+	last := make(map[string]string, len(prev))
+	for _, p := range prev {
+		last[p.Url] = p.Asked
+	}
+	for i := range orderedPrs {
+		if orderedPrs[i].Asked == "" {
+			orderedPrs[i].Asked = last[orderedPrs[i].Url]
+		}
+		if orderedPrs[i].Asked != types.AskedRequested {
+			orderedPrs[i].Asked = types.AskedNotAsked
+		}
+	}
+
+	storeRepoPrsHook()
 
 	if err := q.DeletePrs(ctx); err != nil {
 		return fmt.Errorf("could not delete old prs, in preparation of storing new ones: %w", err)
@@ -772,6 +825,25 @@ func formatTime(t time.Time) string {
 		return ""
 	}
 	return t.UTC().Format(time.RFC3339)
+}
+
+// sameTokens says whether polled are the stored tokens: the primary, and
+// one owner token for each owner, read in q's transaction.
+func sameTokens(ctx context.Context, q *Queries, polled PollTokens) (bool, error) {
+	main, err := q.GetActivePAT(ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, fmt.Errorf("could not read the token to check it: %w", err)
+	}
+	if main.Pat != polled.Main {
+		return false, nil
+	}
+	owners, err := q.ListOwnerPATs(ctx)
+	if err != nil {
+		return false, fmt.Errorf("could not read the owner tokens to check them: %w", err)
+	}
+	return slices.EqualFunc(owners, polled.Owners, func(o ListOwnerPATsRow, p OwnerPAT) bool {
+		return o.Owner == p.Owner && o.Pat == p.Token
+	}), nil
 }
 
 // forgetPrs deletes the stored PRs, buries with them, and the last poll time.

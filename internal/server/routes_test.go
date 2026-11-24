@@ -39,7 +39,7 @@ func newRoutesLogging(t *testing.T, githubURL string, logger *slog.Logger) route
 		// Someone else's approved PR: -100 points.
 		{Url: "https://github.com/o/r/pull/2", Title: "approved one", Author: "someone", ReviewStatus: "APPROVED", LastUpdated: now, RawJsonResponse: []byte("{}")},
 	}
-	if err := store.StoreRepoPrs(prs); err != nil {
+	if err := store.StoreRepoPrs(storage.PollTokens{}, prs); err != nil {
 		t.Fatal(err)
 	}
 	tracker := backoff.New(logger, time.Minute)
@@ -207,7 +207,7 @@ func TestGetPrsTurnYouMatchesThePage(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	if err := w.store.StoreRepoPrs([]types.ViewPr{
+	if err := w.store.StoreRepoPrs(storage.PollTokens{Main: "ghp_x"}, []types.ViewPr{
 		{Url: "https://github.com/o/r/pull/1", Title: "asked", Author: "a", ReviewRequestedFromUsers: []string{"me"}, Asked: types.AskedRequested, LastUpdated: now, RawJsonResponse: []byte("{}")},
 		{Url: "https://github.com/o/r/pull/2", Title: "iced own", Author: "me", Additions: 10, LastUpdated: now.Add(-30 * 24 * time.Hour), RawJsonResponse: []byte("{}")},
 		{Url: "https://github.com/o/r/pull/3", Title: "someone's", Author: "a", Additions: 10, LastUpdated: now, RawJsonResponse: []byte("{}")},
@@ -470,7 +470,7 @@ func TestPatClearDuringValidationWins(t *testing.T) {
 func TestPrIdsInPathsTakeBothBase64Alphabets(t *testing.T) {
 	w := newRoutes(t, "")
 	const odd = "https://github.com/o/r/pull/1?" // its standard base64 ends in "/"
-	if err := w.store.StoreRepoPrs([]types.ViewPr{{Url: odd, Author: "a", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+	if err := w.store.StoreRepoPrs(storage.PollTokens{}, []types.ViewPr{{Url: odd, Author: "a", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
 		t.Fatal(err)
 	}
 	bury := types.ViewPr{Url: odd}.ToggleBuryUrl()
