@@ -1,10 +1,18 @@
 package points
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/chelmertz/elly/internal/types"
+)
+
+// headSha is the head the approve links in these tests were reviewed at, and
+// approveAt is claude-review://o/r/1/approve as claude-review writes it there.
+var (
+	headSha   = strings.Repeat("a", 40)
+	approveAt = "?at=" + headSha + "&token=" + strings.Repeat("0", 48)
 )
 
 func TestTurnOf(t *testing.T) {
@@ -12,7 +20,7 @@ func TestTurnOf(t *testing.T) {
 	const me = "me"
 	fresh := now.Add(-time.Hour)
 	old := now.Add(-15 * 24 * time.Hour)
-	approveLink := []types.AnnotationLink{{Label: "Approve", Url: "claude-review://o/r/1/approve"}}
+	approveLink := []types.AnnotationLink{{Label: "Approve", Url: "claude-review://o/r/1/approve" + approveAt}}
 	attachLink := []types.AnnotationLink{{Label: "Attach", Url: "claude-review://o/r/1/attach"}}
 
 	cases := []struct {
@@ -43,8 +51,8 @@ func TestTurnOf(t *testing.T) {
 		{"needs_you's primary link labels the button", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{{Label: "Fork with prod data", Url: "claude-review://o/r/1/fork"}, {Label: "Answer", Url: "claude-review://o/r/1/attach", Primary: true}}}}, LastUpdated: fresh}, GroupWaiting, "Answer"},
 		{"needs_you without a primary link opens the PR", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{{Label: "Answer", Url: "claude-review://o/r/1/attach"}}}}, LastUpdated: fresh}, GroupWaiting, "Check"},
 		{"needs_you annotation waits for me", types.ViewPr{Author: "a", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou}}, LastUpdated: fresh}, GroupWaiting, "Check"},
-		{"approve link is one click", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Asked: types.AskedRequested, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupOneClick, "Approve"},
-		{"approve link on a red PR is not one click", types.ViewPr{Author: "a", ChecksState: "FAILURE", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupWaiting, "Check"},
+		{"approve link is one click", types.ViewPr{Author: "a", HeadRefOid: headSha, ReviewRequestedFromUsers: []string{me}, Asked: types.AskedRequested, Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupOneClick, "Approve"},
+		{"approve link on a red PR is not one click", types.ViewPr{Author: "a", HeadRefOid: headSha, ChecksState: "FAILURE", Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Links: approveLink}}, LastUpdated: fresh}, GroupWaiting, "Check"},
 		{"another tool's handled drops the review request", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Asked: types.AskedRequested, Annotations: []types.Annotation{{Source: "x", State: types.AnnotationHandled}}, LastUpdated: fresh}, GroupOnOthers, "GitHub"},
 		{"an info annotation leaves a reply owed", types.ViewPr{Author: "a", ThreadsActionable: 2, Annotations: []types.Annotation{{Source: "x", State: types.AnnotationInfo}}, LastUpdated: fresh}, GroupWaiting, "Reply"},
 		{"an info annotation leaves a review owed", types.ViewPr{Author: "a", ReviewRequestedFromUsers: []string{me}, Asked: types.AskedRequested, Annotations: []types.Annotation{{Source: "x", State: types.AnnotationInfo}}, LastUpdated: fresh}, GroupWaiting, "Review"},
@@ -157,7 +165,7 @@ func TestTurnVerbFollowsOnlyALinkToThisPr(t *testing.T) {
 	const prUrl = "https://github.com/acme/widget/pull/1"
 	turn := func(state string, l types.AnnotationLink) Turn {
 		l.Primary = state == types.AnnotationNeedsYou // the button follows only a primary link
-		return TurnOf(types.ViewPr{Url: prUrl, Author: "a", LastUpdated: now,
+		return TurnOf(types.ViewPr{Url: prUrl, Author: "a", HeadRefOid: headSha, LastUpdated: now,
 			Annotations: []types.Annotation{{Source: ClaudeReviewSource, State: state, Links: []types.AnnotationLink{l}}}}, "me", now)
 	}
 	for _, c := range []struct {
@@ -165,8 +173,8 @@ func TestTurnVerbFollowsOnlyALinkToThisPr(t *testing.T) {
 		link        types.AnnotationLink
 		follows     bool
 	}{
-		{"approve on this PR", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "claude-review://acme/widget/1/approve"}, true},
-		{"approve on this PR, case folded", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "claude-review://ACME/Widget/1/approve"}, true},
+		{"approve on this PR", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "claude-review://acme/widget/1/approve" + approveAt}, true},
+		{"approve on this PR, case folded", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "claude-review://ACME/Widget/1/approve" + approveAt}, true},
 		{"approve on another PR", types.AnnotationHandled, types.AnnotationLink{Label: "details", Url: "claude-review://victim/other/99/approve"}, false},
 		{"approve on another number", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "claude-review://acme/widget/12/approve"}, false},
 		{"approve on another host", types.AnnotationHandled, types.AnnotationLink{Label: "Approve", Url: "https://evil.example/login"}, false},
@@ -228,7 +236,7 @@ func TestTurnOf_RequestedThroughATeamIsYours(t *testing.T) {
 // until claude-review writes actions, its label or path still says it.
 func TestOnlyClaudeReviewsOwnLinksApproveOrOpen(t *testing.T) {
 	row := func(source string, l types.AnnotationLink) types.ViewPr {
-		return types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a",
+		return types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", HeadRefOid: headSha,
 			Annotations: []types.Annotation{{Source: source, State: types.AnnotationNeedsYou, Links: []types.AnnotationLink{l}}}}
 	}
 	for name, c := range map[string]struct {
@@ -236,8 +244,8 @@ func TestOnlyClaudeReviewsOwnLinksApproveOrOpen(t *testing.T) {
 		approve bool
 		open    bool
 	}{
-		"claude-review, by action":       {row("claude-review", types.AnnotationLink{Label: "Yes", Url: "claude-review://o/r/1/approve", Action: types.ActionApprove}), true, false},
-		"claude-review, by label":        {row("claude-review", types.AnnotationLink{Label: "Approve", Url: "claude-review://o/r/1/approve"}), true, false},
+		"claude-review, by action":       {row("claude-review", types.AnnotationLink{Label: "Yes", Url: "claude-review://o/r/1/approve" + approveAt, Action: types.ActionApprove}), true, false},
+		"claude-review, by label":        {row("claude-review", types.AnnotationLink{Label: "Approve", Url: "claude-review://o/r/1/approve" + approveAt}), true, false},
 		"claude-review, open by action":  {row("claude-review", types.AnnotationLink{Label: "Open Claude", Url: "claude-review://o/r/1/attach", Action: types.ActionOpen}), false, true},
 		"another source's Approve":       {row("other", types.AnnotationLink{Label: "Approve", Url: "claude-review://o/r/1/approve"}), false, false},
 		"an https Approve":               {row("claude-review", types.AnnotationLink{Label: "Approve", Url: "https://github.com/o/r/pull/1/approve"}), false, false},
@@ -269,6 +277,48 @@ func TestLooksLikeApproveByPath(t *testing.T) {
 	for _, c := range cases {
 		if got := looksLikeApprove(types.AnnotationLink{Label: "Open", Url: c.url}); got != c.want {
 			t.Errorf("looksLikeApprove(%q) = %v, want %v", c.url, got, c.want)
+		}
+	}
+}
+
+// An approve link approves the head claude-review reviewed, which its at=
+// names. On a PR that has moved past that head it is no verdict, as if the
+// link were not there: a needs_you annotation leaves the PR in Waiting. A
+// link without at= says no head, and neither does a PR whose head is
+// unknown, so neither is one click.
+func TestTurnOf_ApproveLinkCountsOnlyAtTheCurrentHead(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	head, older := headSha, strings.Repeat("b", 40)
+	approve := func(at string) string {
+		u := "claude-review://o/r/1/approve"
+		if at != "" {
+			u += "?at=" + at + "&token=" + strings.Repeat("0", 48)
+		}
+		return u
+	}
+	row := func(prHead, at, state string) types.ViewPr {
+		return types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", HeadRefOid: prHead, LastUpdated: now,
+			Annotations: []types.Annotation{{Source: ClaudeReviewSource, State: state, Links: []types.AnnotationLink{
+				{Label: "Approve", Url: approve(at), Action: types.ActionApprove, Primary: true}}}}}
+	}
+	for _, c := range []struct {
+		name  string
+		pr    types.ViewPr
+		group Group
+		verb  string
+	}{
+		{"at the current head", row(head, head, types.AnnotationNeedsYou), GroupOneClick, "Approve"},
+		{"at an older head", row(head, older, types.AnnotationNeedsYou), GroupWaiting, "Check"},
+		{"at an older head, handled", row(head, older, types.AnnotationHandled), GroupWithClaude, "GitHub"},
+		{"without at=", row(head, "", types.AnnotationNeedsYou), GroupWaiting, "Check"},
+		{"on a PR whose head is unknown", row("", head, types.AnnotationNeedsYou), GroupWaiting, "Check"},
+	} {
+		got := TurnOf(c.pr, "me", now)
+		if got.Group != c.group || got.Verb != c.verb {
+			t.Errorf("%s: %s %q, want %s %q", c.name, got.Group.Name(), got.Verb, c.group.Name(), c.verb)
+		}
+		if c.group != GroupOneClick && got.VerbUrl != "" {
+			t.Errorf("%s: the button follows %q", c.name, got.VerbUrl)
 		}
 	}
 }

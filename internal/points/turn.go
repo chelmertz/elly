@@ -66,11 +66,13 @@ const icebox = 14 * 24 * time.Hour
 // the pr-status skill: a PR that is red or owes a reply never comes out as
 // waiting on someone else. Choices where the fields leave it open:
 //
-//   - An annotation link to this PR labelled Approve (or ending in /approve)
-//     makes it one click from done, unless CI is red: a tool's verdict does
-//     not outrank a red build, which is the author's to fix.
-//   - A needs_you or stuck annotation, or an approve link, keeps a PR out of the
-//     icebox: an annotation lives at most 24 hours, so a tool looked at it
+//   - claude-review's approve link to this PR makes it one click from done,
+//     unless CI is red: a tool's verdict does not outrank a red build, which
+//     is the author's to fix. Only at the head it was reviewed at (its at=):
+//     after a push the link approves code nobody reviewed, and the PR is
+//     ranked as if the link were not there.
+//   - A needs_you or stuck annotation, or an approve link at the head, keeps
+//     a PR out of the icebox: an annotation lives at most 24 hours, so a tool looked at it
 //     recently even when github shows no activity.
 //   - The icebox is checked before everything else on purpose, own PRs and
 //     owed replies included, since the rule is "nobody touched it for two
@@ -179,20 +181,30 @@ func looksLikeApprove(l types.AnnotationLink) bool {
 const ClaudeReviewSource = "claude-review"
 
 // annotationVerdict returns the first needs_you or stuck annotation, and the
-// first link of any annotation that approves this PR. A link that approves
-// another PR is no verdict on this one.
+// first link of any annotation that approves this PR at its current head. A
+// link that approves another PR, or an older head of this one, is no verdict
+// on it.
 func annotationVerdict(pr types.ViewPr) (needsYou *types.Annotation, approveUrl string) {
 	for i, a := range pr.Annotations {
 		if (a.State == types.AnnotationNeedsYou || a.State == types.AnnotationStuck) && needsYou == nil {
 			needsYou = &pr.Annotations[i]
 		}
 		for _, l := range a.Links {
-			if approveUrl == "" && types.LinkDoes(a.Source, pr.Url, l, types.ActionApprove) {
+			if approveUrl == "" && types.LinkDoes(a.Source, pr.Url, l, types.ActionApprove) && approvesHead(l.Url, pr.HeadRefOid) {
 				approveUrl = l.Url
 			}
 		}
 	}
 	return needsYou, approveUrl
+}
+
+// approvesHead: the approve link names head as the commit it approves, by
+// its at= (approveURL in claude-review's decide.go always writes one). A
+// link without at=, or a PR whose head elly does not know, names no head the
+// PR is at.
+func approvesHead(link, head string) bool {
+	u, err := url.Parse(link)
+	return err == nil && head != "" && u.Query().Get("at") == head
 }
 
 // attachUrl is the first link of claude-review's annotation that attaches to
