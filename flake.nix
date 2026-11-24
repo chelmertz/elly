@@ -14,7 +14,7 @@
       packages.x86_64-linux.default = pkgs.buildGoModule {
         pname = "elly";
         version = self.shortRev or "dirty";
-        vendorHash = "sha256-1egSfw5egr22wB2XM6RPsJ6K/hZ4QCrld2NVJi7M2Q8=";
+        vendorHash = "sha256-6pZZZ5l6bproqrHvU7az6qoHZreuPuK1dTIigxbRsmQ=";
         src = ./.;
         # the page and --version name the commit, not "(devel)"
         ldflags = [ "-X main.revision=${self.shortRev or "dirty"}" ];
