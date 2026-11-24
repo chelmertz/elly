@@ -507,7 +507,7 @@ func (q *Queries) ListPrs(ctx context.Context) ([]Pr, error) {
 }
 
 const liveAnnotations = `-- name: LiveAnnotations :many
-select pr_url, source, state, note, links, expires_at from annotations
+select pr_url, source, state, note, links, expires_at, handover from annotations
 where expires_unix > ? order by pr_url, source
 `
 
@@ -518,6 +518,7 @@ type LiveAnnotationsRow struct {
 	Note      string
 	Links     string
 	ExpiresAt string
+	Handover  bool
 }
 
 func (q *Queries) LiveAnnotations(ctx context.Context, expiresUnix int64) ([]LiveAnnotationsRow, error) {
@@ -536,6 +537,7 @@ func (q *Queries) LiveAnnotations(ctx context.Context, expiresUnix int64) ([]Liv
 			&i.Note,
 			&i.Links,
 			&i.ExpiresAt,
+			&i.Handover,
 		); err != nil {
 			return nil, err
 		}
@@ -592,8 +594,8 @@ func (q *Queries) PurgeExpiredAnnotations(ctx context.Context, expiresUnix int64
 }
 
 const putAnnotation = `-- name: PutAnnotation :exec
-replace into annotations (pr_url, source, state, note, links, expires_at, expires_unix)
-values (?, ?, ?, ?, ?, ?, ?)
+replace into annotations (pr_url, source, state, note, links, expires_at, expires_unix, handover)
+values (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type PutAnnotationParams struct {
@@ -604,6 +606,7 @@ type PutAnnotationParams struct {
 	Links       string
 	ExpiresAt   string
 	ExpiresUnix int64
+	Handover    bool
 }
 
 func (q *Queries) PutAnnotation(ctx context.Context, arg PutAnnotationParams) error {
@@ -615,6 +618,7 @@ func (q *Queries) PutAnnotation(ctx context.Context, arg PutAnnotationParams) er
 		arg.Links,
 		arg.ExpiresAt,
 		arg.ExpiresUnix,
+		arg.Handover,
 	)
 	return err
 }

@@ -12,6 +12,7 @@ type Annotation struct {
 	Links       string
 	ExpiresAt   string
 	ExpiresUnix int64
+	Handover    bool
 }
 
 type Meta struct {

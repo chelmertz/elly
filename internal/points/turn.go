@@ -18,7 +18,7 @@ const (
 	GroupOneClick Group = iota
 	GroupWaiting
 	GroupUnblock
-	GroupWithClaude
+	GroupHandedOver
 	GroupOnOthers
 	GroupNobody
 	GroupIcebox
@@ -26,15 +26,15 @@ const (
 )
 
 // Groups is every group, in page order.
-var Groups = []Group{GroupOneClick, GroupWaiting, GroupUnblock, GroupWithClaude, GroupOnOthers, GroupNobody, GroupIcebox, GroupBuried}
+var Groups = []Group{GroupOneClick, GroupWaiting, GroupUnblock, GroupHandedOver, GroupOnOthers, GroupNobody, GroupIcebox, GroupBuried}
 
 func (g Group) Name() string {
-	return [...]string{"One click from done", "Waiting for you", "Yours to unblock", "With claude · handed over, nothing for you", "On others", "Nobody's turn", "Icebox · untouched 2+ weeks", "Buried"}[g]
+	return [...]string{"One click from done", "Waiting for you", "Yours to unblock", "Handed over · nothing for you", "On others", "Nobody's turn", "Icebox · untouched 2+ weeks", "Buried"}[g]
 }
 
 // Slug is the group's anchor on the page.
 func (g Group) Slug() string {
-	return [...]string{"one-click", "waiting", "unblock", "with-claude", "on-others", "nobody", "icebox", "buried"}[g]
+	return [...]string{"one-click", "waiting", "unblock", "handed-over", "on-others", "nobody", "icebox", "buried"}[g]
 }
 
 // OnYou is true for the groups where the next move is the user's.
@@ -85,10 +85,11 @@ const icebox = 14 * 24 * time.Hour
 //   - On the user's own PR, reviewers who reviewed before the latest push
 //     (RereviewFrom), and no reviewers at all, are the user's to unblock.
 //   - A handled or running annotation drops owed replies and review
-//     requests, as it does in the score: the user handed the PR over. From
-//     claude-review, on someone else's PR, it goes to With claude, after a
-//     red build (the author's to fix) and before CI still running; from any
-//     other tool the author then has the next move.
+//     requests, as it does in the score: the tool took the user's part.
+//     With its handover field, on someone else's PR, it goes to Handed
+//     over, after a red build (the author's to fix) and before CI still
+//     running, whatever its source; without it the author then has the
+//     next move.
 //   - A stuck annotation is needs_you that nothing but the user will move.
 //   - With no username (no token yet), no PR is the user's own.
 func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
@@ -97,8 +98,11 @@ func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
 	// storage when the request search could not say.
 	asked := !own && username != "" && pr.Asked == types.AskedRequested
 	needsYou, approveUrl := annotationVerdict(pr)
-	handled := needsYou == nil && HandedOver(pr, "")
-	withClaude := needsYou == nil && !own && HandedOver(pr, ClaudeReviewSource)
+	handled := needsYou == nil && tookOver(pr)
+	var handover *types.Annotation
+	if needsYou == nil && !own {
+		handover = HandedOver(pr)
+	}
 
 	switch {
 	case pr.Buried:
@@ -135,8 +139,11 @@ func TurnOf(pr types.ViewPr, username string, now time.Time) Turn {
 		return Turn{Group: GroupUnblock, Verb: "Fix CI", Reason: "yours, and CI is red"}
 	case pr.ChecksRed():
 		return Turn{Group: GroupOnOthers, Verb: "GitHub", Reason: "CI is red, the author's to fix"}
-	case withClaude:
-		t := Turn{Group: GroupWithClaude, Verb: "GitHub", Reason: "handed over to " + ClaudeReviewSource + ", nothing for you"}
+	case handover != nil:
+		t := Turn{Group: GroupHandedOver, Verb: "GitHub", Reason: handover.Source + " handled"}
+		if handover.State == types.AnnotationRunning {
+			t.Reason = handover.Source + " is on it"
+		}
 		if u := attachUrl(pr); u != "" {
 			t.Verb, t.VerbUrl = "Attach", u
 		}
@@ -176,10 +183,6 @@ func looksLikeApprove(l types.AnnotationLink) bool {
 	return err == nil && strings.EqualFold(u.Path[strings.LastIndexByte(u.Path, '/')+1:], "approve")
 }
 
-// ClaudeReviewSource is the source claude-review writes its annotations
-// under (annotationSource in its elly.go); its handed-over PRs get a group.
-const ClaudeReviewSource = "claude-review"
-
 // annotationVerdict returns the first needs_you or stuck annotation, and the
 // first link of any annotation that approves this PR at its current head. A
 // link that approves another PR, or an older head of this one, is no verdict
@@ -207,13 +210,10 @@ func approvesHead(link, head string) bool {
 	return err == nil && head != "" && u.Query().Get("at") == head
 }
 
-// attachUrl is the first link of claude-review's annotation that attaches to
-// its session, or "".
+// attachUrl is the first link that attaches to claude-review's session on
+// this PR (LinkDoes: only claude-review's own), or "".
 func attachUrl(pr types.ViewPr) string {
 	for _, a := range pr.Annotations {
-		if a.Source != ClaudeReviewSource {
-			continue
-		}
 		for _, l := range a.Links {
 			if types.LinkDoes(a.Source, pr.Url, l, types.ActionOpen) {
 				return l.Url

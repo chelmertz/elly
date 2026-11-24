@@ -122,9 +122,14 @@ type nextRow struct {
 	VerbHref    template.URL
 	VerbTitle   string
 	VerbPrimary bool
-	Tag         *nextTag
-	// Ask is the note of an annotation that needs the user, shown under the
-	// row; Note is claude-review's note on a PR handed over to it.
+	// Latch names the tool a click on the verb hands to, for the page's
+	// "starting…": types.ClaudeReview when the verb is one of its links,
+	// else "".
+	Latch string
+	Tag   *nextTag
+	// Ask and Note are the note of the annotation that decides the row
+	// (points.Deciding), shown under it: Ask when it needs the user, Note
+	// when a tool took the PR over.
 	Ask     string
 	Note    string
 	Why     []string
@@ -138,10 +143,12 @@ type nextRow struct {
 	Buried    bool
 }
 
-// nextTag is claude-review's state on the row: its word, coloured by class.
+// nextTag is the deciding annotation's source and state on the row: its
+// word, coloured by class.
 type nextTag struct {
-	Word  string
-	Class string
+	Source string
+	Word   string
+	Class  string
 }
 
 type nextEvent struct {
@@ -207,6 +214,7 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 				turn.Verb, turn.VerbUrl, verbHref = "Check", "", prHref
 			}
 		}
+		decides := points.Deciding(pr)
 		row := nextRow{
 			Anchor:      types.Anchor(pr.Url),
 			Number:      types.Number(pr.Url),
@@ -223,22 +231,21 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 			VerbHref:    verbHref,
 			VerbTitle:   verbTitle,
 			VerbPrimary: turn.Group == points.GroupOneClick,
-			Tag:         reviewTag(pr),
+			Tag:         decidingTag(decides),
 			Why:         append([]string{turn.Reason}, reasonsByWeight(pts.Reasons)...),
 			History:     history(events),
 			State:       stateFacts(pr, username),
 			BuryUrl:     pr.ToggleBuryUrl(),
 			Buried:      pr.Buried,
 		}
-		for _, a := range pr.Annotations {
-			switch {
-			case a.State == types.AnnotationNeedsYou || a.State == types.AnnotationStuck:
-				if row.Ask == "" {
-					row.Ask = a.Note
-				}
-			case a.Source == points.ClaudeReviewSource && row.Note == "":
-				row.Note = a.Note
+		if decides != nil {
+			if decides.State == types.AnnotationNeedsYou || decides.State == types.AnnotationStuck {
+				row.Ask = decides.Note
+			} else {
+				row.Note = decides.Note
 			}
+		}
+		for _, a := range pr.Annotations {
 			for _, l := range a.Links {
 				// An add-on's offer (a primary link on an info annotation,
 				// naming this PR) is the row's button, not a panel link; its
@@ -270,6 +277,9 @@ func buildNext(prs []types.ViewPr, username string, now time.Time, schemes []str
 			}
 		} else if turn.Group == points.GroupOnOthers {
 			data.OnOthers++
+		}
+		if strings.HasPrefix(strings.ToLower(string(row.VerbHref)), types.ClaudeReview+":") {
+			row.Latch = types.ClaudeReview
 		}
 		byGroup[turn.Group] = append(byGroup[turn.Group], row)
 	}
@@ -466,22 +476,21 @@ func reasonsByWeight(reasons []string) []string {
 	return out
 }
 
-// reviewTag is the claude-review annotation as a short tag.
-func reviewTag(pr types.ViewPr) *nextTag {
-	for _, a := range pr.Annotations {
-		if a.Source != points.ClaudeReviewSource {
-			continue
-		}
-		switch a.State {
-		case types.AnnotationRunning:
-			return &nextTag{"running", "running"}
-		case types.AnnotationStuck:
-			return &nextTag{"stuck", "stuck"}
-		case types.AnnotationNeedsYou:
-			return &nextTag{"needs you", "needs-you"}
-		case types.AnnotationHandled:
-			return &nextTag{"handled", "handled"}
-		}
+// decidingTag is the deciding annotation (points.Deciding) as a short tag,
+// or nil.
+func decidingTag(a *types.Annotation) *nextTag {
+	if a == nil {
+		return nil
+	}
+	switch a.State {
+	case types.AnnotationRunning:
+		return &nextTag{a.Source, "running", "running"}
+	case types.AnnotationStuck:
+		return &nextTag{a.Source, "stuck", "stuck"}
+	case types.AnnotationNeedsYou:
+		return &nextTag{a.Source, "needs you", "needs-you"}
+	case types.AnnotationHandled:
+		return &nextTag{a.Source, "handled", "handled"}
 	}
 	return nil
 }

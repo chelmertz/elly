@@ -3,6 +3,7 @@ package points
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -42,7 +43,7 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 	// bring back the replies it is busy answering. needs_you and stuck count
 	// the PR whatever it scored, and win when two tools disagree.
 	needsYou := append(annotationNotes(pr, types.AnnotationNeedsYou), annotationNotes(pr, types.AnnotationStuck)...)
-	handled := len(needsYou) == 0 && HandedOver(pr, "")
+	handled := len(needsYou) == 0 && tookOver(pr)
 
 	if pr.ThreadsActionable > 0 && !handled {
 		points.Add(80, fmt.Sprintf("Someone asked us something, or reacted to our comment (%d comments)", pr.ThreadsActionable))
@@ -189,15 +190,45 @@ func StandardPrPoints(pr types.ViewPr, username string, now time.Time) *Points {
 	return points
 }
 
-// HandedOver reports whether a handled or running annotation is on pr, from
-// source, or from any source when source is "".
-func HandedOver(pr types.ViewPr, source string) bool {
-	for _, a := range pr.Annotations {
-		if (source == "" || a.Source == source) && (a.State == types.AnnotationHandled || a.State == types.AnnotationRunning) {
-			return true
+// tookOver reports whether a handled or running annotation, from any
+// source, is on pr: the tool took the user's part, handover or not.
+func tookOver(pr types.ViewPr) bool {
+	return slices.ContainsFunc(pr.Annotations, func(a types.Annotation) bool {
+		return a.State == types.AnnotationHandled || a.State == types.AnnotationRunning
+	})
+}
+
+// Deciding is the annotation that decides pr's turn among its annotations,
+// or nil: the first needs_you or stuck one (TurnOf's, and the score's,
+// winner), else the one that hands the PR over, else the first handled or
+// running one. An info annotation decides nothing. The row's tag and note
+// come from it, so they never contradict the group.
+func Deciding(pr types.ViewPr) *types.Annotation {
+	for i, a := range pr.Annotations {
+		if a.State == types.AnnotationNeedsYou || a.State == types.AnnotationStuck {
+			return &pr.Annotations[i]
 		}
 	}
-	return false
+	if a := HandedOver(pr); a != nil {
+		return a
+	}
+	for i, a := range pr.Annotations {
+		if a.State == types.AnnotationHandled || a.State == types.AnnotationRunning {
+			return &pr.Annotations[i]
+		}
+	}
+	return nil
+}
+
+// HandedOver is pr's first handled or running annotation that hands it
+// over (its handover field, from any source), or nil.
+func HandedOver(pr types.ViewPr) *types.Annotation {
+	for i, a := range pr.Annotations {
+		if a.Handover && (a.State == types.AnnotationHandled || a.State == types.AnnotationRunning) {
+			return &pr.Annotations[i]
+		}
+	}
+	return nil
 }
 
 // needsYouPoints is where a needs_you or stuck annotation lifts a PR: as

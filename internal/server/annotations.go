@@ -74,6 +74,8 @@ func validateAnnotation(source, prUrl string, body io.Reader, schemes []string, 
 			Action  string `json:"action"`
 		} `json:"links"`
 		ExpiresAt string `json:"expiresAt"`
+		// Handover is optional, and false when left out.
+		Handover bool `json:"handover"`
 	}
 	dec := json.NewDecoder(body)
 	dec.DisallowUnknownFields()
@@ -87,13 +89,16 @@ func validateAnnotation(source, prUrl string, body io.Reader, schemes []string, 
 	if !slices.Contains([]string{types.AnnotationHandled, types.AnnotationNeedsYou, types.AnnotationRunning, types.AnnotationStuck, types.AnnotationInfo}, req.State) {
 		return types.Annotation{}, time.Time{}, errors.New("state must be handled, needs_you, running, stuck or info")
 	}
+	if req.Handover && req.State != types.AnnotationHandled && req.State != types.AnnotationRunning {
+		return types.Annotation{}, time.Time{}, errors.New("handover only on a handled or running annotation")
+	}
 	if err := plainText(req.Note, maxAnnotationNote); err != nil {
 		return types.Annotation{}, time.Time{}, fmt.Errorf("note: %w", err)
 	}
 	if len(req.Links) > maxAnnotationLinks {
 		return types.Annotation{}, time.Time{}, fmt.Errorf("at most %d links", maxAnnotationLinks)
 	}
-	a := types.Annotation{Source: source, State: req.State, Note: req.Note, ExpiresAt: req.ExpiresAt, Links: []types.AnnotationLink{}}
+	a := types.Annotation{Source: source, State: req.State, Note: req.Note, ExpiresAt: req.ExpiresAt, Handover: req.Handover, Links: []types.AnnotationLink{}}
 	primaries := 0
 	for i, l := range req.Links {
 		if l.Primary {
@@ -107,12 +112,17 @@ func validateAnnotation(source, prUrl string, body io.Reader, schemes []string, 
 		if !allowedLink(l.Url, schemes) {
 			return types.Annotation{}, time.Time{}, fmt.Errorf("links[%d]: https, or a scheme named in -annotation-schemes, at most %d characters", i, maxLinkUrl)
 		}
+		verb, ours := types.ClaudeReviewVerb(prUrl, l.Url)
 		if l.Action != "" {
 			want, known := types.ActionVerbs[l.Action]
-			verb, ours := types.ClaudeReviewVerb(prUrl, l.Url)
-			if source != "claude-review" || !known || !ours || verb != want {
+			if source != types.ClaudeReview || !known || !ours || verb != want {
 				return types.Annotation{}, time.Time{}, fmt.Errorf("links[%d]: an action only from claude-review, on its own link to this PR with the action's verb", i)
 			}
+		} else if source == types.ClaudeReview && ours {
+			// Its own link to this PR says what it does by its action, so
+			// the row rules below check every one: a link that names none
+			// would act by nothing and pass them unchecked.
+			return types.Annotation{}, time.Time{}, fmt.Errorf("links[%d]: a claude-review link to this PR names its action", i)
 		}
 		a.Links = append(a.Links, types.AnnotationLink{Label: l.Label, Url: l.Url, Primary: l.Primary, Action: l.Action})
 	}
@@ -131,10 +141,12 @@ func validateAnnotation(source, prUrl string, body io.Reader, schemes []string, 
 }
 
 // rowRule is, for one annotation state, the actions a claude-review row may
-// make primary and the actions it may offer.
+// make primary, the actions it may offer, and whether its rows hand the PR
+// over (validateAnnotation takes that on handled and running only).
 type rowRule struct {
-	Primary []string `json:"primary"`
-	Offered []string `json:"offered"`
+	Primary  []string `json:"primary"`
+	Offered  []string `json:"offered"`
+	Handover bool     `json:"handover"`
 }
 
 // claudeReviewRows are the rules claude-review's table produces, equal to
@@ -142,10 +154,10 @@ type rowRule struct {
 // testdata/rows.json); TestClaudeReviewRowsMatchTheFixture holds them
 // together.
 var claudeReviewRows = map[string]rowRule{
-	types.AnnotationHandled:  {Primary: []string{}, Offered: []string{types.ActionHelp, types.ActionOpen}},
+	types.AnnotationHandled:  {Primary: []string{}, Offered: []string{types.ActionHelp, types.ActionOpen}, Handover: true},
 	types.AnnotationInfo:     {Primary: []string{types.ActionStart}, Offered: []string{types.ActionStart}},
 	types.AnnotationNeedsYou: {Primary: []string{types.ActionApprove, types.ActionOpen, types.ActionStart}, Offered: []string{types.ActionApprove, types.ActionHelp, types.ActionOpen, types.ActionStart}},
-	types.AnnotationRunning:  {Primary: []string{}, Offered: []string{types.ActionHelp, types.ActionOpen}},
+	types.AnnotationRunning:  {Primary: []string{}, Offered: []string{types.ActionHelp, types.ActionOpen}, Handover: true},
 	types.AnnotationStuck:    {Primary: []string{types.ActionOpen, types.ActionStart}, Offered: []string{types.ActionHelp, types.ActionOpen, types.ActionStart}},
 }
 
@@ -163,34 +175,6 @@ func checkRow(a types.Annotation) error {
 		}
 	}
 	return nil
-}
-
-// countPut counts a claude-review row: carrying actions, or with an approve
-// or attach link that names none and so leans on its label. A fallback is
-// logged by PR and verb, never the link, whose query may hold a live token.
-func countPut(cfg HttpServerConfig, prUrl string, a types.Annotation) {
-	if a.Source != "claude-review" {
-		return
-	}
-	fallback, actions := "", false
-	for _, l := range a.Links {
-		if l.Action != "" {
-			actions = true
-			continue
-		}
-		if verb, ok := types.ClaudeReviewVerb(prUrl, l.Url); ok && (verb == "approve" || verb == "attach") {
-			fallback = verb
-		}
-	}
-	if fallback == "" && !actions {
-		return
-	}
-	if fallback != "" {
-		cfg.logger().Info("a claude-review link names no action; its verb decides", "pr", prUrl, "verb", fallback)
-	}
-	if err := cfg.Store.CountAnnotationPut(fallback != ""); err != nil {
-		cfg.logger().Warn("could not count an annotation write", "error", err)
-	}
 }
 
 func plainText(s string, max int) error {
@@ -297,7 +281,6 @@ func registerAnnotationRoutes(mux *http.ServeMux, cfg HttpServerConfig) {
 			http.Error(w, "could not store annotation", http.StatusInternalServerError)
 			return
 		}
-		countPut(cfg, u, a)
 		w.WriteHeader(http.StatusNoContent)
 	})
 

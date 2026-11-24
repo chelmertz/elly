@@ -18,7 +18,7 @@ var (
 		"SetPATOwner", "StoreDegradations", "PutAnnotation", "DeleteAnnotation"}
 	// IsRateLimitActive only clears a limit already past, which the page
 	// already hides; StoreNotifySeen is never shown.
-	silentMethods = []string{"CountAnnotationPut", "AnnotationPutCounts", "Prs", "GetPr", "IsRateLimitActive", "GetRateLimitUntil", "GetPAT", "OwnerPATs",
+	silentMethods = []string{"Prs", "GetPr", "IsRateLimitActive", "GetRateLimitUntil", "GetPAT", "OwnerPATs",
 		"Degradations", "StoreNotifySeen", "NotifySeen"}
 )
 

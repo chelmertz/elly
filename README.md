@@ -94,16 +94,20 @@ tool replaces with another state when it finishes. `needs_you` counts the PR
 whatever it scored, and wins over `handled` and `running`. `stuck` counts like
 `needs_you` and says nothing but the user will move the PR; the page marks its
 row with an amber edge. `info` changes nothing about the score and only puts
-its links on the row. On the page, a `handled` or `running` PR from
-`claude-review` sits in the folded "With claude" group, and the note of a
-`needs_you` or `stuck` annotation shows under its row. No annotation sends a
-desktop notification.
+its links on the row. A `handled` or `running` annotation may also say
+`"handover": true` (refused on any other state; left out, it is false): on
+someone else's PR it puts the row in the folded "Handed over" group, from any
+source, with the reason "<source> handled" or "<source> is on it". Without it,
+the author has the next move. The row's tag and the note under it come from
+the annotation that decided its group: a `needs_you` or `stuck` one first,
+then the one that hands the PR over, then any other `handled` or `running`
+one. No annotation sends a desktop notification.
 Annotations expire (1 minute to 24 hours after writing), so a tool that stops
 running stops hiding PRs.
 
 ```
 PUT    /api/v0/prs/{base64 PR url}/annotations/{source}
-       {"state":"needs_you","note":"…","links":[{"label":"…","url":"…","primary":false}],"expiresAt":"<RFC 3339>"}
+       {"state":"needs_you","note":"…","links":[{"label":"…","url":"…","primary":false}],"expiresAt":"<RFC 3339>","handover":false}
 DELETE /api/v0/prs/{base64 PR url}/annotations/{source}
 ```
 
@@ -123,7 +127,12 @@ shown on hover; an approve link is the button only through the one-click
 group. A `needs_you` or `stuck` annotation with no primary link gets a
 button that opens the PR; link order means nothing. Anywhere else a primary
 link shows nowhere. A link labelled `?` that names the PR shows as a small `?` on the row, beside the button, for the tool's explanation of the row. Every other link stays in the row's details. A PR whose URL is not a GitHub PR URL gets no
-link at all. `GET /api/v0/prs` returns each PR's live annotations.
+link at all. A link's `action` (`approve`, `open`, `start` or `help`) is
+what it does, and only from source `claude-review` on its own
+`claude-review://` link to the PR with the action's verb; every such link
+from `claude-review` must name one, and elly never reads what a link does
+from its label or path. The source name is a label, not authentication: the
+bearer token is the lock. `GET /api/v0/prs` returns each PR's live annotations.
 
 ## What elly lets in
 

@@ -181,7 +181,3 @@ func (s *StorageDemo) NotifySeen() map[string][]string { return nil }
 func (s *StorageDemo) PutAnnotation(string, types.Annotation, time.Time) error { return nil }
 
 func (s *StorageDemo) DeleteAnnotation(string, string) error { return nil }
-
-func (s *StorageDemo) CountAnnotationPut(bool) error { return nil }
-
-func (s *StorageDemo) AnnotationPutCounts() (int, int, error) { return 0, 0, nil }

@@ -412,8 +412,15 @@ func TestAnnotations(t *testing.T) {
 	if err := store.PutAnnotation("u", live, now.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if got := store.Prs().Prs[0].Annotations; len(got) != 1 || got[0].State != types.AnnotationHandled {
+	if got := store.Prs().Prs[0].Annotations; len(got) != 1 || got[0].State != types.AnnotationHandled || got[0].Handover {
 		t.Errorf("a second write from the same source: got %+v, want it replaced", got)
+	}
+	live.Handover = true
+	if err := store.PutAnnotation("u", live, now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Prs().Prs[0].Annotations; len(got) != 1 || !got[0].Handover {
+		t.Errorf("handover not kept: got %+v", got)
 	}
 
 	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{pr}); err != nil {
@@ -604,6 +611,50 @@ func TestNewStorage_AcceptsNewStatesOnAnOldAnnotationsTable(t *testing.T) {
 				t.Fatalf("second start: got %+v", got)
 			}
 		})
+	}
+}
+
+// The annotations table as elly created it before handover: startup adds
+// the column, rows already there read as not handed over, and a second
+// start leaves the table alone.
+func TestNewStorage_AddsHandoverToAnOldAnnotationsTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "elly.db")
+	old, err := sql.Open("sqlite", "file:"+path+"?mode=rwc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{
+		`create table annotations (
+			pr_url       text not null,
+			source       text not null,
+			state        text not null check (state in ('handled', 'needs_you', 'running', 'stuck', 'info')),
+			note         text not null default '',
+			links        text not null default '[]',
+			expires_at   text not null,
+			expires_unix integer not null,
+			primary key (pr_url, source)
+		)`,
+		`insert into annotations (pr_url, source, state, note, links, expires_at, expires_unix)
+			values ('u', 'other', 'handled', 'kept', '[]', '2099-01-01T00:00:00Z', 4070908800)`,
+	} {
+		if _, err := old.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = old.Close()
+
+	store := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
+	if err := store.StoreRepoPrs(PollTokens{}, []types.ViewPr{{Url: "u", LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
+		t.Fatal(err)
+	}
+	a := types.Annotation{Source: "tool", State: types.AnnotationRunning, Handover: true, ExpiresAt: "2099-01-01T00:00:00Z"}
+	if err := store.PutAnnotation("u", a, time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("an upgraded database rejects handover: %v", err)
+	}
+	again := NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), path)
+	got := again.Prs().Prs[0].Annotations
+	if len(got) != 2 || got[0].Source != "other" || got[0].Handover || got[1].Source != "tool" || !got[1].Handover {
+		t.Fatalf("got %+v, want the old row not handed over beside the new one handed over", got)
 	}
 }
 

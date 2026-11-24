@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -12,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -36,15 +36,16 @@ func TestValidateAnnotation(t *testing.T) {
 		schemes []string
 		ok      bool
 	}{
-		{"valid", "claude-review", body(in15, ""), schemes, true},
+		{"valid", "t", body(in15, ""), schemes, true},
+		{"valid from claude-review", "claude-review", action("approve", "claude-review://o/r/1/approve"), schemes, true},
 		{"https link needs no flag", "t", `{"state":"handled","links":[{"label":"x","url":"https://github.com/o/r/pull/1"}],"expiresAt":"` + in15 + `"}`, nil, true},
 		{"custom scheme without the flag", "t", body(in15, ""), nil, false},
 		{"javascript link", "t", `{"state":"handled","links":[{"label":"x","url":"javascript:alert(1)"}],"expiresAt":"` + in15 + `"}`, schemes, false},
 		{"http link", "t", `{"state":"handled","links":[{"label":"x","url":"http://example.com"}],"expiresAt":"` + in15 + `"}`, schemes, false},
 		{"source with capitals", "Tool", body(in15, ""), schemes, false},
 		{"source too long", strings.Repeat("a", 41), body(in15, ""), schemes, false},
-		{"running", "claude-review", strings.Replace(body(in15, ""), "needs_you", "running", 1), schemes, true},
-		{"stuck", "claude-review", strings.Replace(body(in15, ""), "needs_you", "stuck", 1), schemes, true},
+		{"running", "t", strings.Replace(body(in15, ""), "needs_you", "running", 1), schemes, true},
+		{"stuck", "t", strings.Replace(body(in15, ""), "needs_you", "stuck", 1), schemes, true},
 		{"note at the limit", "t", strings.Replace(body(in15, ""), `"look"`, `"`+strings.Repeat("ö", 300)+`"`, 1), schemes, true},
 		{"unknown state", "t", strings.Replace(body(in15, ""), "needs_you", "done", 1), schemes, false},
 		{"unknown field", "t", body(in15, `,"extra":1`), schemes, false},
@@ -133,7 +134,8 @@ func TestAnnotationHandlers(t *testing.T) {
 	if got := do("PUT", path, "secret", strings.Repeat(" ", 4097)+body(in15, "")); got != http.StatusRequestEntityTooLarge {
 		t.Errorf("body over 4 KiB: %d", got)
 	}
-	if got := do("PUT", path, "secret", body(in15, "")); got != http.StatusNoContent {
+	valid := `{"state":"needs_you","note":"look","links":[{"label":"Approve","url":"claude-review://o/r/1/approve","action":"approve"}],"expiresAt":"` + in15 + `"}`
+	if got := do("PUT", path, "secret", valid); got != http.StatusNoContent {
 		t.Fatalf("valid write: %d", got)
 	}
 	if got := store.Prs().Prs[0].Annotations; len(got) != 1 || got[0].Source != "claude-review" {
@@ -266,6 +268,15 @@ func TestClaudeReviewRowsMatchTheFixture(t *testing.T) {
 		if len(r.Primary) > 0 && !slices.Contains([]string{types.AnnotationInfo, types.AnnotationNeedsYou, types.AnnotationStuck}, state) {
 			t.Errorf("a primary on %s", state)
 		}
+		// claude-review hands over on exactly the states elly takes it on
+		want := state == types.AnnotationHandled || state == types.AnnotationRunning
+		if r.Handover != want {
+			t.Errorf("handover on %s: %v, want %v", state, r.Handover, want)
+		}
+		b := `{"state":"` + state + `","handover":` + strconv.FormatBool(r.Handover) + `,"expiresAt":"` + testNow.Add(15*time.Minute).Format(time.RFC3339) + `"}`
+		if _, _, err := validateAnnotation(types.ClaudeReview, testPrUrl, strings.NewReader(b), nil, testNow); err != nil {
+			t.Errorf("a %s row as claude-review sends it is refused: %v", state, err)
+		}
 	}
 }
 
@@ -289,72 +300,59 @@ func TestValidateAnnotationChecksClaudeReviewRows(t *testing.T) {
 	}
 }
 
-// Every claude-review PUT is counted: one carrying actions, or one whose
-// approve or attach link still leans on its label (the fallback elly drops
-// once claude-review has sent actions long enough). The counts persist and
-// /health reports them with elly's version.
-func TestHealthCountsActionPutsAndFallbacks(t *testing.T) {
+// /health says elly's version and nothing else: no PR, source or link.
+func TestHealthIsTheVersionOnly(t *testing.T) {
 	store := storage.NewStorage(slog.New(slog.NewTextHandler(io.Discard, nil)), filepath.Join(t.TempDir(), "elly.db"))
-	const prUrl = "https://github.com/o/r/pull/1"
-	if err := store.StoreRepoPrs(storage.PollTokens{}, []types.ViewPr{{Url: prUrl, LastUpdated: time.Now(), RawJsonResponse: []byte("{}")}}); err != nil {
-		t.Fatal(err)
-	}
-	var logs bytes.Buffer
-	cfg := HttpServerConfig{Store: store, Version: "abc1234", AnnotationToken: "secret", AnnotationSchemes: []string{"claude-review"},
-		Logger: slog.New(slog.NewTextHandler(&logs, nil))}
-	mux := routes(cfg)
-	counts := func() (int, int) {
-		t.Helper()
-		a, f, err := store.AnnotationPutCounts()
-		if err != nil {
-			t.Fatal(err)
-		}
-		return a, f
-	}
-	put := func(link string, wantActions, wantFallbacks int) {
-		t.Helper()
-		b := `{"state":"running","links":[` + link + `],"expiresAt":"` + time.Now().Add(15*time.Minute).Format(time.RFC3339) + `"}`
-		r := httptest.NewRequest("PUT", "/api/v0/prs/"+base64.StdEncoding.EncodeToString([]byte(prUrl))+"/annotations/claude-review", strings.NewReader(b))
-		r.Header.Set("Authorization", "Bearer secret")
-		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, r)
-		if w.Code != http.StatusNoContent {
-			t.Fatalf("PUT %s: %d %s", link, w.Code, w.Body)
-		}
-		if a, f := counts(); a != wantActions || f != wantFallbacks {
-			t.Fatalf("after PUT %s: actionPuts %d fallbacks %d, want %d %d", link, a, f, wantActions, wantFallbacks)
-		}
-	}
-	put(`{"label":"Open Claude","url":"claude-review://o/r/1/attach","action":"open"}`, 1, 0)
-	put(`{"label":"Open Claude","url":"claude-review://o/r/1/attach","action":"open"}`, 2, 0)
-	put(`{"label":"?","url":"claude-review://o/r/1/states"}`, 2, 0) // neither: no approve or attach
-	if strings.Contains(logs.String(), "names no action") || strings.Contains(logs.String(), "could not count") {
-		t.Fatalf("logged without a fallback or a failure:\n%s", logs.String())
-	}
-	put(`{"label":"Open Claude","url":"claude-review://o/r/1/attach"}`, 2, 1)
-	if !strings.Contains(logs.String(), "names no action") || !strings.Contains(logs.String(), "verb=attach") {
-		t.Fatalf("a fallback was not logged with its verb:\n%s", logs.String())
-	}
-	r := httptest.NewRequest("GET", "/health", nil)
+	mux := routes(HttpServerConfig{Store: store, Version: "abc1234", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, r)
-	var h struct {
-		Version    string `json:"version"`
-		ActionPuts int    `json:"actionPuts"`
-		Fallbacks  int    `json:"fallbacks"`
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/health", nil))
+	if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != `{"version":"abc1234"}` {
+		t.Errorf("health %d %q", w.Code, w.Body)
 	}
-	if err := json.Unmarshal(w.Body.Bytes(), &h); err != nil || w.Code != http.StatusOK {
-		t.Fatalf("health %d %q: %v", w.Code, w.Body, err)
+}
+
+// A claude-review link to this PR names what it does by its action; one
+// without an action is refused, whatever its label or verb says, so a row
+// cannot carry an Approve its state's rules never checked.
+func TestValidateAnnotationRefusesAnActionlessVerbLink(t *testing.T) {
+	exp := testNow.Add(15 * time.Minute).Format(time.RFC3339)
+	approve := "claude-review://o/r/1/approve?at=" + strings.Repeat("a", 40) + "&token=" + strings.Repeat("b", 48)
+	for name, b := range map[string]string{
+		"approve on handled":   `{"state":"handled","links":[{"label":"Approve","url":"` + approve + `"}],"expiresAt":"` + exp + `"}`,
+		"approve on info":      `{"state":"info","links":[{"label":"Approve","url":"` + approve + `"}],"expiresAt":"` + exp + `"}`,
+		"approve on needs_you": `{"state":"needs_you","links":[{"label":"Approve","url":"` + approve + `"}],"expiresAt":"` + exp + `"}`,
+		"attach on running":    `{"state":"running","links":[{"label":"Open Claude","url":"claude-review://o/r/1/attach"}],"expiresAt":"` + exp + `"}`,
+		"the bare start link":  `{"state":"info","links":[{"label":"Start","url":"claude-review://o/r/1?from=elly","primary":true}],"expiresAt":"` + exp + `"}`,
+	} {
+		if _, _, err := validateAnnotation(types.ClaudeReview, testPrUrl, strings.NewReader(b), []string{types.ClaudeReview}, testNow); err == nil {
+			t.Errorf("%s: accepted without an action", name)
+		}
 	}
-	if h.Version != "abc1234" || h.ActionPuts != 2 || h.Fallbacks != 1 {
-		t.Errorf("health %+v", h)
+}
+
+// handover is taken on handled and running only, from any source, and its
+// absence is false: a writer from before the field keeps working.
+func TestValidateAnnotationHandover(t *testing.T) {
+	exp := testNow.Add(15 * time.Minute).Format(time.RFC3339)
+	b := func(state, extra string) string {
+		return `{"state":"` + state + `"` + extra + `,"expiresAt":"` + exp + `"}`
 	}
-	if strings.Contains(logs.String(), "could not") {
-		t.Errorf("warned on a run where nothing failed:\n%s", logs.String())
-	}
-	var keys map[string]any
-	_ = json.Unmarshal(w.Body.Bytes(), &keys)
-	if len(keys) != 3 {
-		t.Errorf("health keys %v, want version, actionPuts, fallbacks", keys)
+	for _, c := range []struct {
+		name, state, extra string
+		ok, handover       bool
+	}{
+		{"handled", types.AnnotationHandled, `,"handover":true`, true, true},
+		{"running", types.AnnotationRunning, `,"handover":true`, true, true},
+		{"handled without it", types.AnnotationHandled, ``, true, false},
+		{"handled, false", types.AnnotationHandled, `,"handover":false`, true, false},
+		{"needs_you", types.AnnotationNeedsYou, `,"handover":true`, false, false},
+		{"stuck", types.AnnotationStuck, `,"handover":true`, false, false},
+		{"info", types.AnnotationInfo, `,"handover":true`, false, false},
+		{"not a bool", types.AnnotationHandled, `,"handover":"yes"`, false, false},
+	} {
+		a, _, err := validateAnnotation("ci-bot", testPrUrl, strings.NewReader(b(c.state, c.extra)), nil, testNow)
+		if (err == nil) != c.ok || a.Handover != c.handover {
+			t.Errorf("%s: handover %v, err %v; want ok=%v handover %v", c.name, a.Handover, err, c.ok, c.handover)
+		}
 	}
 }

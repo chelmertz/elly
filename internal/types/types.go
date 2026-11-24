@@ -147,6 +147,11 @@ type Annotation struct {
 	Note      string           `json:"note"`
 	Links     []AnnotationLink `json:"links"`
 	ExpiresAt string           `json:"expiresAt"`
+	// Handover says the tool took the PR over from the user: elly accepts
+	// it only on a handled or running annotation, and such a PR, someone
+	// else's, goes to "Handed over". Without it, handled and running still
+	// drop the PR's review-owed reasons, and the author has the next move.
+	Handover bool `json:"handover"`
 }
 
 type AnnotationLink struct {
@@ -157,10 +162,19 @@ type AnnotationLink struct {
 	// annotation.
 	Primary bool `json:"primary,omitempty"`
 	// Action is what the link does, one of the Action* names; only
-	// claude-review's own links on its scheme may carry one (validated on
-	// PUT), and elly reads it, never the label.
+	// claude-review's own links on its scheme may carry one, and each of
+	// them to the PR must (validated on PUT). elly reads it, never the
+	// label or the path.
 	Action string `json:"action,omitempty"`
 }
+
+// ClaudeReview is claude-review's name: the source it writes annotations
+// under (annotationSource in its elly.go) and the scheme of its links. It is
+// a label, not authentication: any process holding the annotation token may
+// write under it, and the bearer token is the lock. elly uses it to check
+// that a link's action matches the link (validateAnnotation, LinkDoes) and
+// to mark the links the page's "starting…" latch watches.
+const ClaudeReview = "claude-review"
 
 // The action table. claude-review's actionVerbs (in its elly.go) names the
 // same pairs; each side pins them in a test. The verb is the link's last
@@ -178,7 +192,7 @@ var ActionVerbs = map[string]string{ActionApprove: "approve", ActionOpen: "attac
 // the bare link), and whether it is one.
 func ClaudeReviewVerb(prUrl, link string) (string, bool) {
 	u, err := url.Parse(link)
-	if err != nil || !strings.EqualFold(u.Scheme, "claude-review") || !LinkNamesPr(prUrl, link) {
+	if err != nil || !strings.EqualFold(u.Scheme, ClaudeReview) || !LinkNamesPr(prUrl, link) {
 		return "", false
 	}
 	segments := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
@@ -189,15 +203,12 @@ func ClaudeReviewVerb(prUrl, link string) (string, bool) {
 }
 
 // LinkDoes: the link, on an annotation from source, does action to prUrl.
-// Only claude-review's own scheme counts, from source claude-review: by the
-// link's Action, or, on a link without one (claude-review before it wrote
-// actions), by its verb.
+// Only claude-review's own scheme counts, from source claude-review, and
+// only by the link's Action: a link without one does nothing, whatever its
+// label or verb (validateAnnotation refuses such a link from claude-review).
 func LinkDoes(source, prUrl string, l AnnotationLink, action string) bool {
 	verb, ok := ClaudeReviewVerb(prUrl, l.Url)
-	if source != "claude-review" || !ok || !strings.EqualFold(verb, ActionVerbs[action]) {
-		return false
-	}
-	return l.Action == action || l.Action == ""
+	return source == ClaudeReview && ok && l.Action == action && strings.EqualFold(verb, ActionVerbs[action])
 }
 
 const (
@@ -354,7 +365,7 @@ func LinkNamesPr(prUrl, link string) bool {
 		return strings.EqualFold(u.Host, "github.com") && len(segments) >= 4 &&
 			strings.EqualFold(segments[0], owner) && strings.EqualFold(segments[1], repo) &&
 			segments[2] == "pull" && segments[3] == number
-	case "claude-review":
+	case ClaudeReview:
 		// The start link may say where it was clicked (?from=elly); a verb
 		// link carries no query.
 		query := u.RawQuery == "" || (len(segments) == 2 && fromTag.MatchString(u.RawQuery)) ||

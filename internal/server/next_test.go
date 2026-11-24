@@ -40,7 +40,7 @@ func nextFixture(now time.Time) []types.ViewPr {
 	handedOver := pr("8", "a")
 	handedOver.ReviewRequestedFromUsers = []string{"me"}
 	handedOver.Asked = types.AskedRequested
-	handedOver.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning, Note: "started by tick"}}
+	handedOver.Annotations = []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning, Handover: true, Note: "started by tick"}}
 	return []types.ViewPr{buried, iced, involved, waiting, red, review, merge, handedOver}
 }
 
@@ -125,11 +125,11 @@ func TestNextVerbFollowsAnAllowedAnnotationLink(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", HeadRefOid: strings.Repeat("a", 40), LastUpdated: now,
 		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou,
-			Links: []types.AnnotationLink{{Label: "Approve", Url: "claude-review://o/r/1/approve?at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&token=000000000000000000000000000000000000000000000000"}}}}}
+			Links: []types.AnnotationLink{{Label: "Approve", Url: "claude-review://o/r/1/approve?at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&token=000000000000000000000000000000000000000000000000", Action: types.ActionApprove}}}}}
 	page := renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"}))
 	// The link as claude-review writes it, with its sha and token: elly
 	// refused the query until 2026-11-16, and Approve was never the button.
-	if !strings.Contains(page, `href="claude-review://o/r/1/approve?at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&amp;token=000000000000000000000000000000000000000000000000">Approve</a>`) {
+	if !strings.Contains(page, `href="claude-review://o/r/1/approve?at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&amp;token=000000000000000000000000000000000000000000000000" data-latch="claude-review">Approve</a>`) {
 		t.Error("the Approve verb does not follow the annotation link")
 	}
 	// the verb is on hover: the label is the tool's, the hover says what the
@@ -209,7 +209,7 @@ func TestNextShowsWhatNeedsTheUserUnderTheRow(t *testing.T) {
 	for _, want := range []string{
 		`<div class="ask">the round has a question for you: &lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt; &amp; &#34;quotes&#34;</div>`,
 		`<div class="ask">a post was refused over the limit</div>`,
-		`<span class="tag stuck">claude stuck</span>`,
+		`<span class="tag stuck">claude-review stuck</span>`,
 		`<div class="note">started by a click</div>`,
 		`<div class="note">round posted its review</div>`,
 	} {
@@ -226,13 +226,13 @@ func TestNextShowsWhatNeedsTheUserUnderTheRow(t *testing.T) {
 func TestNextAttachVerbFollowsTheAnnotationLink(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	pr := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now, ReviewRequestedFromUsers: []string{"me"}, Asked: types.AskedRequested,
-		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning,
-			Links: []types.AnnotationLink{{Label: "Attach", Url: "claude-review://o/r/1/attach"}}}}}
+		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationRunning, Handover: true,
+			Links: []types.AnnotationLink{{Label: "Attach", Url: "claude-review://o/r/1/attach", Action: types.ActionOpen}}}}}
 	data := buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"})
 	if data.OnYou != 0 {
 		t.Errorf("a handed-over PR counts as on the user: %d", data.OnYou)
 	}
-	if page := renderNext(t, data); !strings.Contains(page, `href="claude-review://o/r/1/attach">Attach</a>`) {
+	if page := renderNext(t, data); !strings.Contains(page, `href="claude-review://o/r/1/attach" data-latch="claude-review">Attach</a>`) {
 		t.Error("the Attach verb does not follow the annotation link")
 	}
 }
@@ -259,12 +259,12 @@ func TestNextLeavesEmptyGroupsOut(t *testing.T) {
 func TestNextFoldedGroupsAreOneToggleRowEach(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	page := renderNext(t, buildNext(nextFixture(now), "me", now, nil))
-	want := `<button type="button" class="fold" aria-expanded="false" aria-controls="with-claude-list"><span class="fold-name">With claude · handed over, nothing for you</span><span class="fold-count">1</span></button>`
+	want := `<button type="button" class="fold" aria-expanded="false" aria-controls="handed-over-list"><span class="fold-name">Handed over · nothing for you</span><span class="fold-count">1</span></button>`
 	if !strings.Contains(page, want) {
 		t.Errorf("page lacks %s", want)
 	}
-	if strings.Count(page, `class="group folded first-folded"`) != 1 || !strings.Contains(page, `<section class="group folded first-folded" id="with-claude"`) {
-		t.Error("With claude does not open the folded block, or more than one group does")
+	if strings.Count(page, `class="group folded first-folded"`) != 1 || !strings.Contains(page, `<section class="group folded first-folded" id="handed-over"`) {
+		t.Error("Handed over does not open the folded block, or more than one group does")
 	}
 	if strings.Contains(page, ">show ") {
 		t.Error("a folded heading still says show N")
@@ -351,7 +351,7 @@ func TestNextPrimaryLinkBecomesTheVerb(t *testing.T) {
 	}}}
 	prs := []types.ViewPr{offered, plain, asked("https://github.com/o/r/pull/3"), elsewhere, needsYou}
 	page := renderNext(t, buildNext(prs, "me", now, []string{"claude-review"}))
-	if want := `href="claude-review://o/r/1?from=elly" title="claude-review · claude-review://o/r/1?from=elly">Start</a>`; !strings.Contains(page, want) {
+	if want := `href="claude-review://o/r/1?from=elly" title="claude-review · claude-review://o/r/1?from=elly" data-latch="claude-review">Start</a>`; !strings.Contains(page, want) {
 		t.Errorf("page lacks %s", want)
 	}
 	if n := strings.Count(page, ">Start</a>"); n != 2 {
@@ -567,7 +567,7 @@ func TestNextNeedsYouButtonIsItsPrimaryLink(t *testing.T) {
 		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationNeedsYou, Note: "the round has a question for you: rows?",
 			Links: []types.AnnotationLink{{Label: "Fork with prod data", Url: "claude-review://o/r/1/fork"}, {Label: "Answer", Url: "claude-review://o/r/1/attach", Primary: true}, {Label: "Ignore", Url: "claude-review://o/r/1/ignore"}}}}}
 	page := renderNext(t, buildNext([]types.ViewPr{pr}, "me", now, []string{"claude-review"}))
-	if !strings.Contains(page, `href="claude-review://o/r/1/attach" title="claude-review · claude-review://o/r/1/attach">Answer</a>`) {
+	if !strings.Contains(page, `href="claude-review://o/r/1/attach" title="claude-review · claude-review://o/r/1/attach" data-latch="claude-review">Answer</a>`) {
 		t.Error("the button is not the Answer link, with its target on hover")
 	}
 	if strings.Count(page, "claude-review://o/r/1/attach") != 2 {
@@ -646,5 +646,67 @@ func TestAnnotationSourceOfNamesTheSourceHoldingTheLink(t *testing.T) {
 	}
 	if got := annotationSourceOf(pr, "https://none.test"); got != "" {
 		t.Errorf("source %q for a link nobody holds, want none", got)
+	}
+}
+
+// The row's tag and note come from the annotation that decided its group,
+// whatever its source: a needs-you row never wears another tool's
+// "handled", and a PR handed over to any tool shows that tool's state and
+// note.
+func TestNextTagComesFromTheDecidingAnnotation(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	row := func(n string, as ...types.Annotation) types.ViewPr {
+		return types.ViewPr{Url: "https://github.com/o/r/pull/" + n, Author: "a", LastUpdated: now, Annotations: as}
+	}
+	for _, c := range []struct {
+		name     string
+		pr       types.ViewPr
+		tag      string
+		note     string
+		notNotes []string
+	}{
+		{"claude-review needs you beside another source's handled",
+			row("1", types.Annotation{Source: "a-bot", State: types.AnnotationHandled, Note: "a-bot is done"}, types.Annotation{Source: types.ClaudeReview, State: types.AnnotationNeedsYou, Note: "answer me"}),
+			`<span class="tag needs-you">claude-review needs you</span>`, `<div class="ask">answer me</div>`, []string{"a-bot is done"}},
+		{"another source needs you beside claude-review's handled",
+			row("2", types.Annotation{Source: types.ClaudeReview, State: types.AnnotationHandled, Handover: true, Note: "Claude posted its review"}, types.Annotation{Source: "x-bot", State: types.AnnotationNeedsYou, Note: "look at this"}),
+			`<span class="tag needs-you">x-bot needs you</span>`, `<div class="ask">look at this</div>`, []string{"Claude posted its review"}},
+		{"handed over to another tool",
+			row("3", types.Annotation{Source: "ci-bot", State: types.AnnotationRunning, Handover: true, Note: "fixing the build"}),
+			`<span class="tag running">ci-bot running</span>`, `<div class="note">fixing the build</div>`, nil},
+		{"the handover beats a handled without it",
+			row("4", types.Annotation{Source: "a-bot", State: types.AnnotationHandled, Note: "a-bot is done"}, types.Annotation{Source: types.ClaudeReview, State: types.AnnotationRunning, Handover: true, Note: "started by tick"}),
+			`<span class="tag running">claude-review running</span>`, `<div class="note">started by tick</div>`, []string{"a-bot is done"}},
+	} {
+		page := renderNext(t, buildNext([]types.ViewPr{c.pr}, "me", now, nil))
+		if !strings.Contains(page, c.tag) || !strings.Contains(page, c.note) {
+			t.Errorf("%s: page lacks %s or %s", c.name, c.tag, c.note)
+		}
+		if strings.Count(page, `class="tag `) != 1 {
+			t.Errorf("%s: want one tag", c.name)
+		}
+		for _, n := range c.notNotes {
+			if strings.Contains(page, n) {
+				t.Errorf("%s: shows the note %q of an annotation that decided nothing", c.name, n)
+			}
+		}
+	}
+}
+
+// Only a verb that is a claude-review link carries the page's latch; the
+// PR's own GitHub link does not.
+func TestNextLatchMarksOnlyClaudeReviewVerbs(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	offer := types.ViewPr{Url: "https://github.com/o/r/pull/1", Author: "a", LastUpdated: now,
+		Annotations: []types.Annotation{{Source: "claude-review", State: types.AnnotationInfo, Links: []types.AnnotationLink{{Label: "Start", Url: "claude-review://o/r/1?from=elly", Primary: true, Action: types.ActionStart}}}}}
+	plain := types.ViewPr{Url: "https://github.com/o/r/pull/2", Author: "a", LastUpdated: now}
+	data := buildNext([]types.ViewPr{offer, plain}, "me", now, []string{"claude-review"})
+	for _, g := range data.Groups {
+		for _, r := range g.Rows {
+			want := map[string]string{offer.Url: types.ClaudeReview, plain.Url: ""}[r.Url]
+			if r.Latch != want {
+				t.Errorf("%s: latch %q, want %q", r.Url, r.Latch, want)
+			}
+		}
 	}
 }

@@ -70,5 +70,7 @@ create table if not exists annotations (
     links        text not null default '[]',
     expires_at   text not null,
     expires_unix integer not null,
+    -- last, where the add column in NewStorage puts it on an older table
+    handover     boolean not null default 0,
     primary key (pr_url, source)
 );

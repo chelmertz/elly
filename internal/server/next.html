@@ -349,12 +349,12 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
                     {{if $r.PrHref}}<a class="num" href="{{$r.PrHref}}">#{{$r.Number}}</a>{{else}}<span class="num">#{{$r.Number}}</span>{{end}}
                     <button type="button" class="toggle" aria-expanded="false" aria-controls="{{$r.Anchor}}-panel">
                         <span class="title" title="{{$r.Title}}">{{$r.Title}}</span>
-                        {{with $r.Tag}}<span class="tag {{.Class}}">claude {{.Word}}</span>{{end}}
+                        {{with $r.Tag}}<span class="tag {{.Class}}">{{.Source}} {{.Word}}</span>{{end}}
                         <span class="who">{{$r.Repo}} · {{$r.Author}}</span>
                         <span class="wait {{if eq $r.Bucket "week+"}}week{{else}}{{$r.Bucket}}{{end}}" title="since the last activity by someone else">{{$r.Bucket}}</span>
                     </button>
                     {{with $r.Help}}<a class="help" href="{{.}}" title="{{$r.HelpTitle}}" aria-label="what this row means">?</a>{{end}}
-                    <a class="verb{{if $r.VerbPrimary}} primary{{end}}"{{with $r.VerbHref}} href="{{.}}"{{end}}{{with $r.VerbTitle}} title="{{.}}"{{end}}>{{$r.Verb}}</a>
+                    <a class="verb{{if $r.VerbPrimary}} primary{{end}}"{{with $r.VerbHref}} href="{{.}}"{{end}}{{with $r.VerbTitle}} title="{{.}}"{{end}}{{with $r.Latch}} data-latch="{{.}}"{{end}}>{{$r.Verb}}</a>
                 </div>
                 {{with $r.Ask}}<div class="ask">{{.}}</div>{{end}}
                 {{with $r.Note}}<div class="note">{{.}}</div>{{end}}
@@ -564,10 +564,11 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
         });
     };
 
-    // A clicked claude-review link answers at once: the row says
-    // "starting…" until the swap that claude-review's "starting" row brings
-    // changes its verb, or says so after 20 s without an answer.
-    const pending = new Map(); // row id -> {href, at}
+    // A clicked verb the server marked with data-latch (a claude-review
+    // link) answers at once: the row says "starting…" until the swap that
+    // the tool's "starting" row brings changes its verb, or says so after
+    // 20 s without an answer.
+    const pending = new Map(); // row id -> {href, at, tool}
     const startWait = 20000;
     const showPending = () => {
         pending.forEach((p, id) => {
@@ -576,16 +577,16 @@ dialog.tokens label a { display: inline; padding: 0; font-size: inherit; color: 
             const late = Date.now() - p.at > startWait;
             verb.classList.toggle("starting", !late);
             verb.textContent = late ? "no answer" : "starting…";
-            verb.title = late ? "claude-review did not answer within 20 s; click to try again" : verb.title;
+            verb.title = late ? p.tool + " did not answer within 20 s; click to try again" : verb.title;
             if (late) pending.delete(id);
         });
     };
     document.addEventListener("click", (e) => {
         const link = e.target instanceof Element ? e.target.closest("a.verb") : null;
-        if (!link || !(link.getAttribute("href") || "").startsWith("claude-review:")) return;
+        if (!link || !link.dataset.latch) return;
         const pr = link.closest(".pr");
         if (!pr) return;
-        pending.set(pr.id, {href: link.getAttribute("href"), at: Date.now()});
+        pending.set(pr.id, {href: link.getAttribute("href"), at: Date.now(), tool: link.dataset.latch});
         showPending();
         setTimeout(showPending, startWait + 100);
     });
