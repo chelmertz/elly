@@ -2,8 +2,8 @@ package github
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"regexp"
 	"strings"
 	"time"
@@ -20,9 +20,9 @@ var inlineCode = regexp.MustCompile("`[^`\n]*`")
 
 // mentionedIn says whether body names @user outside quoted lines, code
 // fences and code spans. A login is word-bounded on both sides: "@meow"
-// and "me@me.com" do not name "me". claude-review's mentionedIn (its
-// mention.go, for `threads`) is the same rule; each side pins it with the
-// same cases.
+// and "me@me.com" do not name "me". This is the only copy of the rule:
+// claude-review keeps none, and names in its round prompt the open mentions
+// elly serves.
 func mentionedIn(body, user string) bool {
 	if user == "" {
 		return false
